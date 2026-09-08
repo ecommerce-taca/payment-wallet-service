@@ -43,6 +43,11 @@ public record Money(long amount, String currency) {
         return new Money(amount - other.amount, currency);
     }
 
+    public Money multiplyBy(RateBps rate) {
+        long result = Math.round((double) amount * rate.value() / 10_000);
+        return new Money(result, currency);
+    }
+
     public boolean isGreaterThan(Money other) {
         requireSameCurrency(other);
         return amount > other.amount;
