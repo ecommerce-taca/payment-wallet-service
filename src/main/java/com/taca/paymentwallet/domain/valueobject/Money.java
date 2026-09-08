@@ -53,6 +53,11 @@ public record Money(long amount, String currency) {
         return amount > other.amount;
     }
 
+    public boolean isGreaterThanOrEqual(Money other) {
+        requireSameCurrency(other);
+        return amount >= other.amount;
+    }
+
     private void requireSameCurrency(Money other) {
         if (!currency.equals(other.currency)) {
             throw new IllegalArgumentException("currency mismatch");
