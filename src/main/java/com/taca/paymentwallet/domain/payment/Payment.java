@@ -55,7 +55,14 @@ public class Payment {
                 ? PaymentStatus.PENDING_COD
                 : PaymentStatus.PENDING;
 
-        return new Payment(id, checkoutGroupId, buyerUserId, method, amount, orders, initialStatus);
+        return new Payment(
+                id,
+                checkoutGroupId,
+                buyerUserId,
+                method,
+                amount,
+                orders,
+                initialStatus);
     }
 
     public void markSucceeded(Instant paidAt) {
