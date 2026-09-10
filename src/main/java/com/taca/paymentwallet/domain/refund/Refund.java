@@ -60,13 +60,18 @@ public class Refund extends AggregateRoot {
             String reason,
             IdempotencyKey idempotencyKey
     ) {
-        return new Refund(
+        Refund refund = new Refund(
                 id,
                 paymentId,
                 amount,
                 reason,
                 idempotencyKey,
-                RefundStatus.REQUESTED);
+                RefundStatus.REQUESTED
+        );
+
+        refund.registerEvent(RefundRequestedEvent.now(id, paymentId, amount));
+
+        return refund;
     }
 
     public void markProcessing() {
