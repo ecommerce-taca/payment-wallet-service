@@ -1,5 +1,6 @@
 package com.taca.paymentwallet.domain.payment;
 
+import com.taca.paymentwallet.domain.AggregateRoot;
 import com.taca.paymentwallet.domain.refund.RefundLimitExceededException;
 import com.taca.paymentwallet.domain.valueobject.BuyerUserId;
 import com.taca.paymentwallet.domain.valueobject.CheckoutGroupId;
@@ -9,7 +10,7 @@ import com.taca.paymentwallet.domain.valueobject.PaymentId;
 import java.time.Instant;
 import java.util.List;
 
-public class Payment {
+public class Payment extends AggregateRoot {
 
     private final PaymentId id;
     private final CheckoutGroupId checkoutGroupId;
@@ -18,6 +19,7 @@ public class Payment {
     private final Money amount;
     private final List<PaymentOrder> orders;
     private PaymentStatus status;
+    private String failureCode;
     private Money capturedAmount;
     private Money refundedAmount;
     private Instant paidAt;
@@ -74,14 +76,23 @@ public class Payment {
         this.status = PaymentStatus.SUCCESS;
         this.capturedAmount = amount;
         this.paidAt = paidAt;
+
+        registerEvent(PaymentSucceededEvent.now(id, capturedAmount));
     }
 
-    public void markFailed() {
+    public void markFailed(String failureCode) {
         if (status != PaymentStatus.PENDING && status != PaymentStatus.PENDING_COD) {
             throw new InvalidPaymentStateException(status, "mark failed");
         }
 
+        if (failureCode == null || failureCode.isBlank()) {
+            throw new IllegalArgumentException("Failure code must not be blank");
+        }
+
         this.status = PaymentStatus.FAILED;
+        this.failureCode = failureCode;
+
+        registerEvent(PaymentFailedEvent.now(id, failureCode));
     }
 
     public void markExpired() {

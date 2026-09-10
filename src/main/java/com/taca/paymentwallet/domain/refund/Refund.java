@@ -1,11 +1,13 @@
 package com.taca.paymentwallet.domain.refund;
 
+import com.taca.paymentwallet.domain.AggregateRoot;
+import com.taca.paymentwallet.domain.payment.PaymentFailedEvent;
 import com.taca.paymentwallet.domain.valueobject.IdempotencyKey;
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.domain.valueobject.PaymentId;
 import com.taca.paymentwallet.domain.valueobject.RefundId;
 
-public class Refund {
+public class Refund extends AggregateRoot {
 
     private final RefundId id;
     private final PaymentId paymentId;
@@ -83,6 +85,8 @@ public class Refund {
         }
 
         this.status = RefundStatus.SUCCESS;
+
+        registerEvent(RefundSucceededEvent.now(id, paymentId, amount));
     }
 
     public void markFailed() {
