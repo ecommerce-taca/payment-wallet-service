@@ -1,12 +1,13 @@
 package com.taca.paymentwallet.domain.payout;
 
+import com.taca.paymentwallet.domain.AggregateRoot;
 import com.taca.paymentwallet.domain.valueobject.IdempotencyKey;
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.domain.valueobject.PayoutId;
 import com.taca.paymentwallet.domain.valueobject.ShopId;
 import com.taca.paymentwallet.domain.valueobject.WalletId;
 
-public class Payout {
+public class Payout extends AggregateRoot {
 
     private final PayoutId id;
     private final WalletId walletId;
@@ -100,6 +101,8 @@ public class Payout {
 
         this.providerRef = providerRef;
         this.status = PayoutStatus.SUCCESS;
+
+        registerEvent(PayoutSucceededEvent.now(id, shopId, amount, providerRef));
     }
 
     public void markFailed(String failureCode) {

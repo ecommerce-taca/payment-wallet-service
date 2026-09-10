@@ -1,5 +1,6 @@
 package com.taca.paymentwallet.domain.settlement;
 
+import com.taca.paymentwallet.domain.AggregateRoot;
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.domain.valueobject.PaymentAllocationId;
 import com.taca.paymentwallet.domain.valueobject.SettlementBatchId;
@@ -9,7 +10,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-public class SettlementBatch {
+public class SettlementBatch extends AggregateRoot {
 
     private final SettlementBatchId id;
     private final Instant periodStart;
@@ -72,6 +73,8 @@ public class SettlementBatch {
         }
 
         this.status = SettlementBatchStatus.COMPLETED;
+
+        registerEvent(SettlementBatchCompletedEvent.now(id, totalReleased()));
     }
 
     public void markFailed() {
