@@ -1,5 +1,6 @@
 package com.taca.paymentwallet.domain.payment;
 
+import com.taca.paymentwallet.domain.refund.RefundLimitExceededException;
 import com.taca.paymentwallet.domain.valueobject.BuyerUserId;
 import com.taca.paymentwallet.domain.valueobject.CheckoutGroupId;
 import com.taca.paymentwallet.domain.valueobject.Money;
@@ -102,7 +103,9 @@ public class Payment {
         }
     }
 
-    public PaymentId id() { return id; }
+    public PaymentId id() {
+        return id;
+    }
 
     public CheckoutGroupId checkoutGroupId() {
         return checkoutGroupId;
@@ -138,5 +141,53 @@ public class Payment {
 
     public Instant paidAt() {
         return paidAt;
+    }
+
+    public void validateRefundRequest(
+            Money requestedAmount,
+            Money processingRefundAmount
+    ) {
+        if (status != PaymentStatus.SUCCESS
+                && status != PaymentStatus.PARTIALLY_REFUNDED) {
+            throw new InvalidPaymentStateException(status, "request refund");
+        }
+
+        if (requestedAmount == null || !requestedAmount.isPositive()) {
+            throw new IllegalArgumentException("requestedAmount must be positive");
+        }
+
+        if (processingRefundAmount == null) {
+            throw new IllegalArgumentException("processingRefundAmount must not be null");
+        }
+
+        Money totalRefundAmount = refundedAmount
+                .add(processingRefundAmount)
+                .add(requestedAmount);
+
+        if (totalRefundAmount.isGreaterThan(capturedAmount)) {
+            throw new RefundLimitExceededException(capturedAmount, totalRefundAmount);
+        }
+    }
+
+    public void markRefundSucceeded(Money refundAmount) {
+        if (status != PaymentStatus.SUCCESS
+                && status != PaymentStatus.PARTIALLY_REFUNDED) {
+            throw new InvalidPaymentStateException(status, "mark refund succeeded");
+        }
+
+        if (refundAmount == null || !refundAmount.isPositive()) {
+            throw new IllegalArgumentException("refundAmount must be positive");
+        }
+
+        Money newRefundedAmount = refundedAmount.add(refundAmount);
+
+        if (newRefundedAmount.isGreaterThan(capturedAmount)) {
+            throw new RefundLimitExceededException(capturedAmount, newRefundedAmount);
+        }
+
+        this.refundedAmount = newRefundedAmount;
+        this.status = newRefundedAmount.equals(capturedAmount)
+                ? PaymentStatus.REFUNDED
+                : PaymentStatus.PARTIALLY_REFUNDED;
     }
 }
