@@ -1,7 +1,6 @@
 package com.taca.paymentwallet.domain.refund;
 
 import com.taca.paymentwallet.domain.AggregateRoot;
-import com.taca.paymentwallet.domain.payment.PaymentFailedEvent;
 import com.taca.paymentwallet.domain.valueobject.IdempotencyKey;
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.domain.valueobject.PaymentId;

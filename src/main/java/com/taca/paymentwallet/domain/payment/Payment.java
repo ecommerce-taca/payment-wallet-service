@@ -73,6 +73,10 @@ public class Payment extends AggregateRoot {
             throw new InvalidPaymentStateException(status, "mark succeeded");
         }
 
+        if (paidAt == null) {
+            throw new IllegalArgumentException("paidAt must not be null");
+        }
+
         this.status = PaymentStatus.SUCCESS;
         this.capturedAmount = amount;
         this.paidAt = paidAt;
@@ -128,6 +132,10 @@ public class Payment extends AggregateRoot {
 
     public PaymentMethod method() {
         return method;
+    }
+
+    public String failureCode() {
+        return failureCode;
     }
 
     public Money amount() {

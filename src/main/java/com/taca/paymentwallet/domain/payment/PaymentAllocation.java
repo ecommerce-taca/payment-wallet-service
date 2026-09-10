@@ -2,9 +2,11 @@ package com.taca.paymentwallet.domain.payment;
 
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.domain.valueobject.OrderId;
+import com.taca.paymentwallet.domain.valueobject.PaymentAllocationId;
 import com.taca.paymentwallet.domain.valueobject.ShopId;
 
 public record PaymentAllocation(
+        PaymentAllocationId id,
         OrderId orderId,
         ShopId shopId,
         Money grossAmount,
@@ -14,6 +16,10 @@ public record PaymentAllocation(
 ) {
 
     public PaymentAllocation {
+        if (id == null) {
+            throw new IllegalArgumentException("paymentAllocationId must not be null");
+        }
+
         if (orderId == null) {
             throw new IllegalArgumentException("orderId must not be null");
         }
