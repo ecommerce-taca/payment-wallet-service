@@ -105,6 +105,8 @@ public class Payment extends AggregateRoot {
         }
 
         this.status = PaymentStatus.EXPIRED;
+
+        registerEvent(PaymentExpiredEvent.now(id));
     }
 
     private void validateTotalOrderAmount() {
@@ -208,5 +210,7 @@ public class Payment extends AggregateRoot {
         this.status = newRefundedAmount.equals(capturedAmount)
                 ? PaymentStatus.REFUNDED
                 : PaymentStatus.PARTIALLY_REFUNDED;
+
+        registerEvent(PaymentRefundedEvent.now(id, refundAmount, status));
     }
 }

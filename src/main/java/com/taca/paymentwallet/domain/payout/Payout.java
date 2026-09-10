@@ -71,7 +71,7 @@ public class Payout extends AggregateRoot {
             BankAccountSnapshot bankAccountSnapshot,
             IdempotencyKey idempotencyKey
     ) {
-        return new Payout(
+        Payout payout = new Payout(
                 id,
                 walletId,
                 shopId,
@@ -80,6 +80,10 @@ public class Payout extends AggregateRoot {
                 idempotencyKey,
                 PayoutStatus.REQUESTED
         );
+
+        payout.registerEvent(PayoutRequestedEvent.now(id, shopId, amount));
+
+        return payout;
     }
 
     public void markProcessing() {
@@ -116,6 +120,8 @@ public class Payout extends AggregateRoot {
 
         this.failureCode = failureCode;
         this.status = PayoutStatus.FAILED;
+
+        registerEvent(PayoutFailedEvent.now(id, shopId, failureCode));
     }
 
     public void cancel() {
