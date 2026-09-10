@@ -7,4 +7,17 @@ public record CreatePaymentResult(
         String status,
         String paymentUrl
 ) {
+
+    public CreatePaymentResult {
+        if (paymentId == null) {
+            throw new IllegalArgumentException("paymentId must not be null");
+        }
+
+        if (status == null || status.isBlank()) {
+            throw new IllegalArgumentException("status must not be blank");
+        }
+
+        status = status.trim().toUpperCase();
+        paymentUrl = paymentUrl == null ? null : paymentUrl.trim();
+    }
 }
