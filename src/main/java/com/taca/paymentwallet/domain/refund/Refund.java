@@ -11,6 +11,7 @@ public class Refund extends AggregateRoot {
     private final RefundId id;
     private final PaymentId paymentId;
     private final Money amount;
+    private String failureCode;
     private final String reason;
     private final IdempotencyKey idempotencyKey;
     private RefundStatus status;
@@ -93,13 +94,20 @@ public class Refund extends AggregateRoot {
         registerEvent(RefundSucceededEvent.now(id, paymentId, amount));
     }
 
-    public void markFailed() {
+    public void markFailed(String failureCode) {
         if (status != RefundStatus.REQUESTED
                 && status != RefundStatus.PROCESSING) {
             throw new InvalidRefundStateException(status, "mark failed");
         }
 
+        if (failureCode == null || failureCode.isBlank()) {
+            throw new IllegalArgumentException("failureCode must not be blank");
+        }
+
+        this.failureCode = failureCode.trim();
         this.status = RefundStatus.FAILED;
+
+        registerEvent(RefundFailedEvent.now(id, paymentId, this.failureCode));
     }
 
     public void cancel() {
@@ -124,6 +132,10 @@ public class Refund extends AggregateRoot {
 
     public String reason() {
         return reason;
+    }
+
+    public String failureCode() {
+        return failureCode;
     }
 
     public IdempotencyKey idempotencyKey() {
