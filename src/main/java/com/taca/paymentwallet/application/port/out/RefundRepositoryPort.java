@@ -14,4 +14,8 @@ public interface RefundRepositoryPort {
     Money sumPendingRefundAmount(PaymentId paymentId);
 
     Refund save(Refund refund);
+
+    default Optional<Refund> findByIdForUpdate(RefundId refundId) {
+        return findById(refundId);
+    }
 }
