@@ -22,4 +22,8 @@ public interface LedgerAccountLookupPort {
     Map<PaymentAllocationId, LedgerAccountId> sellerRefundAccountsFor(
             List<PaymentAllocationId> paymentAllocationIds
     );
+
+    LedgerAccountId sellerAvailableAccount(ShopId shopId);
+
+    LedgerAccountId payoutClearingAccount();
 }
