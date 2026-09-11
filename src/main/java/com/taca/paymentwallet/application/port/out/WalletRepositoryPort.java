@@ -16,4 +16,6 @@ public interface WalletRepositoryPort {
     );
 
     Wallet save(Wallet wallet);
+
+    Optional<Wallet> findByIdForUpdate(WalletId walletId);
 }
