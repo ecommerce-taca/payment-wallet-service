@@ -17,4 +17,10 @@ public interface PaymentRepositoryPort {
     }
 
     Payment save(Payment payment);
+
+    default Optional<Payment> findByCheckoutGroupIdForUpdate(
+            CheckoutGroupId checkoutGroupId
+    ) {
+        return findByCheckoutGroupId(checkoutGroupId);
+    }
 }
