@@ -26,4 +26,6 @@ public interface LedgerAccountLookupPort {
     LedgerAccountId sellerAvailableAccount(ShopId shopId);
 
     LedgerAccountId payoutClearingAccount();
+
+    LedgerAccountId codClearingAccount();
 }
