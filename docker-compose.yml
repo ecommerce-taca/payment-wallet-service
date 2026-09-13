@@ -9,6 +9,7 @@ services:
       MYSQL_PASSWORD: payment_password
     ports:
       - "15405:15405"
+    command: --port=15405
     volumes:
       - payment_wallet_mysql_data:/var/lib/mysql
 

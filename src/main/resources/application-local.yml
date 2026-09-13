@@ -3,7 +3,7 @@ server:
 
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/paymentdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: jdbc:mysql://localhost:15405/paymentdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: payment_user
     password: payment_password
 
