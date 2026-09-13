@@ -8,7 +8,7 @@ services:
       MYSQL_USER: payment_user
       MYSQL_PASSWORD: payment_password
     ports:
-      - "3306:3306"
+      - "15405:15405"
     volumes:
       - payment_wallet_mysql_data:/var/lib/mysql
 
