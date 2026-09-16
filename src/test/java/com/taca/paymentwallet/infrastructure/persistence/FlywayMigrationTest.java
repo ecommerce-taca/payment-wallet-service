@@ -50,6 +50,9 @@ class FlywayMigrationTest {
         assertThat(tableExists(flyway, "refund_allocations")).isTrue();
         assertThat(tableExists(flyway, "payouts")).isTrue();
         assertThat(tableExists(flyway, "idempotency_keys")).isTrue();
+        assertThat(tableExists(flyway, "inbox_events")).isTrue();
+        assertThat(tableExists(flyway, "outbox_events")).isTrue();
+        assertThat(tableExists(flyway, "audit_logs")).isTrue();
     }
 
     private boolean tableExists(Flyway flyway, String tableName) throws Exception {
