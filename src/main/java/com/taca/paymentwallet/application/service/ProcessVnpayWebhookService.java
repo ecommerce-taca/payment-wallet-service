@@ -3,34 +3,22 @@ package com.taca.paymentwallet.application.service;
 import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
 import com.taca.paymentwallet.application.exception.PaymentAmountMismatchException;
 import com.taca.paymentwallet.application.exception.PaymentNotFoundException;
+import com.taca.paymentwallet.application.exception.WalletNotFoundException;
 import com.taca.paymentwallet.application.fee.PaymentFeePolicy;
 import com.taca.paymentwallet.application.paymentevent.PaymentProviderEvent;
 import com.taca.paymentwallet.application.paymentevent.PaymentProviderEventStatus;
 import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
-import com.taca.paymentwallet.application.port.out.ClockPort;
-import com.taca.paymentwallet.application.port.out.FeePolicyPort;
-import com.taca.paymentwallet.application.port.out.IdGeneratorPort;
-import com.taca.paymentwallet.application.port.out.LedgerAccountLookupPort;
-import com.taca.paymentwallet.application.port.out.LedgerPostingRepositoryPort;
-import com.taca.paymentwallet.application.port.out.OutboxPort;
-import com.taca.paymentwallet.application.port.out.PaymentAllocationRepositoryPort;
-import com.taca.paymentwallet.application.port.out.PaymentProviderEventPort;
-import com.taca.paymentwallet.application.port.out.PaymentRepositoryPort;
-import com.taca.paymentwallet.application.port.out.TransactionPort;
-import com.taca.paymentwallet.application.port.out.VnpayWebhookVerifierPort;
+import com.taca.paymentwallet.application.port.out.*;
 import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
 import com.taca.paymentwallet.application.result.WebhookProcessingAction;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.payment.Payment;
 import com.taca.paymentwallet.domain.payment.PaymentAllocation;
 import com.taca.paymentwallet.domain.payment.PaymentOrder;
-import com.taca.paymentwallet.domain.valueobject.Money;
-import com.taca.paymentwallet.domain.valueobject.OrderId;
-import com.taca.paymentwallet.domain.valueobject.PaymentAllocationId;
-import com.taca.paymentwallet.domain.valueobject.PaymentId;
-import com.taca.paymentwallet.domain.valueobject.ShopId;
+import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
+import com.taca.paymentwallet.domain.wallet.Wallet;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,6 +33,7 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
     private final PaymentRepositoryPort paymentRepository;
     private final PaymentProviderEventPort paymentProviderEventPort;
     private final PaymentAllocationRepositoryPort paymentAllocationRepository;
+    private final WalletRepositoryPort walletRepository;
     private final LedgerPostingRepositoryPort ledgerPostingRepository;
     private final LedgerAccountLookupPort ledgerAccountLookupPort;
     private final FeePolicyPort feePolicyPort;
@@ -60,6 +49,7 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
             PaymentRepositoryPort paymentRepository,
             PaymentProviderEventPort paymentProviderEventPort,
             PaymentAllocationRepositoryPort paymentAllocationRepository,
+            WalletRepositoryPort walletRepository,
             LedgerPostingRepositoryPort ledgerPostingRepository,
             LedgerAccountLookupPort ledgerAccountLookupPort,
             FeePolicyPort feePolicyPort,
@@ -73,6 +63,7 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
     ) {
         this.paymentRepository = Objects.requireNonNull(paymentRepository);
         this.paymentProviderEventPort = Objects.requireNonNull(paymentProviderEventPort);
+        this.walletRepository = Objects.requireNonNull(walletRepository);
         this.paymentAllocationRepository = Objects.requireNonNull(paymentAllocationRepository);
         this.ledgerPostingRepository = Objects.requireNonNull(ledgerPostingRepository);
         this.ledgerAccountLookupPort = Objects.requireNonNull(ledgerAccountLookupPort);
@@ -149,32 +140,88 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
     }
 
     private void applySuccessfulPayment(Payment payment) {
+        Map<ShopId, Wallet> walletsByShop =
+                loadWalletsForUpdate(payment.orders());
+
+        PaymentFeePolicy feePolicy =
+                feePolicyPort.currentPaymentFeePolicy();
+
         payment.markSucceeded(clockPort.now());
 
-        PaymentFeePolicy feePolicy = feePolicyPort.currentPaymentFeePolicy();
+        List<PaymentAllocation> allocations =
+                allocationCalculator.allocate(
+                        payment.id(),
+                        payment.orders(),
+                        allocationIdsByOrder(payment.orders()),
+                        walletIdsByShop(walletsByShop),
+                        feePolicy.feeConfigId(),
+                        feePolicy.taxConfigId(),
+                        feePolicy.commissionRate(),
+                        feePolicy.taxRate()
+                );
 
-        List<PaymentAllocation> allocations = allocationCalculator.allocate(
-                payment.orders(),
-                allocationIdsByOrder(payment.orders()),
-                feePolicy.commissionRate(),
-                feePolicy.taxRate()
-        );
-
-        LedgerPosting posting = ledgerPostingFactory.createPaymentCapturePosting(
-                idGeneratorPort.nextLedgerPostingId(),
-                payment.id(),
-                ledgerAccountLookupPort.vnpayClearingAccount(),
-                ledgerAccountLookupPort.platformCommissionAccount(),
-                ledgerAccountLookupPort.taxPayableAccount(),
-                ledgerAccountLookupPort.sellerPendingAccountsFor(distinctShopIds(payment.orders())),
-                allocations
-        );
+        LedgerPosting posting =
+                ledgerPostingFactory.createPaymentCapturePosting(
+                        idGeneratorPort.nextLedgerPostingId(),
+                        payment.id(),
+                        ledgerAccountLookupPort.vnpayClearingAccount(),
+                        ledgerAccountLookupPort.platformCommissionAccount(),
+                        ledgerAccountLookupPort.taxPayableAccount(),
+                        ledgerAccountLookupPort.sellerPendingAccountsFor(
+                                distinctShopIds(payment.orders())
+                        ),
+                        allocations
+                );
 
         paymentRepository.save(payment);
         paymentAllocationRepository.saveAll(allocations);
         ledgerPostingRepository.save(posting);
+
         outboxPort.saveAll(payment.domainEvents());
         payment.clearDomainEvents();
+    }
+
+    private Map<ShopId, Wallet> loadWalletsForUpdate(
+            List<PaymentOrder> orders
+    ) {
+        Map<ShopId, Wallet> result = new LinkedHashMap<>();
+
+        for (PaymentOrder order : orders) {
+            ShopId shopId = order.shopId();
+
+            if (result.containsKey(shopId)) {
+                continue;
+            }
+
+            String currency = order.amount().currency();
+
+            Wallet wallet = walletRepository
+                    .findByShopIdAndCurrencyForUpdate(
+                            shopId,
+                            currency
+                    )
+                    .orElseThrow(() -> new WalletNotFoundException(
+                            shopId,
+                            currency
+                    ));
+
+            result.put(shopId, wallet);
+        }
+
+        return result;
+    }
+
+    private Map<ShopId, WalletId> walletIdsByShop(
+            Map<ShopId, Wallet> walletsByShop
+    ) {
+        Map<ShopId, WalletId> result = new LinkedHashMap<>();
+
+        walletsByShop.forEach(
+                (shopId, wallet) ->
+                        result.put(shopId, wallet.id())
+        );
+
+        return result;
     }
 
     private Map<OrderId, PaymentAllocationId> allocationIdsByOrder(List<PaymentOrder> orders) {

@@ -26,22 +26,7 @@ import com.taca.paymentwallet.domain.payment.PaymentStatus;
 import com.taca.paymentwallet.domain.refund.Refund;
 import com.taca.paymentwallet.domain.refund.RefundAllocation;
 import com.taca.paymentwallet.domain.refund.RefundStatus;
-import com.taca.paymentwallet.domain.valueobject.BuyerUserId;
-import com.taca.paymentwallet.domain.valueobject.CheckoutGroupId;
-import com.taca.paymentwallet.domain.valueobject.IdempotencyKey;
-import com.taca.paymentwallet.domain.valueobject.LedgerAccountId;
-import com.taca.paymentwallet.domain.valueobject.LedgerPostingId;
-import com.taca.paymentwallet.domain.valueobject.Money;
-import com.taca.paymentwallet.domain.valueobject.OrderId;
-import com.taca.paymentwallet.domain.valueobject.PaymentAllocationId;
-import com.taca.paymentwallet.domain.valueobject.PaymentId;
-import com.taca.paymentwallet.domain.valueobject.PayoutId;
-import com.taca.paymentwallet.domain.valueobject.RefundId;
-import com.taca.paymentwallet.domain.valueobject.SettlementBatchId;
-import com.taca.paymentwallet.domain.valueobject.SettlementBatchItemId;
-import com.taca.paymentwallet.domain.valueobject.SettlementLineId;
-import com.taca.paymentwallet.domain.valueobject.ShopId;
-import com.taca.paymentwallet.domain.valueobject.WalletId;
+import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import org.junit.jupiter.api.Test;
@@ -77,7 +62,7 @@ class ProcessRefundResultServiceTest {
                 new FakePaymentRepositoryPort(payment);
 
         FakePaymentAllocationRepositoryPort paymentAllocationRepository =
-                new FakePaymentAllocationRepositoryPort(List.of(paymentAllocation(allocationId)));
+                new FakePaymentAllocationRepositoryPort(List.of(paymentAllocation(allocationId, paymentId)));
 
         FakeRefundAllocationRepositoryPort refundAllocationRepository =
                 new FakeRefundAllocationRepositoryPort();
@@ -262,7 +247,10 @@ class ProcessRefundResultServiceTest {
         ProcessRefundResultService service = newService(
                 new FakeRefundRepositoryPort(requestedRefund(refundId, paymentId, Money.vnd(50_000))),
                 new FakePaymentRepositoryPort(succeededPayment(paymentId)),
-                new FakePaymentAllocationRepositoryPort(List.of(paymentAllocation(new PaymentAllocationId(UUID.randomUUID())))),
+                new FakePaymentAllocationRepositoryPort(List.of(paymentAllocation(
+                        new PaymentAllocationId(UUID.randomUUID()),
+                        paymentId
+                ))),
                 new FakeRefundAllocationRepositoryPort(),
                 new FakeLedgerPostingRepositoryPort(),
                 new FakeOutboxPort()
@@ -336,15 +324,22 @@ class ProcessRefundResultServiceTest {
         return refund;
     }
 
-    private PaymentAllocation paymentAllocation(PaymentAllocationId allocationId) {
+    private PaymentAllocation paymentAllocation(
+            PaymentAllocationId allocationId,
+            PaymentId paymentId
+    ) {
         return new PaymentAllocation(
                 allocationId,
+                paymentId,
                 new OrderId(UUID.randomUUID()),
                 new ShopId(UUID.randomUUID()),
+                new WalletId(UUID.randomUUID()),
                 Money.vnd(100_000),
                 Money.vnd(7_000),
                 Money.vnd(1_000),
-                Money.vnd(92_000)
+                Money.vnd(92_000),
+                new FeeConfigId(UUID.randomUUID()),
+                new TaxConfigId(UUID.randomUUID())
         );
     }
 

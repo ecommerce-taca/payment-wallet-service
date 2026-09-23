@@ -28,12 +28,16 @@ class LedgerPostingFactoryTest {
 
         PaymentAllocation allocation = new PaymentAllocation(
                 id,
+                paymentId,
                 orderId,
                 shopId,
+                new WalletId(UUID.randomUUID()),
                 Money.vnd(100_000),
                 Money.vnd(7_000),
                 Money.vnd(1_000),
-                Money.vnd(92_000)
+                Money.vnd(92_000),
+                new FeeConfigId(UUID.randomUUID()),
+                new TaxConfigId(UUID.randomUUID())
         );
 
         Map<ShopId, LedgerAccountId> sellerPendingAccountIdsByShop = Map.of(
