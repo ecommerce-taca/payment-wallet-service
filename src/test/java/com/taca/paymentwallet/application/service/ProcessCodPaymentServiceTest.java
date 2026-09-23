@@ -83,6 +83,13 @@ class ProcessCodPaymentServiceTest {
 
         assertThat(ledgerPostingRepository.postings).hasSize(1);
         assertThat(outboxPort.events).hasSize(1);
+
+        PaymentAllocation allocation = paymentAllocationRepository.allocations.getFirst();
+
+        assertThat(allocation.paymentId()).isEqualTo(payment.id());
+        assertThat(allocation.walletId()).isEqualTo(wallet.id());
+        assertThat(allocation.feeConfigId()).isNotNull();
+        assertThat(allocation.taxConfigId()).isNotNull();
     }
 
     @Test
@@ -386,8 +393,18 @@ class ProcessCodPaymentServiceTest {
         @Override
         public PaymentFeePolicy currentPaymentFeePolicy() {
             return new PaymentFeePolicy(
-                    new RateBps(700),
-                    new RateBps(100)
+                    new FeeConfigId(
+                            UUID.fromString(
+                                    "11111111-1111-1111-1111-111111111111"
+                            )
+                    ),
+                    new TaxConfigId(
+                            UUID.fromString(
+                                    "22222222-2222-2222-2222-222222222222"
+                            )
+                    ),
+                    RateBps.of(700),
+                    RateBps.of(100)
             );
         }
     }

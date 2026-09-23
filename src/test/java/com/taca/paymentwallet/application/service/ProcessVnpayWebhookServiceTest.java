@@ -5,17 +5,7 @@ import com.taca.paymentwallet.application.exception.PaymentAmountMismatchExcepti
 import com.taca.paymentwallet.application.exception.PaymentNotFoundException;
 import com.taca.paymentwallet.application.fee.PaymentFeePolicy;
 import com.taca.paymentwallet.application.paymentevent.PaymentProviderEvent;
-import com.taca.paymentwallet.application.port.out.ClockPort;
-import com.taca.paymentwallet.application.port.out.FeePolicyPort;
-import com.taca.paymentwallet.application.port.out.IdGeneratorPort;
-import com.taca.paymentwallet.application.port.out.LedgerAccountLookupPort;
-import com.taca.paymentwallet.application.port.out.LedgerPostingRepositoryPort;
-import com.taca.paymentwallet.application.port.out.OutboxPort;
-import com.taca.paymentwallet.application.port.out.PaymentAllocationRepositoryPort;
-import com.taca.paymentwallet.application.port.out.PaymentProviderEventPort;
-import com.taca.paymentwallet.application.port.out.PaymentRepositoryPort;
-import com.taca.paymentwallet.application.port.out.TransactionPort;
-import com.taca.paymentwallet.application.port.out.VnpayWebhookVerifierPort;
+import com.taca.paymentwallet.application.port.out.*;
 import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
 import com.taca.paymentwallet.application.result.WebhookProcessingAction;
 import com.taca.paymentwallet.domain.event.DomainEvent;
@@ -25,32 +15,14 @@ import com.taca.paymentwallet.domain.payment.PaymentAllocation;
 import com.taca.paymentwallet.domain.payment.PaymentMethod;
 import com.taca.paymentwallet.domain.payment.PaymentOrder;
 import com.taca.paymentwallet.domain.payment.PaymentStatus;
-import com.taca.paymentwallet.domain.valueobject.BuyerUserId;
-import com.taca.paymentwallet.domain.valueobject.CheckoutGroupId;
-import com.taca.paymentwallet.domain.valueobject.LedgerAccountId;
-import com.taca.paymentwallet.domain.valueobject.LedgerPostingId;
-import com.taca.paymentwallet.domain.valueobject.Money;
-import com.taca.paymentwallet.domain.valueobject.OrderId;
-import com.taca.paymentwallet.domain.valueobject.PaymentAllocationId;
-import com.taca.paymentwallet.domain.valueobject.PaymentId;
-import com.taca.paymentwallet.domain.valueobject.PayoutId;
-import com.taca.paymentwallet.domain.valueobject.RefundId;
-import com.taca.paymentwallet.domain.valueobject.SettlementBatchId;
-import com.taca.paymentwallet.domain.valueobject.SettlementBatchItemId;
-import com.taca.paymentwallet.domain.valueobject.SettlementLineId;
-import com.taca.paymentwallet.domain.valueobject.ShopId;
-import com.taca.paymentwallet.domain.valueobject.WalletId;
-import com.taca.paymentwallet.domain.valueobject.RateBps;
+import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
+import com.taca.paymentwallet.domain.wallet.Wallet;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -237,6 +209,7 @@ class ProcessVnpayWebhookServiceTest {
                 paymentRepository,
                 paymentProviderEventPort,
                 allocationRepository,
+                new FakeWalletRepositoryPort(),
                 ledgerPostingRepository,
                 new FakeLedgerAccountLookupPort(),
                 new FixedFeePolicyPort(),
@@ -248,6 +221,60 @@ class ProcessVnpayWebhookServiceTest {
                 new AllocationCalculator(),
                 new LedgerPostingFactory()
         );
+    }
+
+    private static final class FakeWalletRepositoryPort
+            implements WalletRepositoryPort {
+
+        private final Map<WalletId, Wallet> walletsById = new HashMap<>();
+
+        @Override
+        public Optional<Wallet> findById(WalletId walletId) {
+            return Optional.ofNullable(
+                    walletsById.get(walletId)
+            );
+        }
+
+        @Override
+        public Optional<Wallet> findByIdForUpdate(
+                WalletId walletId
+        ) {
+            return findById(walletId);
+        }
+
+        @Override
+        public Optional<Wallet> findByShopIdAndCurrencyForUpdate(
+                ShopId shopId,
+                String currency
+        ) {
+            Wallet existing = walletsById.values()
+                    .stream()
+                    .filter(wallet ->
+                            wallet.shopId().equals(shopId))
+                    .filter(wallet ->
+                            wallet.currency().equals(currency))
+                    .findFirst()
+                    .orElse(null);
+
+            if (existing != null) {
+                return Optional.of(existing);
+            }
+
+            Wallet wallet = Wallet.create(
+                    new WalletId(UUID.randomUUID()),
+                    shopId
+            );
+
+            walletsById.put(wallet.id(), wallet);
+
+            return Optional.of(wallet);
+        }
+
+        @Override
+        public Wallet save(Wallet wallet) {
+            walletsById.put(wallet.id(), wallet);
+            return wallet;
+        }
     }
 
     private Payment createPendingVnpayPayment(PaymentId paymentId, ShopId shopId) {
@@ -439,6 +466,16 @@ class ProcessVnpayWebhookServiceTest {
         @Override
         public PaymentFeePolicy currentPaymentFeePolicy() {
             return new PaymentFeePolicy(
+                    new FeeConfigId(
+                            UUID.fromString(
+                                    "11111111-1111-1111-1111-111111111111"
+                            )
+                    ),
+                    new TaxConfigId(
+                            UUID.fromString(
+                                    "22222222-2222-2222-2222-222222222222"
+                            )
+                    ),
                     RateBps.of(700),
                     RateBps.of(100)
             );
