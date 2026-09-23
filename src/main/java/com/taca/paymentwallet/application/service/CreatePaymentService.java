@@ -145,13 +145,18 @@ public class CreatePaymentService implements CreatePaymentUseCase {
         PaymentMethod method = parsePaymentMethod(command.method());
         PaymentId paymentId = idGeneratorPort.nextPaymentId();
 
+        Instant expiresAt = method == PaymentMethod.VNPAY
+                ? clockPort.now().plus(VNPAY_PAYMENT_TTL)
+                : null;
+
         Payment payment = Payment.create(
                 paymentId,
                 checkoutGroupId,
                 new BuyerUserId(command.buyerUserId()),
                 method,
                 new Money(command.amount(), command.currency()),
-                toDomainOrders(command.orders())
+                toDomainOrders(command.orders()),
+                expiresAt
         );
 
         CreatePaymentResult result = switch (method) {
@@ -170,17 +175,16 @@ public class CreatePaymentService implements CreatePaymentUseCase {
             CreatePaymentCommand command,
             Payment payment
     ) {
-        Instant expiresAt = clockPort.now().plus(VNPAY_PAYMENT_TTL);
-
-        CreateVnpayPaymentUrlResult vnpayResult = vnpayGatewayPort.createPaymentUrl(
-                new CreateVnpayPaymentUrlRequest(
-                        payment.id(),
-                        payment.checkoutGroupId(),
-                        payment.amount(),
-                        expiresAt,
-                        requireClientIp(command.clientIp())
-                )
-        );
+        CreateVnpayPaymentUrlResult vnpayResult =
+                vnpayGatewayPort.createPaymentUrl(
+                        new CreateVnpayPaymentUrlRequest(
+                                payment.id(),
+                                payment.checkoutGroupId(),
+                                payment.amount(),
+                                payment.expiresAt(),
+                                requireClientIp(command.clientIp())
+                        )
+                );
 
         return new CreatePaymentResult(
                 payment.id().value(),

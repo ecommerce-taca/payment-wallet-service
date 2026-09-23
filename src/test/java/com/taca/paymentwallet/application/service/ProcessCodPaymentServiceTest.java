@@ -227,7 +227,8 @@ class ProcessCodPaymentServiceTest {
                         new OrderId(UUID.randomUUID()),
                         shopId,
                         amount
-                ))
+                )),
+                Instant.parse("2026-09-12T01:15:00Z")
         );
     }
 

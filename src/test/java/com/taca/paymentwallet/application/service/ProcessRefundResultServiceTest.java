@@ -308,7 +308,8 @@ class ProcessRefundResultServiceTest {
                         new OrderId(UUID.randomUUID()),
                         new ShopId(UUID.randomUUID()),
                         Money.vnd(100_000)
-                ))
+                )),
+                Instant.parse("2026-01-01T00:15:00Z")
         );
 
         payment.markSucceeded(Instant.parse("2026-01-01T00:00:00Z"));
