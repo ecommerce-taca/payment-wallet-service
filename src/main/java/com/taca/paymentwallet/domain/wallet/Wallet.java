@@ -64,6 +64,24 @@ public class Wallet {
         );
     }
 
+    public static Wallet rehydrate(
+            WalletId id,
+            ShopId shopId,
+            String currency,
+            Money availableBalance,
+            Money pendingBalance,
+            WalletStatus status
+    ) {
+        return new Wallet(
+                id,
+                shopId,
+                currency,
+                availableBalance,
+                pendingBalance,
+                status
+        );
+    }
+
     public void creditPending(Money amount) {
         requireActive();
         requirePositive(amount);
