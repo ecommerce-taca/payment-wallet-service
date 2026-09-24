@@ -23,7 +23,7 @@ public class SettlementBatchItem {
     private SettlementBatchItemStatus status;
     private LedgerPostingId postingId;
 
-    public SettlementBatchItem(
+    private SettlementBatchItem(
             SettlementBatchItemId id,
             ShopId shopId,
             WalletId walletId,
@@ -33,7 +33,9 @@ public class SettlementBatchItem {
             Money net,
             Money releasedAmount,
             Money heldAmount,
-            List<SettlementLine> lines
+            List<SettlementLine> lines,
+            SettlementBatchItemStatus status,
+            LedgerPostingId postingId
     ) {
         if (id == null) {
             throw new IllegalArgumentException("id must not be null");
@@ -51,6 +53,10 @@ public class SettlementBatchItem {
             throw new IllegalArgumentException("lines must not be empty");
         }
 
+        if (status == null) {
+            throw new IllegalArgumentException("status must not be null");
+        }
+
         this.id = id;
         this.shopId = shopId;
         this.walletId = walletId;
@@ -58,12 +64,94 @@ public class SettlementBatchItem {
         this.commission = requireMoney(commission, "commission");
         this.tax = requireMoney(tax, "tax");
         this.net = requireMoney(net, "net");
-        this.releasedAmount = requireMoney(releasedAmount, "releasedAmount");
-        this.heldAmount = requireMoney(heldAmount, "heldAmount");
+        this.releasedAmount = requireMoney(
+                releasedAmount,
+                "releasedAmount"
+        );
+        this.heldAmount = requireMoney(
+                heldAmount,
+                "heldAmount"
+        );
         this.lines = List.copyOf(lines);
-        this.status = SettlementBatchItemStatus.PENDING;
+        this.status = status;
+        this.postingId = postingId;
 
         validateAmounts();
+        validateState();
+    }
+
+    public static SettlementBatchItem create(
+            SettlementBatchItemId id,
+            ShopId shopId,
+            WalletId walletId,
+            Money gross,
+            Money commission,
+            Money tax,
+            Money net,
+            Money releasedAmount,
+            Money heldAmount,
+            List<SettlementLine> lines
+    ) {
+        return new SettlementBatchItem(
+                id,
+                shopId,
+                walletId,
+                gross,
+                commission,
+                tax,
+                net,
+                releasedAmount,
+                heldAmount,
+                lines,
+                SettlementBatchItemStatus.PENDING,
+                null
+        );
+    }
+
+    public static SettlementBatchItem rehydrate(
+            SettlementBatchItemId id,
+            ShopId shopId,
+            WalletId walletId,
+            Money gross,
+            Money commission,
+            Money tax,
+            Money net,
+            Money releasedAmount,
+            Money heldAmount,
+            List<SettlementLine> lines,
+            SettlementBatchItemStatus status,
+            LedgerPostingId postingId
+    ) {
+        return new SettlementBatchItem(
+                id,
+                shopId,
+                walletId,
+                gross,
+                commission,
+                tax,
+                net,
+                releasedAmount,
+                heldAmount,
+                lines,
+                status,
+                postingId
+        );
+    }
+
+    private void validateState() {
+        if (status == SettlementBatchItemStatus.COMPLETED
+                && postingId == null) {
+            throw new IllegalArgumentException(
+                    "completed settlement item requires postingId"
+            );
+        }
+
+        if (status != SettlementBatchItemStatus.COMPLETED
+                && postingId != null) {
+            throw new IllegalArgumentException(
+                    "non-completed settlement item must not have postingId"
+            );
+        }
     }
 
     public void markCompleted(LedgerPostingId postingId) {

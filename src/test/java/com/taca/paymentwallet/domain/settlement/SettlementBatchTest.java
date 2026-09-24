@@ -63,12 +63,156 @@ class SettlementBatchTest {
     void shouldRejectInvalidPeriod() {
         Instant now = Instant.now();
 
-        assertThrows(IllegalArgumentException.class, () -> new SettlementBatch(
-                new SettlementBatchId(UUID.randomUUID()),
-                now,
-                now.minusSeconds(3600),
-                List.of(createItem(new PaymentAllocationId(UUID.randomUUID())))
-        ));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> SettlementBatch.create(
+                        new SettlementBatchId(UUID.randomUUID()),
+                        now,
+                        now.minusSeconds(3600),
+                        List.of(createItem(
+                                new PaymentAllocationId(UUID.randomUUID())
+                        ))
+                )
+        );
+    }
+
+    @Test
+    void shouldRehydrateCompletedSettlementItem() {
+        SettlementLine line = new SettlementLine(
+                new SettlementLineId(UUID.randomUUID()),
+                new PaymentAllocationId(UUID.randomUUID()),
+                Money.vnd(92_000)
+        );
+
+        LedgerPostingId postingId =
+                new LedgerPostingId(UUID.randomUUID());
+
+        SettlementBatchItem item =
+                SettlementBatchItem.rehydrate(
+                        new SettlementBatchItemId(UUID.randomUUID()),
+                        new ShopId(UUID.randomUUID()),
+                        new WalletId(UUID.randomUUID()),
+                        Money.vnd(100_000),
+                        Money.vnd(7_000),
+                        Money.vnd(1_000),
+                        Money.vnd(92_000),
+                        Money.vnd(92_000),
+                        Money.vnd(0),
+                        List.of(line),
+                        SettlementBatchItemStatus.COMPLETED,
+                        postingId
+                );
+
+        assertEquals(
+                SettlementBatchItemStatus.COMPLETED,
+                item.status()
+        );
+
+        assertEquals(
+                postingId,
+                item.postingId()
+        );
+    }
+
+    @Test
+    void shouldRehydrateCompletedBatchWithoutDomainEvent() {
+        SettlementLine line = new SettlementLine(
+                new SettlementLineId(UUID.randomUUID()),
+                new PaymentAllocationId(UUID.randomUUID()),
+                Money.vnd(92_000)
+        );
+
+        SettlementBatchItem item =
+                SettlementBatchItem.rehydrate(
+                        new SettlementBatchItemId(UUID.randomUUID()),
+                        new ShopId(UUID.randomUUID()),
+                        new WalletId(UUID.randomUUID()),
+                        Money.vnd(100_000),
+                        Money.vnd(7_000),
+                        Money.vnd(1_000),
+                        Money.vnd(92_000),
+                        Money.vnd(92_000),
+                        Money.vnd(0),
+                        List.of(line),
+                        SettlementBatchItemStatus.COMPLETED,
+                        new LedgerPostingId(UUID.randomUUID())
+                );
+
+        Instant periodStart =
+                Instant.parse("2026-09-01T00:00:00Z");
+
+        Instant periodEnd =
+                Instant.parse("2026-09-02T00:00:00Z");
+
+        SettlementBatch batch =
+                SettlementBatch.rehydrate(
+                        new SettlementBatchId(UUID.randomUUID()),
+                        periodStart,
+                        periodEnd,
+                        List.of(item),
+                        SettlementBatchStatus.COMPLETED
+                );
+
+        assertEquals(
+                SettlementBatchStatus.COMPLETED,
+                batch.status()
+        );
+
+        assertEquals(
+                Money.vnd(92_000),
+                batch.totalReleased()
+        );
+
+        assertEquals(
+                0,
+                batch.domainEvents().size()
+        );
+    }
+
+    @Test
+    void shouldRejectCompletedItemWithoutPostingId() {
+        SettlementLine line = new SettlementLine(
+                new SettlementLineId(UUID.randomUUID()),
+                new PaymentAllocationId(UUID.randomUUID()),
+                Money.vnd(92_000)
+        );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> SettlementBatchItem.rehydrate(
+                        new SettlementBatchItemId(UUID.randomUUID()),
+                        new ShopId(UUID.randomUUID()),
+                        new WalletId(UUID.randomUUID()),
+                        Money.vnd(100_000),
+                        Money.vnd(7_000),
+                        Money.vnd(1_000),
+                        Money.vnd(92_000),
+                        Money.vnd(92_000),
+                        Money.vnd(0),
+                        List.of(line),
+                        SettlementBatchItemStatus.COMPLETED,
+                        null
+                )
+        );
+    }
+
+    @Test
+    void shouldRejectRehydratedCompletedBatchWithPendingItem() {
+        SettlementBatchItem pendingItem =
+                createItem(
+                        new PaymentAllocationId(UUID.randomUUID())
+                );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> SettlementBatch.rehydrate(
+                        new SettlementBatchId(UUID.randomUUID()),
+                        Instant.parse("2026-09-01T00:00:00Z"),
+                        Instant.parse("2026-09-02T00:00:00Z"),
+                        List.of(pendingItem),
+                        SettlementBatchStatus.COMPLETED
+                )
+        );
     }
 
     private SettlementBatch createBatch() {
@@ -80,7 +224,7 @@ class SettlementBatchTest {
     }
 
     private SettlementBatch createBatchWithItems(List<SettlementBatchItem> items) {
-        return new SettlementBatch(
+        return SettlementBatch.create(
                 new SettlementBatchId(UUID.randomUUID()),
                 Instant.now().minusSeconds(86_400),
                 Instant.now(),
@@ -95,7 +239,7 @@ class SettlementBatchTest {
                 Money.vnd(92_000)
         );
 
-        return new SettlementBatchItem(
+        return SettlementBatchItem.create(
                 new SettlementBatchItemId(UUID.randomUUID()),
                 new ShopId(UUID.randomUUID()),
                 new WalletId(UUID.randomUUID()),
