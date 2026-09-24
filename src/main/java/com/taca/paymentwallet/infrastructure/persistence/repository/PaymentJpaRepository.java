@@ -17,4 +17,14 @@ public interface PaymentJpaRepository extends JpaRepository<PaymentJpaEntity, UU
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select p from PaymentJpaEntity p where p.id = :id")
     Optional<PaymentJpaEntity> findByIdForUpdate(@Param("id") UUID id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        select p
+        from PaymentJpaEntity p
+        where p.checkoutGroupId = :checkoutGroupId
+        """)
+    Optional<PaymentJpaEntity> findByCheckoutGroupIdForUpdate(
+            @Param("checkoutGroupId") UUID checkoutGroupId
+    );
 }
