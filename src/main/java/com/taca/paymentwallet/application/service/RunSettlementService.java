@@ -85,7 +85,7 @@ public class RunSettlementService implements RunSettlementUseCase {
 
         List<SettlementBatchItem> items = buildItems(candidates);
 
-        SettlementBatch batch = new SettlementBatch(
+        SettlementBatch batch = SettlementBatch.create(
                 idGeneratorPort.nextSettlementBatchId(),
                 command.periodStart(),
                 command.periodEnd(),
@@ -181,7 +181,7 @@ public class RunSettlementService implements RunSettlementUseCase {
                 .map(SettlementCandidate::heldAmount)
                 .reduce(Money.vnd(0), Money::add);
 
-        return new SettlementBatchItem(
+        return SettlementBatchItem.create(
                 idGeneratorPort.nextSettlementBatchItemId(),
                 key.shopId(),
                 key.walletId(),
