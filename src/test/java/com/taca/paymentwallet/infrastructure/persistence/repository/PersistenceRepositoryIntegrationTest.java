@@ -194,7 +194,7 @@ class PersistenceRepositoryIntegrationTest {
                 ))
                 .isPresent();
 
-        assertThat(paymentAllocationRepository.findByPaymentId(payment.getId()))
+        assertThat(paymentAllocationRepository.findByPaymentIdOrderByCreatedAtAscIdAsc(payment.getId()))
                 .hasSize(1);
     }
 

@@ -449,9 +449,17 @@ class ProcessRefundResultServiceTest {
 
         private final List<RefundAllocation> savedRefundAllocations = new ArrayList<>();
 
+        private RefundId savedRefundId;
+
         @Override
-        public void saveAll(List<RefundAllocation> refundAllocations) {
-            savedRefundAllocations.addAll(refundAllocations);
+        public void saveAll(
+                RefundId refundId,
+                List<RefundAllocation> refundAllocations
+        ) {
+            this.savedRefundId = refundId;
+            savedRefundAllocations.addAll(
+                    refundAllocations
+            );
         }
     }
 

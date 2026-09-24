@@ -8,7 +8,9 @@ import java.util.UUID;
 
 public interface PaymentAllocationJpaRepository extends JpaRepository<PaymentAllocationJpaEntity, UUID> {
 
-    List<PaymentAllocationJpaEntity> findByPaymentId(UUID paymentId);
+    List<PaymentAllocationJpaEntity> findByPaymentIdOrderByCreatedAtAscIdAsc(
+            UUID paymentId
+    );
 
     List<PaymentAllocationJpaEntity> findByShopId(UUID shopId);
 }
