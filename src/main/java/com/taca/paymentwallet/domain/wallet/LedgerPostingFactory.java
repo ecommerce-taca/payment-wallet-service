@@ -96,11 +96,17 @@ public class LedgerPostingFactory {
                 postingId,
                 "SETTLEMENT_RELEASE",
                 "SETTLEMENT_RELEASE:" + settlementBatchItemId.value(),
-                "SETTLEMENT_BATCH_ITEM",
+                "SETTLEMENT",
                 settlementBatchItemId.value().toString(),
                 List.of(
-                        LedgerEntry.debit(sellerPendingAccountId, releasedAmount),
-                        LedgerEntry.credit(sellerAvailableAccountId, releasedAmount)
+                        LedgerEntry.debit(
+                                sellerPendingAccountId,
+                                releasedAmount
+                        ),
+                        LedgerEntry.credit(
+                                sellerAvailableAccountId,
+                                releasedAmount
+                        )
                 )
         );
     }
