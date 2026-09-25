@@ -318,6 +318,439 @@ class ProcessCodPaymentIntegrationTest {
         );
     }
 
+    @Test
+    void shouldProcessFailedCodPaymentEndToEnd() {
+        UUID paymentId =
+                UUID.randomUUID();
+
+        UUID checkoutGroupId =
+                UUID.randomUUID();
+
+        UUID orderId =
+                UUID.randomUUID();
+
+        createCodPayment(
+                paymentId,
+                checkoutGroupId,
+                orderId
+        );
+
+        WalletJpaEntity walletBefore =
+                walletJpaRepository
+                        .findById(WALLET_ID)
+                        .orElseThrow();
+
+        long availableBalanceBefore =
+                walletBefore.getAvailableBalance();
+
+        long pendingBalanceBefore =
+                walletBefore.getPendingBalance();
+
+        ProcessCodPaymentService service =
+                createCodPaymentService();
+
+        ProcessCodPaymentResult result =
+                service.execute(
+                        new ProcessCodPaymentCommand(
+                                checkoutGroupId,
+                                CodPaymentResultStatus.FAILED,
+                                100_000,
+                                "VND",
+                                DELIVERED_AT,
+                                "SHIPMENT_FAILED"
+                        )
+                );
+
+        assertThat(
+                result.action()
+        ).isEqualTo(
+                CodPaymentProcessingAction.APPLIED
+        );
+
+        assertThat(
+                result.paymentStatus()
+        ).isEqualTo(
+                "FAILED"
+        );
+
+        PaymentJpaEntity storedPayment =
+                paymentJpaRepository
+                        .findById(paymentId)
+                        .orElseThrow();
+
+        assertThat(
+                storedPayment.getStatus()
+        ).isEqualTo(
+                "FAILED"
+        );
+
+        assertThat(
+                storedPayment.getFailureCode()
+        ).isEqualTo(
+                "SHIPMENT_FAILED"
+        );
+
+        assertThat(
+                storedPayment.getCapturedAmount()
+        ).isZero();
+
+        assertThat(
+                storedPayment.getPaidAt()
+        ).isNull();
+
+        assertThat(
+                paymentAllocationJpaRepository
+                        .findByPaymentIdOrderByCreatedAtAscIdAsc(
+                                paymentId
+                        )
+        ).isEmpty();
+
+        assertThat(
+                ledgerPostingJpaRepository
+                        .findByBusinessKey(
+                                "PAYMENT_CAPTURE:"
+                                        + paymentId
+                        )
+        ).isEmpty();
+
+        WalletJpaEntity walletAfter =
+                walletJpaRepository
+                        .findById(WALLET_ID)
+                        .orElseThrow();
+
+        assertThat(
+                walletAfter.getAvailableBalance()
+        ).isEqualTo(
+                availableBalanceBefore
+        );
+
+        assertThat(
+                walletAfter.getPendingBalance()
+        ).isEqualTo(
+                pendingBalanceBefore
+        );
+
+        assertPaymentFailedOutboxEventCreated(
+                paymentId,
+                "SHIPMENT_FAILED"
+        );
+    }
+
+    @Test
+    void shouldProcessCancelledCodPaymentEndToEnd() {
+        UUID paymentId =
+                UUID.randomUUID();
+
+        UUID checkoutGroupId =
+                UUID.randomUUID();
+
+        UUID orderId =
+                UUID.randomUUID();
+
+        createCodPayment(
+                paymentId,
+                checkoutGroupId,
+                orderId
+        );
+
+        WalletJpaEntity walletBefore =
+                walletJpaRepository
+                        .findById(WALLET_ID)
+                        .orElseThrow();
+
+        long availableBalanceBefore =
+                walletBefore.getAvailableBalance();
+
+        long pendingBalanceBefore =
+                walletBefore.getPendingBalance();
+
+        ProcessCodPaymentService service =
+                createCodPaymentService();
+
+        ProcessCodPaymentResult result =
+                service.execute(
+                        new ProcessCodPaymentCommand(
+                                checkoutGroupId,
+                                CodPaymentResultStatus.CANCELLED,
+                                100_000,
+                                "VND",
+                                DELIVERED_AT,
+                                "ORDER_CANCELLED"
+                        )
+                );
+
+        assertThat(
+                result.action()
+        ).isEqualTo(
+                CodPaymentProcessingAction.APPLIED
+        );
+
+        assertThat(
+                result.paymentStatus()
+        ).isEqualTo(
+                "FAILED"
+        );
+
+        PaymentJpaEntity storedPayment =
+                paymentJpaRepository
+                        .findById(paymentId)
+                        .orElseThrow();
+
+        assertThat(
+                storedPayment.getStatus()
+        ).isEqualTo(
+                "FAILED"
+        );
+
+        assertThat(
+                storedPayment.getFailureCode()
+        ).isEqualTo(
+                "ORDER_CANCELLED"
+        );
+
+        assertThat(
+                storedPayment.getCapturedAmount()
+        ).isZero();
+
+        assertThat(
+                storedPayment.getPaidAt()
+        ).isNull();
+
+        assertThat(
+                paymentAllocationJpaRepository
+                        .findByPaymentIdOrderByCreatedAtAscIdAsc(
+                                paymentId
+                        )
+        ).isEmpty();
+
+        assertThat(
+                ledgerPostingJpaRepository
+                        .findByBusinessKey(
+                                "PAYMENT_CAPTURE:"
+                                        + paymentId
+                        )
+        ).isEmpty();
+
+        WalletJpaEntity walletAfter =
+                walletJpaRepository
+                        .findById(WALLET_ID)
+                        .orElseThrow();
+
+        assertThat(
+                walletAfter.getAvailableBalance()
+        ).isEqualTo(
+                availableBalanceBefore
+        );
+
+        assertThat(
+                walletAfter.getPendingBalance()
+        ).isEqualTo(
+                pendingBalanceBefore
+        );
+
+        assertPaymentFailedOutboxEventCreated(
+                paymentId,
+                "ORDER_CANCELLED"
+        );
+    }
+
+    private ProcessCodPaymentService createCodPaymentService() {
+        ClockPort clockPort =
+                () -> NOW;
+
+        TransactionPort transactionPort =
+                new SpringTransactionAdapter(
+                        transactionManager
+                );
+
+        PaymentRepositoryAdapter paymentRepository =
+                new PaymentRepositoryAdapter(
+                        paymentJpaRepository,
+                        paymentOrderJpaRepository,
+                        new PaymentPersistenceMapper(),
+                        clockPort,
+                        new PersistenceUuidGenerator()
+                );
+
+        WalletRepositoryAdapter walletRepository =
+                new WalletRepositoryAdapter(
+                        walletJpaRepository,
+                        new WalletPersistenceMapper(),
+                        clockPort
+                );
+
+        PaymentAllocationRepositoryAdapter allocationRepository =
+                new PaymentAllocationRepositoryAdapter(
+                        paymentAllocationJpaRepository,
+                        new PaymentAllocationPersistenceMapper(),
+                        clockPort
+                );
+
+        LedgerPostingRepositoryAdapter ledgerRepository =
+                new LedgerPostingRepositoryAdapter(
+                        ledgerPostingJpaRepository,
+                        ledgerEntryJpaRepository,
+                        new LedgerPostingPersistenceMapper(),
+                        clockPort,
+                        new PersistenceUuidGenerator()
+                );
+
+        LedgerAccountLookupAdapter accountLookup =
+                new LedgerAccountLookupAdapter(
+                        ledgerAccountJpaRepository,
+                        paymentAllocationJpaRepository,
+                        settlementLineJpaRepository
+                );
+
+        FeePolicyPersistenceAdapter feePolicy =
+                new FeePolicyPersistenceAdapter(
+                        feeConfigJpaRepository,
+                        taxConfigJpaRepository,
+                        clockPort
+                );
+
+        OutboxPersistenceAdapter outbox =
+                new OutboxPersistenceAdapter(
+                        outboxEventJpaRepository,
+                        new ObjectMapper()
+                );
+
+        return new ProcessCodPaymentService(
+                paymentRepository,
+                allocationRepository,
+                walletRepository,
+                ledgerRepository,
+                accountLookup,
+                feePolicy,
+                new TestIdGenerator(),
+                outbox,
+                transactionPort,
+                new AllocationCalculator(),
+                new LedgerPostingFactory()
+        );
+    }
+
+    private void createCodPayment(
+            UUID paymentId,
+            UUID checkoutGroupId,
+            UUID orderId
+    ) {
+        Payment payment =
+                Payment.create(
+                        new PaymentId(
+                                paymentId
+                        ),
+                        new CheckoutGroupId(
+                                checkoutGroupId
+                        ),
+                        new BuyerUserId(
+                                UUID.randomUUID()
+                        ),
+                        PaymentMethod.COD,
+                        Money.vnd(
+                                100_000
+                        ),
+                        List.of(
+                                new PaymentOrder(
+                                        new OrderId(
+                                                orderId
+                                        ),
+                                        new ShopId(
+                                                SHOP_ID
+                                        ),
+                                        Money.vnd(
+                                                100_000
+                                        )
+                                )
+                        )
+                );
+
+        ClockPort clockPort =
+                () -> NOW;
+
+        PaymentRepositoryAdapter paymentRepository =
+                new PaymentRepositoryAdapter(
+                        paymentJpaRepository,
+                        paymentOrderJpaRepository,
+                        new PaymentPersistenceMapper(),
+                        clockPort,
+                        new PersistenceUuidGenerator()
+                );
+
+        TransactionPort transactionPort =
+                new SpringTransactionAdapter(
+                        transactionManager
+                );
+
+        transactionPort.execute(
+                () -> paymentRepository.save(
+                        payment
+                )
+        );
+    }
+
+    private void assertPaymentFailedOutboxEventCreated(
+            UUID paymentId,
+            String failureCode
+    ) {
+        List<OutboxEventJpaEntity> unpublished =
+                outboxEventJpaRepository
+                        .findByPublishedAtIsNullOrderByOccurredAtAsc(
+                                PageRequest.of(
+                                        0,
+                                        100
+                                )
+                        );
+
+        List<OutboxEventJpaEntity> paymentEvents =
+                unpublished.stream()
+                        .filter(event ->
+                                paymentId.equals(
+                                        event.getAggregateId()
+                                )
+                        )
+                        .toList();
+
+        assertThat(
+                paymentEvents
+        ).hasSize(1);
+
+        OutboxEventJpaEntity event =
+                paymentEvents.getFirst();
+
+        assertThat(
+                event.getAggregateType()
+        ).isEqualTo(
+                "PAYMENT"
+        );
+
+        assertThat(
+                event.getEventType()
+        ).isEqualTo(
+                "payment.failed"
+        );
+
+        assertThat(
+                event.getPublishedAt()
+        ).isNull();
+
+        assertThat(
+                event.getRetryCount()
+        ).isZero();
+
+        assertThat(
+                event.getPayload()
+        ).contains(
+                paymentId.toString()
+        );
+
+        assertThat(
+                event.getPayload()
+        ).contains(
+                failureCode
+        );
+    }
+
     private void assertPaymentSucceeded(
             UUID paymentId
     ) {
