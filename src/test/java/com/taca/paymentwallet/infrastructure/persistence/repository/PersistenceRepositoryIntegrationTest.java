@@ -255,6 +255,7 @@ class PersistenceRepositoryIntegrationTest {
         idempotencyKey.setStatus("SUCCEEDED");
         idempotencyKey.setCreatedAt(LocalDateTime.now());
         idempotencyKey.setExpiresAt(LocalDateTime.now().plusDays(1));
+        idempotencyKey.setUpdatedAt(LocalDateTime.now());
         idempotencyKeyRepository.saveAndFlush(idempotencyKey);
 
         InboxEventJpaEntity inboxEvent = new InboxEventJpaEntity();
