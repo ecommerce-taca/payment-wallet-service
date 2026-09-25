@@ -554,6 +554,329 @@ class ProcessCodPaymentIntegrationTest {
         );
     }
 
+    @Test
+    void shouldIgnoreDuplicateDeliveredCodPaymentEndToEnd() {
+        UUID paymentId =
+                UUID.randomUUID();
+
+        UUID checkoutGroupId =
+                UUID.randomUUID();
+
+        UUID orderId =
+                UUID.randomUUID();
+
+        createCodPayment(
+                paymentId,
+                checkoutGroupId,
+                orderId
+        );
+
+        ProcessCodPaymentService service =
+                createCodPaymentService();
+
+        ProcessCodPaymentResult firstResult =
+                service.execute(
+                        new ProcessCodPaymentCommand(
+                                checkoutGroupId,
+                                CodPaymentResultStatus.DELIVERED,
+                                100_000,
+                                "VND",
+                                DELIVERED_AT,
+                                null
+                        )
+                );
+
+        assertThat(
+                firstResult.action()
+        ).isEqualTo(
+                CodPaymentProcessingAction.APPLIED
+        );
+
+        assertThat(
+                firstResult.paymentStatus()
+        ).isEqualTo(
+                "SUCCESS"
+        );
+
+        WalletJpaEntity walletAfterFirstCall =
+                walletJpaRepository
+                        .findById(WALLET_ID)
+                        .orElseThrow();
+
+        long pendingBalanceAfterFirstCall =
+                walletAfterFirstCall
+                        .getPendingBalance();
+
+        List<PaymentAllocationJpaEntity>
+                allocationsAfterFirstCall =
+                paymentAllocationJpaRepository
+                        .findByPaymentIdOrderByCreatedAtAscIdAsc(
+                                paymentId
+                        );
+
+        assertThat(
+                allocationsAfterFirstCall
+        ).hasSize(1);
+
+        long outboxCountAfterFirstCall =
+                countOutboxEventsForPayment(
+                        paymentId
+                );
+
+        assertThat(
+                outboxCountAfterFirstCall
+        ).isEqualTo(1L);
+
+        ProcessCodPaymentResult duplicateResult =
+                service.execute(
+                        new ProcessCodPaymentCommand(
+                                checkoutGroupId,
+                                CodPaymentResultStatus.DELIVERED,
+                                100_000,
+                                "VND",
+                                DELIVERED_AT,
+                                null
+                        )
+                );
+
+        assertThat(
+                duplicateResult.action()
+        ).isEqualTo(
+                CodPaymentProcessingAction.DUPLICATE
+        );
+
+        assertThat(
+                duplicateResult.paymentStatus()
+        ).isEqualTo(
+                "SUCCESS"
+        );
+
+        PaymentJpaEntity storedPayment =
+                paymentJpaRepository
+                        .findById(paymentId)
+                        .orElseThrow();
+
+        assertThat(
+                storedPayment.getStatus()
+        ).isEqualTo(
+                "SUCCESS"
+        );
+
+        assertThat(
+                storedPayment.getCapturedAmount()
+        ).isEqualTo(
+                100_000L
+        );
+
+        assertThat(
+                paymentAllocationJpaRepository
+                        .findByPaymentIdOrderByCreatedAtAscIdAsc(
+                                paymentId
+                        )
+        ).hasSize(1);
+
+        WalletJpaEntity walletAfterDuplicate =
+                walletJpaRepository
+                        .findById(WALLET_ID)
+                        .orElseThrow();
+
+        assertThat(
+                walletAfterDuplicate
+                        .getPendingBalance()
+        ).isEqualTo(
+                pendingBalanceAfterFirstCall
+        );
+
+        assertThat(
+                ledgerPostingJpaRepository
+                        .findByBusinessKey(
+                                "PAYMENT_CAPTURE:"
+                                        + paymentId
+                        )
+        ).isPresent();
+
+        assertThat(
+                countOutboxEventsForPayment(
+                        paymentId
+                )
+        ).isEqualTo(
+                outboxCountAfterFirstCall
+        );
+    }
+
+    @Test
+    void shouldIgnoreDuplicateFailedCodPaymentEndToEnd() {
+        UUID paymentId =
+                UUID.randomUUID();
+
+        UUID checkoutGroupId =
+                UUID.randomUUID();
+
+        UUID orderId =
+                UUID.randomUUID();
+
+        createCodPayment(
+                paymentId,
+                checkoutGroupId,
+                orderId
+        );
+
+        ProcessCodPaymentService service =
+                createCodPaymentService();
+
+        ProcessCodPaymentResult firstResult =
+                service.execute(
+                        new ProcessCodPaymentCommand(
+                                checkoutGroupId,
+                                CodPaymentResultStatus.FAILED,
+                                100_000,
+                                "VND",
+                                DELIVERED_AT,
+                                "SHIPMENT_FAILED"
+                        )
+                );
+
+        assertThat(
+                firstResult.action()
+        ).isEqualTo(
+                CodPaymentProcessingAction.APPLIED
+        );
+
+        assertThat(
+                firstResult.paymentStatus()
+        ).isEqualTo(
+                "FAILED"
+        );
+
+        WalletJpaEntity walletAfterFirstCall =
+                walletJpaRepository
+                        .findById(WALLET_ID)
+                        .orElseThrow();
+
+        long availableBalanceAfterFirstCall =
+                walletAfterFirstCall
+                        .getAvailableBalance();
+
+        long pendingBalanceAfterFirstCall =
+                walletAfterFirstCall
+                        .getPendingBalance();
+
+        long outboxCountAfterFirstCall =
+                countOutboxEventsForPayment(
+                        paymentId
+                );
+
+        assertThat(
+                outboxCountAfterFirstCall
+        ).isEqualTo(1L);
+
+        ProcessCodPaymentResult duplicateResult =
+                service.execute(
+                        new ProcessCodPaymentCommand(
+                                checkoutGroupId,
+                                CodPaymentResultStatus.FAILED,
+                                100_000,
+                                "VND",
+                                DELIVERED_AT,
+                                "SHIPMENT_FAILED"
+                        )
+                );
+
+        assertThat(
+                duplicateResult.action()
+        ).isEqualTo(
+                CodPaymentProcessingAction.DUPLICATE
+        );
+
+        assertThat(
+                duplicateResult.paymentStatus()
+        ).isEqualTo(
+                "FAILED"
+        );
+
+        PaymentJpaEntity storedPayment =
+                paymentJpaRepository
+                        .findById(paymentId)
+                        .orElseThrow();
+
+        assertThat(
+                storedPayment.getStatus()
+        ).isEqualTo(
+                "FAILED"
+        );
+
+        assertThat(
+                storedPayment.getFailureCode()
+        ).isEqualTo(
+                "SHIPMENT_FAILED"
+        );
+
+        assertThat(
+                storedPayment.getCapturedAmount()
+        ).isZero();
+
+        assertThat(
+                paymentAllocationJpaRepository
+                        .findByPaymentIdOrderByCreatedAtAscIdAsc(
+                                paymentId
+                        )
+        ).isEmpty();
+
+        assertThat(
+                ledgerPostingJpaRepository
+                        .findByBusinessKey(
+                                "PAYMENT_CAPTURE:"
+                                        + paymentId
+                        )
+        ).isEmpty();
+
+        WalletJpaEntity walletAfterDuplicate =
+                walletJpaRepository
+                        .findById(WALLET_ID)
+                        .orElseThrow();
+
+        assertThat(
+                walletAfterDuplicate
+                        .getAvailableBalance()
+        ).isEqualTo(
+                availableBalanceAfterFirstCall
+        );
+
+        assertThat(
+                walletAfterDuplicate
+                        .getPendingBalance()
+        ).isEqualTo(
+                pendingBalanceAfterFirstCall
+        );
+
+        assertThat(
+                countOutboxEventsForPayment(
+                        paymentId
+                )
+        ).isEqualTo(
+                outboxCountAfterFirstCall
+        );
+    }
+
+    private long countOutboxEventsForPayment(
+            UUID paymentId
+    ) {
+        return outboxEventJpaRepository
+                .findByPublishedAtIsNullOrderByOccurredAtAsc(
+                        PageRequest.of(
+                                0,
+                                100
+                        )
+                )
+                .stream()
+                .filter(event ->
+                        paymentId.equals(
+                                event.getAggregateId()
+                        )
+                )
+                .count();
+    }
+
     private ProcessCodPaymentService createCodPaymentService() {
         ClockPort clockPort =
                 () -> NOW;
