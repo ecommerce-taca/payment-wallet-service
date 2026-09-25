@@ -173,6 +173,11 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
                         allocations
                 );
 
+        creditSellerPendingWallets(
+                allocations,
+                walletsByShop
+        );
+
         paymentRepository.save(payment);
         paymentAllocationRepository.saveAll(allocations);
         ledgerPostingRepository.save(posting);
@@ -209,6 +214,43 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
         }
 
         return result;
+    }
+
+    private void creditSellerPendingWallets(
+            List<PaymentAllocation> allocations,
+            Map<ShopId, Wallet> walletsByShop
+    ) {
+        Map<ShopId, Money> sellerNetAmountByShop =
+                new LinkedHashMap<>();
+
+        for (PaymentAllocation allocation : allocations) {
+            sellerNetAmountByShop.merge(
+                    allocation.shopId(),
+                    allocation.sellerNetAmount(),
+                    Money::add
+            );
+        }
+
+        for (Map.Entry<ShopId, Money> entry
+                : sellerNetAmountByShop.entrySet()) {
+
+            ShopId shopId = entry.getKey();
+
+            Money sellerNetAmount = entry.getValue();
+
+            Wallet wallet = walletsByShop.get(shopId);
+
+            if (wallet == null) {
+                throw new IllegalStateException(
+                        "Wallet not loaded for shop "
+                                + shopId.value()
+                );
+            }
+
+            wallet.creditPending(sellerNetAmount);
+
+            walletRepository.save(wallet);
+        }
     }
 
     private Map<ShopId, WalletId> walletIdsByShop(

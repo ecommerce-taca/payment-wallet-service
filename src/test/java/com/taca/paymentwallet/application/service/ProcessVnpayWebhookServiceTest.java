@@ -49,12 +49,16 @@ class ProcessVnpayWebhookServiceTest {
         FakeLedgerPostingRepositoryPort ledgerPostingRepository =
                 new FakeLedgerPostingRepositoryPort();
 
+        FakeWalletRepositoryPort walletRepository =
+                new FakeWalletRepositoryPort();
+
         FakeOutboxPort outboxPort = new FakeOutboxPort();
 
         ProcessVnpayWebhookService service = newService(
                 paymentRepository,
                 paymentProviderEventPort,
                 allocationRepository,
+                walletRepository,
                 ledgerPostingRepository,
                 outboxPort
         );
@@ -92,12 +96,16 @@ class ProcessVnpayWebhookServiceTest {
         FakeLedgerPostingRepositoryPort ledgerPostingRepository =
                 new FakeLedgerPostingRepositoryPort();
 
+        FakeWalletRepositoryPort walletRepository =
+                new FakeWalletRepositoryPort();
+
         FakeOutboxPort outboxPort = new FakeOutboxPort();
 
         ProcessVnpayWebhookService service = newService(
                 paymentRepository,
                 paymentProviderEventPort,
                 allocationRepository,
+                walletRepository,
                 ledgerPostingRepository,
                 outboxPort
         );
@@ -133,10 +141,14 @@ class ProcessVnpayWebhookServiceTest {
 
         FakeOutboxPort outboxPort = new FakeOutboxPort();
 
+        FakeWalletRepositoryPort walletRepository =
+                new FakeWalletRepositoryPort();
+
         ProcessVnpayWebhookService service = newService(
                 paymentRepository,
                 paymentProviderEventPort,
                 allocationRepository,
+                walletRepository,
                 ledgerPostingRepository,
                 outboxPort
         );
@@ -170,6 +182,7 @@ class ProcessVnpayWebhookServiceTest {
                 paymentRepository,
                 new FakePaymentProviderEventPort(true),
                 new FakePaymentAllocationRepositoryPort(),
+                new FakeWalletRepositoryPort(),
                 new FakeLedgerPostingRepositoryPort(),
                 new FakeOutboxPort()
         );
@@ -188,6 +201,7 @@ class ProcessVnpayWebhookServiceTest {
                 new FakePaymentRepositoryPort(null),
                 new FakePaymentProviderEventPort(true),
                 new FakePaymentAllocationRepositoryPort(),
+                new FakeWalletRepositoryPort(),
                 new FakeLedgerPostingRepositoryPort(),
                 new FakeOutboxPort()
         );
@@ -202,6 +216,7 @@ class ProcessVnpayWebhookServiceTest {
             FakePaymentRepositoryPort paymentRepository,
             FakePaymentProviderEventPort paymentProviderEventPort,
             FakePaymentAllocationRepositoryPort allocationRepository,
+            FakeWalletRepositoryPort walletRepository,
             FakeLedgerPostingRepositoryPort ledgerPostingRepository,
             FakeOutboxPort outboxPort
     ) {
@@ -209,7 +224,7 @@ class ProcessVnpayWebhookServiceTest {
                 paymentRepository,
                 paymentProviderEventPort,
                 allocationRepository,
-                new FakeWalletRepositoryPort(),
+                walletRepository,
                 ledgerPostingRepository,
                 new FakeLedgerAccountLookupPort(),
                 new FixedFeePolicyPort(),
@@ -274,6 +289,19 @@ class ProcessVnpayWebhookServiceTest {
         public Wallet save(Wallet wallet) {
             walletsById.put(wallet.id(), wallet);
             return wallet;
+        }
+
+        private Wallet findByShopId(
+                ShopId shopId
+        ) {
+            return walletsById.values()
+                    .stream()
+                    .filter(wallet ->
+                            wallet.shopId()
+                                    .equals(shopId)
+                    )
+                    .findFirst()
+                    .orElseThrow();
         }
     }
 
