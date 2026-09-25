@@ -15,6 +15,7 @@ import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.payment.Payment;
 import com.taca.paymentwallet.domain.payment.PaymentAllocation;
 import com.taca.paymentwallet.domain.payment.PaymentOrder;
+import com.taca.paymentwallet.domain.payment.PaymentStatus;
 import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
@@ -119,6 +120,19 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
         Payment payment = paymentRepository.findByIdForUpdate(paymentId)
                 .orElseThrow(() -> new PaymentNotFoundException(paymentId));
 
+        if (isTerminal(payment)) {
+            paymentProviderEventPort.markApplied(
+                    PROVIDER,
+                    command.providerEventId()
+            );
+
+            return new ProcessVnpayWebhookResult(
+                    payment.id().value(),
+                    payment.status().name(),
+                    WebhookProcessingAction.DUPLICATE
+            );
+        }
+
         ensureAmountMatches(payment, webhookAmount);
 
         if (isVnpaySuccess(command)) {
@@ -137,6 +151,14 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
                 payment.status().name(),
                 WebhookProcessingAction.APPLIED
         );
+    }
+
+    private boolean isTerminal(Payment payment) {
+        return payment.status() == PaymentStatus.SUCCESS
+                || payment.status() == PaymentStatus.FAILED
+                || payment.status() == PaymentStatus.EXPIRED
+                || payment.status() == PaymentStatus.PARTIALLY_REFUNDED
+                || payment.status() == PaymentStatus.REFUNDED;
     }
 
     private void applySuccessfulPayment(Payment payment) {
