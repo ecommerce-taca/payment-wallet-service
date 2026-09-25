@@ -1,4 +1,4 @@
-package com.taca.paymentwallet.application.service;
+package com.taca.paymentwallet.integration;
 
 import com.taca.paymentwallet.application.command.ProcessCodPaymentCommand;
 import com.taca.paymentwallet.application.payment.CodPaymentProcessingAction;
@@ -7,6 +7,7 @@ import com.taca.paymentwallet.application.port.out.ClockPort;
 import com.taca.paymentwallet.application.port.out.IdGeneratorPort;
 import com.taca.paymentwallet.application.port.out.TransactionPort;
 import com.taca.paymentwallet.application.result.ProcessCodPaymentResult;
+import com.taca.paymentwallet.application.service.ProcessCodPaymentService;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.payment.Payment;
 import com.taca.paymentwallet.domain.payment.PaymentMethod;
