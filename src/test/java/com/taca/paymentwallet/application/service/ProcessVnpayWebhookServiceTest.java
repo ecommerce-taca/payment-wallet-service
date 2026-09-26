@@ -123,6 +123,144 @@ class ProcessVnpayWebhookServiceTest {
     }
 
     @Test
+    void shouldIgnoreNewWebhookWhenPaymentAlreadySucceeded() {
+        PaymentId paymentId =
+                new PaymentId(UUID.randomUUID());
+
+        ShopId shopId =
+                new ShopId(UUID.randomUUID());
+
+        Payment payment =
+                createPendingVnpayPayment(
+                        paymentId,
+                        shopId
+                );
+
+        payment.markSucceeded(
+                Instant.parse("2026-01-01T00:00:00Z")
+        );
+
+        payment.clearDomainEvents();
+
+        FakePaymentRepositoryPort paymentRepository =
+                new FakePaymentRepositoryPort(payment);
+
+        FakePaymentProviderEventPort paymentProviderEventPort =
+                new FakePaymentProviderEventPort(true);
+
+        FakePaymentAllocationRepositoryPort allocationRepository =
+                new FakePaymentAllocationRepositoryPort();
+
+        FakeWalletRepositoryPort walletRepository =
+                new FakeWalletRepositoryPort();
+
+        FakeLedgerPostingRepositoryPort ledgerPostingRepository =
+                new FakeLedgerPostingRepositoryPort();
+
+        FakeOutboxPort outboxPort =
+                new FakeOutboxPort();
+
+        ProcessVnpayWebhookService service =
+                newService(
+                        paymentRepository,
+                        paymentProviderEventPort,
+                        allocationRepository,
+                        walletRepository,
+                        ledgerPostingRepository,
+                        outboxPort
+                );
+
+        ProcessVnpayWebhookResult result =
+                service.execute(
+                        successCommand(
+                                paymentId.value(),
+                                100_000
+                        )
+                );
+
+        assertEquals(paymentId.value(), result.paymentId());
+        assertEquals("SUCCESS", result.paymentStatus());
+        assertEquals(WebhookProcessingAction.DUPLICATE, result.action());
+        assertEquals(0, paymentRepository.savedPayments.size());
+        assertEquals(0, allocationRepository.savedAllocations.size());
+        assertEquals(0, ledgerPostingRepository.savedPostings.size());
+        assertEquals(0, outboxPort.events.size());
+        assertTrue(paymentProviderEventPort.applied);
+    }
+
+    @Test
+    void shouldIgnoreNewWebhookWhenPaymentAlreadyFailed() {
+        PaymentId paymentId =
+                new PaymentId(UUID.randomUUID());
+
+        ShopId shopId =
+                new ShopId(UUID.randomUUID());
+
+        Payment payment =
+                createPendingVnpayPayment(
+                        paymentId,
+                        shopId
+                );
+
+        payment.markFailed(
+                "VNPAY_24_02"
+        );
+
+        payment.clearDomainEvents();
+
+        FakePaymentRepositoryPort paymentRepository =
+                new FakePaymentRepositoryPort(payment);
+
+        FakePaymentProviderEventPort paymentProviderEventPort =
+                new FakePaymentProviderEventPort(true);
+
+        FakePaymentAllocationRepositoryPort allocationRepository =
+                new FakePaymentAllocationRepositoryPort();
+
+        FakeWalletRepositoryPort walletRepository =
+                new FakeWalletRepositoryPort();
+
+        FakeLedgerPostingRepositoryPort ledgerPostingRepository =
+                new FakeLedgerPostingRepositoryPort();
+
+        FakeOutboxPort outboxPort =
+                new FakeOutboxPort();
+
+        ProcessVnpayWebhookService service =
+                newService(
+                        paymentRepository,
+                        paymentProviderEventPort,
+                        allocationRepository,
+                        walletRepository,
+                        ledgerPostingRepository,
+                        outboxPort
+                );
+
+        /*
+         * Giả sử VNPAY gửi một event SUCCESS mới
+         * sau khi payment đã FAILED.
+         */
+        ProcessVnpayWebhookResult result =
+                service.execute(
+                        successCommand(
+                                paymentId.value(),
+                                100_000
+                        )
+                );
+
+        assertEquals(paymentId.value(), result.paymentId());
+        assertEquals("FAILED", result.paymentStatus());
+        assertEquals(WebhookProcessingAction.DUPLICATE, result.action());
+        assertEquals(PaymentStatus.FAILED, paymentRepository.payment.status());
+        assertEquals("VNPAY_24_02", paymentRepository.payment.failureCode());
+        assertEquals(0, paymentRepository.savedPayments.size());
+        assertEquals(0, allocationRepository.savedAllocations.size());
+        assertEquals(0, ledgerPostingRepository.savedPostings.size());
+        assertEquals(0, outboxPort.events.size());
+        assertTrue(paymentProviderEventPort.applied);
+    }
+
+    @Test
     void shouldMarkPaymentFailedWhenVnpayFailed() {
         PaymentId paymentId = new PaymentId(UUID.randomUUID());
         ShopId shopId = new ShopId(UUID.randomUUID());
