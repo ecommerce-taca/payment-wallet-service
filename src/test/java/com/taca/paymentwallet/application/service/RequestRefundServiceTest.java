@@ -24,21 +24,7 @@ import com.taca.paymentwallet.domain.payment.PaymentMethod;
 import com.taca.paymentwallet.domain.payment.PaymentOrder;
 import com.taca.paymentwallet.domain.refund.Refund;
 import com.taca.paymentwallet.domain.refund.RefundLimitExceededException;
-import com.taca.paymentwallet.domain.valueobject.BuyerUserId;
-import com.taca.paymentwallet.domain.valueobject.CheckoutGroupId;
-import com.taca.paymentwallet.domain.valueobject.LedgerAccountId;
-import com.taca.paymentwallet.domain.valueobject.LedgerPostingId;
-import com.taca.paymentwallet.domain.valueobject.Money;
-import com.taca.paymentwallet.domain.valueobject.OrderId;
-import com.taca.paymentwallet.domain.valueobject.PaymentAllocationId;
-import com.taca.paymentwallet.domain.valueobject.PaymentId;
-import com.taca.paymentwallet.domain.valueobject.PayoutId;
-import com.taca.paymentwallet.domain.valueobject.RefundId;
-import com.taca.paymentwallet.domain.valueobject.SettlementBatchId;
-import com.taca.paymentwallet.domain.valueobject.SettlementBatchItemId;
-import com.taca.paymentwallet.domain.valueobject.SettlementLineId;
-import com.taca.paymentwallet.domain.valueobject.ShopId;
-import com.taca.paymentwallet.domain.valueobject.WalletId;
+import com.taca.paymentwallet.domain.valueobject.*;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -496,6 +482,13 @@ class RequestRefundServiceTest {
         @Override
         public SettlementLineId nextSettlementLineId() {
             return new SettlementLineId(UUID.randomUUID());
+        }
+
+        @Override
+        public PaymentAttemptId nextPaymentAttemptId() {
+            return new PaymentAttemptId(
+                    UUID.randomUUID()
+            );
         }
     }
 

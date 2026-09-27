@@ -35,6 +35,10 @@ import com.taca.paymentwallet.domain.valueobject.SettlementBatchId;
 import com.taca.paymentwallet.domain.valueobject.SettlementBatchItemId;
 import com.taca.paymentwallet.domain.valueobject.SettlementLineId;
 import com.taca.paymentwallet.domain.valueobject.WalletId;
+import com.taca.paymentwallet.application.port.out.PaymentAttemptRepositoryPort;
+import com.taca.paymentwallet.application.port.out.PaymentUrlHashPort;
+import com.taca.paymentwallet.domain.payment.PaymentAttempt;
+import com.taca.paymentwallet.domain.valueobject.PaymentAttemptId;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -55,11 +59,13 @@ class CreatePaymentServiceTest {
         FakePaymentRepositoryPort paymentRepository = new FakePaymentRepositoryPort();
         FakeIdempotencyPort idempotencyPort = new FakeIdempotencyPort();
         FakeOutboxPort outboxPort = new FakeOutboxPort();
+        FakePaymentAttemptRepositoryPort paymentAttemptRepository = new FakePaymentAttemptRepositoryPort();
 
         UUID paymentUuid = UUID.randomUUID();
 
         CreatePaymentService service = newService(
                 paymentRepository,
+                paymentAttemptRepository,
                 idempotencyPort,
                 outboxPort,
                 new FixedIdGeneratorPort(paymentUuid),
@@ -73,6 +79,37 @@ class CreatePaymentServiceTest {
         assertEquals("https://sandbox.vnpay.vn/payment-url", result.paymentUrl());
         assertEquals(1, paymentRepository.savedPayments.size());
         assertEquals(IdempotencyStatus.SUCCEEDED, idempotencyPort.record.status());
+        assertEquals(
+                1,
+                paymentAttemptRepository
+                        .savedAttempts
+                        .size()
+        );
+
+        PaymentAttempt attempt =
+                paymentAttemptRepository
+                        .savedAttempts
+                        .getFirst();
+
+        assertEquals(
+                paymentUuid,
+                attempt.paymentId()
+                        .value()
+        );
+
+        assertEquals("VNPAY", attempt.provider());
+        assertEquals("VNPAY-TXN-001", attempt.providerTransactionRef());
+        assertEquals("request-hash", attempt.requestHash());
+
+        assertEquals(
+                "b".repeat(64),
+                attempt.paymentUrlHash()
+        );
+
+        assertEquals(
+                Instant.parse("2026-01-01T00:15:00Z"),
+                attempt.expiresAt()
+        );
     }
 
     @Test
@@ -80,11 +117,13 @@ class CreatePaymentServiceTest {
         FakePaymentRepositoryPort paymentRepository = new FakePaymentRepositoryPort();
         FakeIdempotencyPort idempotencyPort = new FakeIdempotencyPort();
         FakeOutboxPort outboxPort = new FakeOutboxPort();
+        FakePaymentAttemptRepositoryPort paymentAttemptRepository = new FakePaymentAttemptRepositoryPort();
 
         UUID paymentUuid = UUID.randomUUID();
 
         CreatePaymentService service = newService(
                 paymentRepository,
+                paymentAttemptRepository,
                 idempotencyPort,
                 outboxPort,
                 new FixedIdGeneratorPort(paymentUuid),
@@ -97,6 +136,12 @@ class CreatePaymentServiceTest {
         assertEquals("PENDING_COD", result.status());
         assertNull(result.paymentUrl());
         assertEquals(1, paymentRepository.savedPayments.size());
+        assertEquals(
+                0,
+                paymentAttemptRepository
+                        .savedAttempts
+                        .size()
+        );
     }
 
     @Test
@@ -120,6 +165,7 @@ class CreatePaymentServiceTest {
 
         CreatePaymentService service = newService(
                 paymentRepository,
+                new FakePaymentAttemptRepositoryPort(),
                 idempotencyPort,
                 outboxPort,
                 new FixedIdGeneratorPort(UUID.randomUUID()),
@@ -153,6 +199,7 @@ class CreatePaymentServiceTest {
 
         CreatePaymentService service = newService(
                 paymentRepository,
+                new FakePaymentAttemptRepositoryPort(),
                 idempotencyPort,
                 outboxPort,
                 new FixedIdGeneratorPort(UUID.randomUUID()),
@@ -184,6 +231,7 @@ class CreatePaymentServiceTest {
 
         CreatePaymentService service = newService(
                 paymentRepository,
+                new FakePaymentAttemptRepositoryPort(),
                 idempotencyPort,
                 outboxPort,
                 new FixedIdGeneratorPort(UUID.randomUUID()),
@@ -217,6 +265,7 @@ class CreatePaymentServiceTest {
 
         CreatePaymentService service = newService(
                 new FakePaymentRepositoryPort(),
+                new FakePaymentAttemptRepositoryPort(),
                 new FakeIdempotencyPort(),
                 new FakeOutboxPort(),
                 new FixedIdGeneratorPort(UUID.randomUUID()),
@@ -231,6 +280,7 @@ class CreatePaymentServiceTest {
 
     private CreatePaymentService newService(
             FakePaymentRepositoryPort paymentRepository,
+            FakePaymentAttemptRepositoryPort paymentAttemptRepository,
             FakeIdempotencyPort idempotencyPort,
             FakeOutboxPort outboxPort,
             IdGeneratorPort idGeneratorPort,
@@ -238,14 +288,58 @@ class CreatePaymentServiceTest {
     ) {
         return new CreatePaymentService(
                 paymentRepository,
+                paymentAttemptRepository,
                 idempotencyPort,
                 new FakeRequestHashPort(),
+                new FakePaymentUrlHashPort(),
                 idGeneratorPort,
                 new FixedClockPort(),
                 vnpayGatewayPort,
                 outboxPort,
                 new ImmediateTransactionPort(),
                 new PipeSeparatedCreatePaymentResultPayloadPort()
+        );
+    }
+
+    @Test
+    void shouldRejectCreatingSecondPendingVnpayAttempt() {
+        FakePaymentRepositoryPort paymentRepository = new FakePaymentRepositoryPort();
+        FakePaymentAttemptRepositoryPort paymentAttemptRepository = new FakePaymentAttemptRepositoryPort();
+        FakeIdempotencyPort idempotencyPort = new FakeIdempotencyPort();
+        FakeOutboxPort outboxPort = new FakeOutboxPort();
+
+        UUID paymentUuid = UUID.randomUUID();
+
+        paymentAttemptRepository.savedAttempts.add(
+                PaymentAttempt.create(
+                        new PaymentAttemptId(UUID.randomUUID()),
+                        new PaymentId(paymentUuid),
+                        "VNPAY",
+                        "existing-txn",
+                        "a".repeat(64),
+                        "b".repeat(64),
+                        Instant.parse("2026-01-01T00:15:00Z")
+                )
+        );
+
+        CreatePaymentService service =
+                newService(
+                        paymentRepository,
+                        paymentAttemptRepository,
+                        idempotencyPort,
+                        outboxPort,
+                        new FixedIdGeneratorPort(
+                                paymentUuid
+                        ),
+                        new FakeVnpayGatewayPort()
+                );
+
+        assertThrows(
+                IllegalStateException.class,
+                () ->
+                        service.execute(
+                                vnpayCommand()
+                        )
         );
     }
 
@@ -441,6 +535,79 @@ class CreatePaymentServiceTest {
         }
     }
 
+    private static final class
+    FakePaymentAttemptRepositoryPort
+            implements PaymentAttemptRepositoryPort {
+
+        private final List<PaymentAttempt>
+                savedAttempts =
+                new ArrayList<>();
+
+        @Override
+        public PaymentAttempt save(
+                PaymentAttempt attempt
+        ) {
+            savedAttempts.add(
+                    attempt
+            );
+
+            return attempt;
+        }
+
+        @Override
+        public Optional<PaymentAttempt>
+        findByProviderAndProviderTransactionRef(
+                String provider,
+                String providerTransactionRef
+        ) {
+            return savedAttempts.stream()
+                    .filter(attempt ->
+                            attempt.provider()
+                                    .equals(provider)
+                    )
+                    .filter(attempt ->
+                            attempt.providerTransactionRef()
+                                    .equals(
+                                            providerTransactionRef
+                                    )
+                    )
+                    .findFirst();
+        }
+
+        @Override
+        public List<PaymentAttempt>
+        findByPaymentId(
+                PaymentId paymentId
+        ) {
+            return savedAttempts.stream()
+                    .filter(attempt ->
+                            attempt.paymentId()
+                                    .equals(
+                                            paymentId
+                                    )
+                    )
+                    .toList();
+        }
+
+        @Override
+        public boolean existsPendingByPaymentId(
+                PaymentId paymentId
+        ) {
+            return savedAttempts.stream()
+                    .anyMatch(attempt ->
+                            attempt.paymentId()
+                                    .equals(
+                                            paymentId
+                                    )
+                                    && attempt.status()
+                                    == com.taca.paymentwallet
+                                    .domain.payment
+                                    .PaymentAttemptStatus
+                                    .PENDING
+                    );
+        }
+    }
+
     private static final class FixedIdGeneratorPort implements IdGeneratorPort {
 
         private final UUID paymentUuid;
@@ -448,6 +615,8 @@ class CreatePaymentServiceTest {
         private FixedIdGeneratorPort(UUID paymentUuid) {
             this.paymentUuid = paymentUuid;
         }
+
+        private final UUID paymentAttemptUuid = UUID.randomUUID();
 
         @Override
         public PaymentId nextPaymentId() {
@@ -498,6 +667,11 @@ class CreatePaymentServiceTest {
         public SettlementLineId nextSettlementLineId() {
             return new SettlementLineId(UUID.randomUUID());
         }
+
+        @Override
+        public PaymentAttemptId nextPaymentAttemptId() {
+            return new PaymentAttemptId(paymentAttemptUuid);
+        }
     }
 
     private static final class PipeSeparatedCreatePaymentResultPayloadPort
@@ -523,6 +697,16 @@ class CreatePaymentServiceTest {
                     parts[1],
                     paymentUrl
             );
+        }
+    }
+
+    private static final class FakePaymentUrlHashPort implements PaymentUrlHashPort {
+
+        @Override
+        public String hash(
+                String paymentUrl
+        ) {
+            return "b".repeat(64);
         }
     }
 }

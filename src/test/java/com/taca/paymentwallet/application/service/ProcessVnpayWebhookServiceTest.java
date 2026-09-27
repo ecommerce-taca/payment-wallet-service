@@ -732,5 +732,12 @@ class ProcessVnpayWebhookServiceTest {
         public SettlementLineId nextSettlementLineId() {
             return new SettlementLineId(UUID.randomUUID());
         }
+
+        @Override
+        public PaymentAttemptId nextPaymentAttemptId() {
+            return new PaymentAttemptId(
+                    UUID.randomUUID()
+            );
+        }
     }
 }

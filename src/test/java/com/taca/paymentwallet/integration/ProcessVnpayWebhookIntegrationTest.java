@@ -810,8 +810,7 @@ class ProcessVnpayWebhookIntegrationTest {
         );
     }
 
-    private static final class TestIdGenerator
-            implements IdGeneratorPort {
+    private static final class TestIdGenerator implements IdGeneratorPort {
 
         private final UUID allocationId =
                 UUID.randomUUID();
@@ -885,6 +884,13 @@ class ProcessVnpayWebhookIntegrationTest {
         @Override
         public SettlementLineId nextSettlementLineId() {
             return new SettlementLineId(
+                    UUID.randomUUID()
+            );
+        }
+
+        @Override
+        public PaymentAttemptId nextPaymentAttemptId() {
+            return new PaymentAttemptId(
                     UUID.randomUUID()
             );
         }
