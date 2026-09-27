@@ -132,4 +132,42 @@ class VnpaySignerTest {
                         "hashSecret must not be blank"
                 );
     }
+
+    @Test
+    void shouldUrlEncodeValuesWhenBuildingHashData() {
+        Map<String, String> parameters =
+                Map.of(
+                        "vnp_OrderInfo",
+                        "Thanh toan don hang:123",
+                        "vnp_ReturnUrl",
+                        "http://localhost:3000/payment/vnpay-return",
+                        "vnp_TmnCode",
+                        "TESTCODE"
+                );
+
+        String hashData =
+                signer.buildHashData(
+                        parameters
+                );
+
+        assertThat(
+                hashData
+        ).isEqualTo(
+                "vnp_OrderInfo=Thanh+toan+don+hang%3A123"
+                        + "&vnp_ReturnUrl=http%3A%2F%2Flocalhost%3A3000%2Fpayment%2Fvnpay-return"
+                        + "&vnp_TmnCode=TESTCODE"
+        );
+
+        assertThat(
+                signer.sign(
+                        parameters,
+                        "secret-key"
+                )
+        ).isEqualTo(
+                "3b357c27bb4f240fdc1b99b6be2a8da1"
+                        + "9d7764cf38dc11596a2c0328decaf385"
+                        + "25eb0bb43efa5fdbcc4ae70e6abbed93"
+                        + "8aa71c5ac3e9e8389d6437876b4cb219"
+        );
+    }
 }

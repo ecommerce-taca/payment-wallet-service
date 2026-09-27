@@ -170,10 +170,10 @@ class VnpayGatewayAdapterTest {
                 result.paymentUrl()
         ).contains(
                 "vnp_SecureHash="
-                        + "1dc3bef86b69a75b2ec8c178297b58d4"
-                        + "c1251930b4ab2203f9404462d57194ed"
-                        + "b456c8d683f8ffcd0ca4eb3dd87b9ee7"
-                        + "b62b2201cab9febfa8f8d4baafd9033d"
+                        + "fe9d50e178b911f8ea85e1fa74bd1b87"
+                        + "ff85fe888b3fec3304317e2e5a6f6805"
+                        + "a338bcaa770713f6ed22250092e16741"
+                        + "a79dec5ab2822240b6984dc53f423e4c"
         );
     }
 

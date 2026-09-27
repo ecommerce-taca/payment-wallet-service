@@ -2,6 +2,7 @@ package com.taca.paymentwallet.infrastructure.vnpay;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.Map;
@@ -90,13 +91,22 @@ public class VnpaySigner {
                         )
                 )
                 .map(entry ->
-                        entry.getKey()
+                        encode(entry.getKey())
                                 + "="
-                                + entry.getValue()
+                                + encode(entry.getValue())
                 )
                 .collect(
                         Collectors.joining("&")
                 );
+    }
+
+    private String encode(
+            String value
+    ) {
+        return URLEncoder.encode(
+                value,
+                StandardCharsets.UTF_8
+        );
     }
 
     private String toHex(
