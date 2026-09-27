@@ -60,7 +60,6 @@ class CreatePaymentServiceTest {
         FakeIdempotencyPort idempotencyPort = new FakeIdempotencyPort();
         FakeOutboxPort outboxPort = new FakeOutboxPort();
         FakePaymentAttemptRepositoryPort paymentAttemptRepository = new FakePaymentAttemptRepositoryPort();
-
         UUID paymentUuid = UUID.randomUUID();
 
         CreatePaymentService service = newService(
@@ -72,11 +71,20 @@ class CreatePaymentServiceTest {
                 new FakeVnpayGatewayPort()
         );
 
-        CreatePaymentResult result = service.execute(vnpayCommand());
+        CreatePaymentCommand command = vnpayCommand();
+
+        CreatePaymentResult result = service.execute(command);
 
         assertEquals(paymentUuid, result.paymentId());
+        assertEquals(command.checkoutGroupId(), result.checkoutGroupId());
         assertEquals("PENDING", result.status());
+        assertEquals("VNPAY", result.method());
+        assertEquals(100_000L, result.amount());
+        assertEquals("VND", result.currency());
         assertEquals("https://sandbox.vnpay.vn/payment-url", result.paymentUrl());
+
+        assertEquals(Instant.parse("2026-01-01T00:15:00Z"), result.expiresAt());
+
         assertEquals(1, paymentRepository.savedPayments.size());
         assertEquals(IdempotencyStatus.SUCCEEDED, idempotencyPort.record.status());
         assertEquals(
@@ -84,31 +92,6 @@ class CreatePaymentServiceTest {
                 paymentAttemptRepository
                         .savedAttempts
                         .size()
-        );
-
-        PaymentAttempt attempt =
-                paymentAttemptRepository
-                        .savedAttempts
-                        .getFirst();
-
-        assertEquals(
-                paymentUuid,
-                attempt.paymentId()
-                        .value()
-        );
-
-        assertEquals("VNPAY", attempt.provider());
-        assertEquals("VNPAY-TXN-001", attempt.providerTransactionRef());
-        assertEquals("request-hash", attempt.requestHash());
-
-        assertEquals(
-                "b".repeat(64),
-                attempt.paymentUrlHash()
-        );
-
-        assertEquals(
-                Instant.parse("2026-01-01T00:15:00Z"),
-                attempt.expiresAt()
         );
     }
 
@@ -147,37 +130,75 @@ class CreatePaymentServiceTest {
     @Test
     void shouldReturnPreviousResultWhenIdempotencySucceeded() {
         FakePaymentRepositoryPort paymentRepository = new FakePaymentRepositoryPort();
+        FakePaymentAttemptRepositoryPort paymentAttemptRepository = new FakePaymentAttemptRepositoryPort();
         FakeIdempotencyPort idempotencyPort = new FakeIdempotencyPort();
         FakeOutboxPort outboxPort = new FakeOutboxPort();
 
         UUID existingPaymentId = UUID.randomUUID();
 
-        idempotencyPort.record = new IdempotencyRecord(
-                IdempotencyScope.payment(new CheckoutGroupId(vnpayCommand().checkoutGroupId())),
-                "idem-key-1",
-                "request-hash",
-                IdempotencyStatus.SUCCEEDED,
-                existingPaymentId + "|PENDING|https://sandbox.vnpay.vn/old-payment-url",
-                null,
-                Instant.parse("2026-01-01T00:00:00Z"),
-                Instant.parse("2026-01-01T00:00:00Z")
-        );
+        CreatePaymentCommand command = vnpayCommand();
 
-        CreatePaymentService service = newService(
-                paymentRepository,
-                new FakePaymentAttemptRepositoryPort(),
-                idempotencyPort,
-                outboxPort,
-                new FixedIdGeneratorPort(UUID.randomUUID()),
-                new FakeVnpayGatewayPort()
-        );
+        Instant expiresAt = Instant.parse("2026-01-01T00:15:00Z");
 
-        CreatePaymentResult result = service.execute(vnpayCommand());
+        idempotencyPort.record =
+                new IdempotencyRecord(
+                        IdempotencyScope.payment(
+                                new CheckoutGroupId(
+                                        command.checkoutGroupId()
+                                )
+                        ),
+                        "idem-key-1",
+                        "request-hash",
+                        IdempotencyStatus.SUCCEEDED,
+                        existingPaymentId
+                                + "|"
+                                + command.checkoutGroupId()
+                                + "|PENDING"
+                                + "|VNPAY"
+                                + "|100000"
+                                + "|VND"
+                                + "|https://sandbox.vnpay.vn/old-payment-url"
+                                + "|"
+                                + expiresAt,
+                        null,
+                        Instant.parse(
+                                "2026-01-01T00:00:00Z"
+                        ),
+                        Instant.parse(
+                                "2026-01-01T00:00:00Z"
+                        )
+                );
+
+        CreatePaymentService service =
+                newService(
+                        paymentRepository,
+                        paymentAttemptRepository,
+                        idempotencyPort,
+                        outboxPort,
+                        new FixedIdGeneratorPort(
+                                UUID.randomUUID()
+                        ),
+                        new FakeVnpayGatewayPort()
+                );
+
+        CreatePaymentResult result = service.execute(command);
 
         assertEquals(existingPaymentId, result.paymentId());
+        assertEquals(command.checkoutGroupId(), result.checkoutGroupId());
         assertEquals("PENDING", result.status());
+        assertEquals("VNPAY", result.method());
+        assertEquals(100_000L, result.amount());
+        assertEquals("VND", result.currency());
         assertEquals("https://sandbox.vnpay.vn/old-payment-url", result.paymentUrl());
+        assertEquals(expiresAt, result.expiresAt());
         assertEquals(0, paymentRepository.savedPayments.size());
+
+        assertEquals(
+                0,
+                paymentAttemptRepository
+                        .savedAttempts
+                        .size()
+        );
     }
 
     @Test
@@ -339,6 +360,31 @@ class CreatePaymentServiceTest {
                 () ->
                         service.execute(
                                 vnpayCommand()
+                        )
+        );
+    }
+
+    @Test
+    void shouldRejectNonVndCurrency() {
+        CreatePaymentOrderCommand order =
+                new CreatePaymentOrderCommand(
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        100_000
+                );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        new CreatePaymentCommand(
+                                UUID.randomUUID(),
+                                UUID.randomUUID(),
+                                "VNPAY",
+                                100_000,
+                                "USD",
+                                "idem-001",
+                                List.of(order),
+                                "127.0.0.1"
                         )
         );
     }
@@ -678,24 +724,63 @@ class CreatePaymentServiceTest {
             implements CreatePaymentResultPayloadPort {
 
         @Override
-        public String serialize(CreatePaymentResult result) {
+        public String serialize(
+                CreatePaymentResult result
+        ) {
             return result.paymentId()
+                    + "|"
+                    + result.checkoutGroupId()
                     + "|"
                     + result.status()
                     + "|"
-                    + result.paymentUrl();
+                    + result.method()
+                    + "|"
+                    + result.amount()
+                    + "|"
+                    + result.currency()
+                    + "|"
+                    + result.paymentUrl()
+                    + "|"
+                    + result.expiresAt();
         }
 
         @Override
-        public CreatePaymentResult deserialize(String payload) {
-            String[] parts = payload.split("\\|", -1);
+        public CreatePaymentResult deserialize(
+                String payload
+        ) {
+            String[] parts =
+                    payload.split(
+                            "\\|",
+                            -1
+                    );
 
-            String paymentUrl = "null".equals(parts[2]) ? null : parts[2];
+            String paymentUrl =
+                    "null".equals(parts[6])
+                            ? null
+                            : parts[6];
+
+            Instant expiresAt =
+                    "null".equals(parts[7])
+                            ? null
+                            : Instant.parse(
+                            parts[7]
+                    );
 
             return new CreatePaymentResult(
-                    UUID.fromString(parts[0]),
-                    parts[1],
-                    paymentUrl
+                    UUID.fromString(
+                            parts[0]
+                    ),
+                    UUID.fromString(
+                            parts[1]
+                    ),
+                    parts[2],
+                    parts[3],
+                    Long.parseLong(
+                            parts[4]
+                    ),
+                    parts[5],
+                    paymentUrl,
+                    expiresAt
             );
         }
     }

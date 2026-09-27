@@ -240,15 +240,25 @@ public class CreatePaymentService implements CreatePaymentUseCase {
 
         return new CreatePaymentResult(
                 payment.id().value(),
+                payment.checkoutGroupId().value(),
                 payment.status().name(),
-                vnpayResult.paymentUrl()
+                payment.method().name(),
+                payment.amount().amount(),
+                payment.amount().currency(),
+                vnpayResult.paymentUrl(),
+                payment.expiresAt()
         );
     }
 
     private CreatePaymentResult createCodPayment(Payment payment) {
         return new CreatePaymentResult(
                 payment.id().value(),
+                payment.checkoutGroupId().value(),
                 payment.status().name(),
+                payment.method().name(),
+                payment.amount().amount(),
+                payment.amount().currency(),
+                null,
                 null
         );
     }
