@@ -223,23 +223,23 @@ Lưu webhook hoặc callback đã nhận từ provider.
 
 Field chính:
 
-| Field | Type | Ghi chú |
-|---|---:|---|
-| `id` | `BINARY(16)` | PK |
-| `payment_id` | `BINARY(16)` | FK tới `payments.id`, nullable nếu event không match payment |
-| `payment_attempt_id` | `BINARY(16)` | FK tới `payment_attempts.id`, nullable |
-| `provider` | `VARCHAR(40)` | Ví dụ `VNPAY` |
+| Field |           Type | Ghi chú |
+|---|---------------:|---|
+| `id` |   `BINARY(16)` | PK |
+| `payment_id` |   `BINARY(16)` | FK tới `payments.id`, nullable nếu event không match payment |
+| `payment_attempt_id` |   `BINARY(16)` | FK tới `payment_attempts.id`, nullable |
+| `provider` |  `VARCHAR(40)` | Ví dụ `VNPAY` |
 | `provider_event_id` | `VARCHAR(120)` | ID dedupe webhook |
 | `provider_transaction_ref` | `VARCHAR(120)` | Mã giao dịch provider |
-| `provider_response_code` | `VARCHAR(40)` | Code provider |
-| `provider_transaction_status` | `VARCHAR(40)` | Status provider |
-| `amount` | `BIGINT` | Amount provider gửi về |
-| `currency` | `CHAR(3)` | V1 là `VND` |
-| `payload_hash` | `VARCHAR(128)` | Hash payload đã canonicalize |
-| `received_at` | `DATETIME(6)` | UTC |
-| `applied_at` | `DATETIME(6)` | Nullable |
-| `status` | `VARCHAR(40)` | `RECEIVED`, `APPLIED`, `IGNORED`, `FAILED` |
-| `failure_code` | `VARCHAR(80)` | Nullable |
+| `provider_response_code` |  `VARCHAR(40)` | Code provider |
+| `provider_transaction_status` |  `VARCHAR(40)` | Status provider |
+| `amount` |       `BIGINT` | Amount provider gửi về |
+| `currency` |      `CHAR(3)` | V1 là `VND` |
+| `payload_hash` |     `CHAR(64)` | Hash payload đã canonicalize |
+| `received_at` |  `DATETIME(6)` | UTC |
+| `applied_at` |  `DATETIME(6)` | Nullable |
+| `status` |  `VARCHAR(40)` | `RECEIVED`, `APPLIED`, `IGNORED`, `FAILED` |
+| `failure_code` |  `VARCHAR(80)` | Nullable |
 
 Ràng buộc:
 
@@ -769,18 +769,18 @@ shop.kyc.approved
 
 Field chính:
 
-| Field | Type | Ghi chú |
-|---|---:|---|
-| `id` | `BINARY(16)` | PK |
+| Field |           Type | Ghi chú |
+|---|---------------:|---|
+| `id` |   `BINARY(16)` | PK |
 | `consumer_name` | `VARCHAR(120)` | Tên consumer trong payment-wallet |
 | `source` | `VARCHAR(120)` | Tên service phát event |
 | `event_id` | `VARCHAR(160)` | ID event từ producer |
 | `event_type` | `VARCHAR(120)` | Ví dụ `shipment.delivered` |
-| `payload_hash` | `VARCHAR(128)` | Hash payload |
-| `received_at` | `DATETIME(6)` | UTC |
-| `processed_at` | `DATETIME(6)` | Nullable |
-| `status` | `VARCHAR(40)` | `RECEIVED`, `PROCESSED`, `FAILED`, `IGNORED` |
-| `failure_code` | `VARCHAR(80)` | Nullable |
+| `payload_hash` |     `CHAR(64)` | Hash payload |
+| `received_at` |  `DATETIME(6)` | UTC |
+| `processed_at` |  `DATETIME(6)` | Nullable |
+| `status` |  `VARCHAR(40)` | `RECEIVED`, `PROCESSED`, `FAILED`, `IGNORED` |
+| `failure_code` |  `VARCHAR(80)` | Nullable |
 
 Ràng buộc:
 
