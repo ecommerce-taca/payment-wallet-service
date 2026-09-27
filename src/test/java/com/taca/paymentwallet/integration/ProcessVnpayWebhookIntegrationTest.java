@@ -10,6 +10,7 @@ import com.taca.paymentwallet.application.result.WebhookProcessingAction;
 import com.taca.paymentwallet.application.service.ProcessVnpayWebhookService;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.payment.Payment;
+import com.taca.paymentwallet.domain.payment.PaymentAttempt;
 import com.taca.paymentwallet.domain.payment.PaymentMethod;
 import com.taca.paymentwallet.domain.payment.PaymentOrder;
 import com.taca.paymentwallet.domain.valueobject.*;
@@ -169,6 +170,9 @@ class ProcessVnpayWebhookIntegrationTest {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private PaymentAttemptJpaRepository paymentAttemptJpaRepository;
 
     @Test
     void shouldProcessSuccessfulVnpayWebhookEndToEnd() {
@@ -349,8 +353,16 @@ class ProcessVnpayWebhookIntegrationTest {
                      */
                 };
 
+        PaymentAttemptRepositoryAdapter paymentAttemptRepository =
+                new PaymentAttemptRepositoryAdapter(
+                        paymentAttemptJpaRepository,
+                        new PaymentAttemptPersistenceMapper(),
+                        clockPort
+                );
+
         return new ProcessVnpayWebhookService(
                 paymentRepository,
+                paymentAttemptRepository,
                 providerEventAdapter,
                 allocationRepository,
                 walletRepository,
@@ -403,6 +415,21 @@ class ProcessVnpayWebhookIntegrationTest {
                         EXPIRES_AT
                 );
 
+        PaymentAttempt attempt =
+                PaymentAttempt.create(
+                        new PaymentAttemptId(
+                                UUID.randomUUID()
+                        ),
+                        new PaymentId(
+                                paymentId
+                        ),
+                        "VNPAY",
+                        PROVIDER_TRANSACTION_REF,
+                        "a".repeat(64),
+                        "b".repeat(64),
+                        EXPIRES_AT
+                );
+
         ClockPort clockPort =
                 () -> NOW;
 
@@ -415,16 +442,28 @@ class ProcessVnpayWebhookIntegrationTest {
                         new PersistenceUuidGenerator()
                 );
 
+        PaymentAttemptRepositoryAdapter paymentAttemptRepository =
+                new PaymentAttemptRepositoryAdapter(
+                        paymentAttemptJpaRepository,
+                        new PaymentAttemptPersistenceMapper(),
+                        clockPort
+                );
+
         TransactionPort transactionPort =
                 new SpringTransactionAdapter(
                         transactionManager
                 );
 
         transactionPort.execute(
-                () ->
-                        paymentRepository.save(
-                                payment
-                        )
+                () -> {
+                    paymentRepository.save(
+                            payment
+                    );
+
+                    paymentAttemptRepository.save(
+                            attempt
+                    );
+                }
         );
     }
 
@@ -810,8 +849,7 @@ class ProcessVnpayWebhookIntegrationTest {
         );
     }
 
-    private static final class TestIdGenerator
-            implements IdGeneratorPort {
+    private static final class TestIdGenerator implements IdGeneratorPort {
 
         private final UUID allocationId =
                 UUID.randomUUID();
@@ -885,6 +923,13 @@ class ProcessVnpayWebhookIntegrationTest {
         @Override
         public SettlementLineId nextSettlementLineId() {
             return new SettlementLineId(
+                    UUID.randomUUID()
+            );
+        }
+
+        @Override
+        public PaymentAttemptId nextPaymentAttemptId() {
+            return new PaymentAttemptId(
                     UUID.randomUUID()
             );
         }

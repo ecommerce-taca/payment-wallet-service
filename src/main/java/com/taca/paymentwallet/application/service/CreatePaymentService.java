@@ -10,17 +10,10 @@ import com.taca.paymentwallet.application.gateway.vnpay.CreateVnpayPaymentUrlRes
 import com.taca.paymentwallet.application.idempotency.IdempotencyRecord;
 import com.taca.paymentwallet.application.idempotency.IdempotencyScope;
 import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
-import com.taca.paymentwallet.application.port.out.ClockPort;
-import com.taca.paymentwallet.application.port.out.CreatePaymentResultPayloadPort;
-import com.taca.paymentwallet.application.port.out.IdGeneratorPort;
-import com.taca.paymentwallet.application.port.out.IdempotencyPort;
-import com.taca.paymentwallet.application.port.out.OutboxPort;
-import com.taca.paymentwallet.application.port.out.PaymentRepositoryPort;
-import com.taca.paymentwallet.application.port.out.RequestHashPort;
-import com.taca.paymentwallet.application.port.out.TransactionPort;
-import com.taca.paymentwallet.application.port.out.VnpayGatewayPort;
+import com.taca.paymentwallet.application.port.out.*;
 import com.taca.paymentwallet.application.result.CreatePaymentResult;
 import com.taca.paymentwallet.domain.payment.Payment;
+import com.taca.paymentwallet.domain.payment.PaymentAttempt;
 import com.taca.paymentwallet.domain.payment.PaymentMethod;
 import com.taca.paymentwallet.domain.payment.PaymentOrder;
 import com.taca.paymentwallet.domain.valueobject.BuyerUserId;
@@ -48,11 +41,15 @@ public class CreatePaymentService implements CreatePaymentUseCase {
     private final OutboxPort outboxPort;
     private final TransactionPort transactionPort;
     private final CreatePaymentResultPayloadPort resultPayloadPort;
+    private final PaymentAttemptRepositoryPort paymentAttemptRepository;
+    private final PaymentUrlHashPort paymentUrlHashPort;
 
     public CreatePaymentService(
             PaymentRepositoryPort paymentRepository,
+            PaymentAttemptRepositoryPort paymentAttemptRepository,
             IdempotencyPort idempotencyPort,
             RequestHashPort requestHashPort,
+            PaymentUrlHashPort paymentUrlHashPort,
             IdGeneratorPort idGeneratorPort,
             ClockPort clockPort,
             VnpayGatewayPort vnpayGatewayPort,
@@ -61,8 +58,10 @@ public class CreatePaymentService implements CreatePaymentUseCase {
             CreatePaymentResultPayloadPort resultPayloadPort
     ) {
         this.paymentRepository = Objects.requireNonNull(paymentRepository);
+        this.paymentAttemptRepository = Objects.requireNonNull(paymentAttemptRepository);
         this.idempotencyPort = Objects.requireNonNull(idempotencyPort);
         this.requestHashPort = Objects.requireNonNull(requestHashPort);
+        this.paymentUrlHashPort = Objects.requireNonNull(paymentUrlHashPort);
         this.idGeneratorPort = Objects.requireNonNull(idGeneratorPort);
         this.clockPort = Objects.requireNonNull(clockPort);
         this.vnpayGatewayPort = Objects.requireNonNull(vnpayGatewayPort);
@@ -96,7 +95,12 @@ public class CreatePaymentService implements CreatePaymentUseCase {
                     requestHash
             );
 
-            CreatePaymentResult result = createNewPayment(command, checkoutGroupId);
+            CreatePaymentResult result =
+                    createNewPayment(
+                            command,
+                            checkoutGroupId,
+                            requestHash
+                    );
 
             idempotencyPort.markSucceeded(
                     scope,
@@ -140,29 +144,43 @@ public class CreatePaymentService implements CreatePaymentUseCase {
 
     private CreatePaymentResult createNewPayment(
             CreatePaymentCommand command,
-            CheckoutGroupId checkoutGroupId
+            CheckoutGroupId checkoutGroupId,
+            String requestHash
     ) {
         PaymentMethod method = parsePaymentMethod(command.method());
         PaymentId paymentId = idGeneratorPort.nextPaymentId();
 
-        Instant expiresAt = method == PaymentMethod.VNPAY
-                ? clockPort.now().plus(VNPAY_PAYMENT_TTL)
-                : null;
+        Instant expiresAt =
+                method == PaymentMethod.VNPAY
+                        ? clockPort.now()
+                        .plus(VNPAY_PAYMENT_TTL)
+                        : null;
 
-        Payment payment = Payment.create(
-                paymentId,
-                checkoutGroupId,
-                new BuyerUserId(command.buyerUserId()),
-                method,
-                new Money(command.amount(), command.currency()),
-                toDomainOrders(command.orders()),
-                expiresAt
-        );
+        Payment payment =
+                Payment.create(
+                        paymentId,
+                        checkoutGroupId,
+                        new BuyerUserId(command.buyerUserId()),
+                        method,
+                        new Money(
+                                command.amount(),
+                                command.currency()
+                        ),
+                        toDomainOrders(command.orders()),
+                        expiresAt
+                );
 
-        CreatePaymentResult result = switch (method) {
-            case VNPAY -> createVnpayPayment(command, payment);
-            case COD -> createCodPayment(payment);
-        };
+        CreatePaymentResult result =
+                switch (method) {
+                    case VNPAY ->
+                            createVnpayPayment(
+                                    command,
+                                    payment,
+                                    requestHash
+                            );
+
+                    case COD -> createCodPayment(payment);
+                };
 
         paymentRepository.save(payment);
         outboxPort.saveAll(payment.domainEvents());
@@ -173,8 +191,18 @@ public class CreatePaymentService implements CreatePaymentUseCase {
 
     private CreatePaymentResult createVnpayPayment(
             CreatePaymentCommand command,
-            Payment payment
+            Payment payment,
+            String requestHash
     ) {
+        if (paymentAttemptRepository
+                .existsPendingByPaymentId(
+                        payment.id()
+                )) {
+            throw new IllegalStateException(
+                    "Payment already has a pending VNPAY attempt"
+            );
+        }
+
         CreateVnpayPaymentUrlResult vnpayResult =
                 vnpayGatewayPort.createPaymentUrl(
                         new CreateVnpayPaymentUrlRequest(
@@ -182,21 +210,55 @@ public class CreatePaymentService implements CreatePaymentUseCase {
                                 payment.checkoutGroupId(),
                                 payment.amount(),
                                 payment.expiresAt(),
-                                requireClientIp(command.clientIp())
+                                requireClientIp(
+                                        command.clientIp()
+                                )
                         )
                 );
 
+        String paymentUrlHash =
+                paymentUrlHashPort.hash(
+                        vnpayResult.paymentUrl()
+                );
+
+        PaymentAttempt attempt =
+                PaymentAttempt.create(
+                        idGeneratorPort
+                                .nextPaymentAttemptId(),
+                        payment.id(),
+                        "VNPAY",
+                        vnpayResult
+                                .providerTransactionRef(),
+                        requestHash,
+                        paymentUrlHash,
+                        vnpayResult.expiresAt()
+                );
+
+        paymentAttemptRepository.save(
+                attempt
+        );
+
         return new CreatePaymentResult(
                 payment.id().value(),
+                payment.checkoutGroupId().value(),
                 payment.status().name(),
-                vnpayResult.paymentUrl()
+                payment.method().name(),
+                payment.amount().amount(),
+                payment.amount().currency(),
+                vnpayResult.paymentUrl(),
+                payment.expiresAt()
         );
     }
 
     private CreatePaymentResult createCodPayment(Payment payment) {
         return new CreatePaymentResult(
                 payment.id().value(),
+                payment.checkoutGroupId().value(),
                 payment.status().name(),
+                payment.method().name(),
+                payment.amount().amount(),
+                payment.amount().currency(),
+                null,
                 null
         );
     }

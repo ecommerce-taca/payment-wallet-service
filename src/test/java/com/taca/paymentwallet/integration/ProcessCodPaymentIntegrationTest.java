@@ -1357,8 +1357,7 @@ class ProcessCodPaymentIntegrationTest {
         );
     }
 
-    private static class TestIdGenerator
-            implements IdGeneratorPort {
+    private static class TestIdGenerator implements IdGeneratorPort {
 
         private final UUID allocationId =
                 UUID.randomUUID();
@@ -1438,6 +1437,13 @@ class ProcessCodPaymentIntegrationTest {
         public SettlementLineId
         nextSettlementLineId() {
             return new SettlementLineId(
+                    UUID.randomUUID()
+            );
+        }
+
+        @Override
+        public PaymentAttemptId nextPaymentAttemptId() {
+            return new PaymentAttemptId(
                     UUID.randomUUID()
             );
         }
