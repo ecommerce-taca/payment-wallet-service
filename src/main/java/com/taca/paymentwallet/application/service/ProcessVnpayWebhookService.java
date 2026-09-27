@@ -2,6 +2,7 @@ package com.taca.paymentwallet.application.service;
 
 import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
 import com.taca.paymentwallet.application.exception.PaymentAmountMismatchException;
+import com.taca.paymentwallet.application.exception.PaymentAttemptNotFoundException;
 import com.taca.paymentwallet.application.exception.PaymentNotFoundException;
 import com.taca.paymentwallet.application.exception.WalletNotFoundException;
 import com.taca.paymentwallet.application.fee.PaymentFeePolicy;
@@ -12,10 +13,7 @@ import com.taca.paymentwallet.application.port.out.*;
 import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
 import com.taca.paymentwallet.application.result.WebhookProcessingAction;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
-import com.taca.paymentwallet.domain.payment.Payment;
-import com.taca.paymentwallet.domain.payment.PaymentAllocation;
-import com.taca.paymentwallet.domain.payment.PaymentOrder;
-import com.taca.paymentwallet.domain.payment.PaymentStatus;
+import com.taca.paymentwallet.domain.payment.*;
 import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
@@ -45,9 +43,11 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
     private final TransactionPort transactionPort;
     private final AllocationCalculator allocationCalculator;
     private final LedgerPostingFactory ledgerPostingFactory;
+    private final PaymentAttemptRepositoryPort paymentAttemptRepository;
 
     public ProcessVnpayWebhookService(
             PaymentRepositoryPort paymentRepository,
+            PaymentAttemptRepositoryPort paymentAttemptRepository,
             PaymentProviderEventPort paymentProviderEventPort,
             PaymentAllocationRepositoryPort paymentAllocationRepository,
             WalletRepositoryPort walletRepository,
@@ -63,9 +63,10 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
             LedgerPostingFactory ledgerPostingFactory
     ) {
         this.paymentRepository = Objects.requireNonNull(paymentRepository);
+        this.paymentAttemptRepository = Objects.requireNonNull(paymentAttemptRepository);
         this.paymentProviderEventPort = Objects.requireNonNull(paymentProviderEventPort);
-        this.walletRepository = Objects.requireNonNull(walletRepository);
         this.paymentAllocationRepository = Objects.requireNonNull(paymentAllocationRepository);
+        this.walletRepository = Objects.requireNonNull(walletRepository);
         this.ledgerPostingRepository = Objects.requireNonNull(ledgerPostingRepository);
         this.ledgerAccountLookupPort = Objects.requireNonNull(ledgerAccountLookupPort);
         this.feePolicyPort = Objects.requireNonNull(feePolicyPort);
@@ -87,28 +88,56 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
         return transactionPort.execute(() -> process(command));
     }
 
-    private ProcessVnpayWebhookResult process(ProcessVnpayWebhookCommand command) {
-        PaymentId paymentId = new PaymentId(command.paymentId());
-        Money webhookAmount = new Money(command.amount(), command.currency());
+    private ProcessVnpayWebhookResult process(
+            ProcessVnpayWebhookCommand command
+    ) {
+        PaymentAttempt attempt =
+                paymentAttemptRepository
+                        .findByProviderAndProviderTransactionRef(
+                                PROVIDER,
+                                command.providerTransactionRef()
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new PaymentAttemptNotFoundException(
+                                                PROVIDER,
+                                                command.providerTransactionRef()
+                                        )
+                        );
 
-        boolean inserted = paymentProviderEventPort.recordIfAbsent(
-                new PaymentProviderEvent(
-                        PROVIDER,
-                        command.providerEventId(),
-                        command.providerTransactionRef(),
-                        paymentId,
-                        command.responseCode(),
-                        command.transactionStatus(),
-                        webhookAmount,
-                        command.payloadHash(),
-                        clockPort.now(),
-                        PaymentProviderEventStatus.RECEIVED
-                )
-        );
+        PaymentId paymentId =
+                attempt.paymentId();
+
+        Money webhookAmount =
+                new Money(
+                        command.amount(),
+                        command.currency()
+                );
+
+        boolean inserted =
+                paymentProviderEventPort
+                        .recordIfAbsent(
+                                new PaymentProviderEvent(
+                                        PROVIDER,
+                                        command.providerEventId(),
+                                        command.providerTransactionRef(),
+                                        paymentId,
+                                        command.responseCode(),
+                                        command.transactionStatus(),
+                                        webhookAmount,
+                                        command.payloadHash(),
+                                        clockPort.now(),
+                                        PaymentProviderEventStatus.RECEIVED
+                                )
+                        );
 
         if (!inserted) {
-            Payment payment = paymentRepository.findById(paymentId)
-                    .orElseThrow(() -> new PaymentNotFoundException(paymentId));
+            Payment payment =
+                    paymentRepository
+                            .findById(paymentId)
+                            .orElseThrow(
+                                    () -> new PaymentNotFoundException(paymentId)
+                            );
 
             return new ProcessVnpayWebhookResult(
                     payment.id().value(),
@@ -117,8 +146,17 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
             );
         }
 
-        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
-                .orElseThrow(() -> new PaymentNotFoundException(paymentId));
+        Payment payment =
+                paymentRepository
+                        .findByIdForUpdate(
+                                paymentId
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new PaymentNotFoundException(
+                                                paymentId
+                                        )
+                        );
 
         if (isTerminal(payment)) {
             paymentProviderEventPort.markApplied(
@@ -133,24 +171,63 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
             );
         }
 
-        ensureAmountMatches(payment, webhookAmount);
+        ensureAmountMatches(
+                payment,
+                webhookAmount
+        );
 
         if (isVnpaySuccess(command)) {
-            applySuccessfulPayment(payment);
+            applySuccessfulPayment(
+                    payment
+            );
+
+            markAttemptSucceeded(attempt);
+
         } else {
-            payment.markFailed(vnpayFailureCode(command));
-            paymentRepository.save(payment);
-            outboxPort.saveAll(payment.domainEvents());
-            payment.clearDomainEvents();
+            applyFailedPayment(
+                    payment,
+                    attempt,
+                    command
+            );
         }
 
-        paymentProviderEventPort.markApplied(PROVIDER, command.providerEventId());
+        paymentProviderEventPort.markApplied(
+                PROVIDER,
+                command.providerEventId()
+        );
 
         return new ProcessVnpayWebhookResult(
                 payment.id().value(),
                 payment.status().name(),
                 WebhookProcessingAction.APPLIED
         );
+    }
+
+    private void markAttemptSucceeded(PaymentAttempt attempt) {
+        attempt.markSucceeded(clockPort.now());
+
+        paymentAttemptRepository.save(attempt);
+    }
+
+    private void applyFailedPayment(
+            Payment payment,
+            PaymentAttempt attempt,
+            ProcessVnpayWebhookCommand command
+    ) {
+        String failureCode =
+                vnpayFailureCode(
+                        command
+                );
+
+        payment.markFailed(failureCode);
+        attempt.markFailed(failureCode, clockPort.now());
+
+        paymentRepository.save(payment);
+        paymentAttemptRepository.save(attempt);
+
+        outboxPort.saveAll(payment.domainEvents());
+
+        payment.clearDomainEvents();
     }
 
     private boolean isTerminal(Payment payment) {

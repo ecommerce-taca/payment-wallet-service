@@ -2,6 +2,7 @@ package com.taca.paymentwallet.application.service;
 
 import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
 import com.taca.paymentwallet.application.exception.PaymentAmountMismatchException;
+import com.taca.paymentwallet.application.exception.PaymentAttemptNotFoundException;
 import com.taca.paymentwallet.application.exception.PaymentNotFoundException;
 import com.taca.paymentwallet.application.fee.PaymentFeePolicy;
 import com.taca.paymentwallet.application.paymentevent.PaymentProviderEvent;
@@ -10,11 +11,7 @@ import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
 import com.taca.paymentwallet.application.result.WebhookProcessingAction;
 import com.taca.paymentwallet.domain.event.DomainEvent;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
-import com.taca.paymentwallet.domain.payment.Payment;
-import com.taca.paymentwallet.domain.payment.PaymentAllocation;
-import com.taca.paymentwallet.domain.payment.PaymentMethod;
-import com.taca.paymentwallet.domain.payment.PaymentOrder;
-import com.taca.paymentwallet.domain.payment.PaymentStatus;
+import com.taca.paymentwallet.domain.payment.*;
 import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
@@ -54,8 +51,18 @@ class ProcessVnpayWebhookServiceTest {
 
         FakeOutboxPort outboxPort = new FakeOutboxPort();
 
+        FakePaymentAttemptRepositoryPort
+                paymentAttemptRepository =
+                new FakePaymentAttemptRepositoryPort(
+                        createPendingAttempt(
+                                paymentId,
+                                "vnpay-txn-001"
+                        )
+                );
+
         ProcessVnpayWebhookService service = newService(
                 paymentRepository,
+                paymentAttemptRepository,
                 paymentProviderEventPort,
                 allocationRepository,
                 walletRepository,
@@ -77,6 +84,11 @@ class ProcessVnpayWebhookServiceTest {
         assertTrue(paymentProviderEventPort.applied);
         assertTrue(outboxPort.events.stream()
                 .anyMatch(event -> event.eventType().equals("payment.succeeded")));
+        assertEquals(
+                PaymentAttemptStatus.SUCCESS,
+                paymentAttemptRepository.attempt.status()
+        );
+        assertEquals(1, paymentAttemptRepository.savedAttempts.size());
     }
 
     @Test
@@ -101,8 +113,18 @@ class ProcessVnpayWebhookServiceTest {
 
         FakeOutboxPort outboxPort = new FakeOutboxPort();
 
+        FakePaymentAttemptRepositoryPort
+                paymentAttemptRepository =
+                new FakePaymentAttemptRepositoryPort(
+                        createPendingAttempt(
+                                paymentId,
+                                "vnpay-txn-001"
+                        )
+                );
+
         ProcessVnpayWebhookService service = newService(
                 paymentRepository,
+                paymentAttemptRepository,
                 paymentProviderEventPort,
                 allocationRepository,
                 walletRepository,
@@ -120,6 +142,8 @@ class ProcessVnpayWebhookServiceTest {
         assertEquals(0, allocationRepository.savedAllocations.size());
         assertEquals(0, ledgerPostingRepository.savedPostings.size());
         assertEquals(0, outboxPort.events.size());
+        assertEquals(PaymentAttemptStatus.PENDING, paymentAttemptRepository.attempt.status());
+        assertEquals(0, paymentAttemptRepository.savedAttempts.size());
     }
 
     @Test
@@ -160,15 +184,24 @@ class ProcessVnpayWebhookServiceTest {
         FakeOutboxPort outboxPort =
                 new FakeOutboxPort();
 
-        ProcessVnpayWebhookService service =
-                newService(
-                        paymentRepository,
-                        paymentProviderEventPort,
-                        allocationRepository,
-                        walletRepository,
-                        ledgerPostingRepository,
-                        outboxPort
+        FakePaymentAttemptRepositoryPort
+                paymentAttemptRepository =
+                new FakePaymentAttemptRepositoryPort(
+                        createPendingAttempt(
+                                paymentId,
+                                "vnpay-txn-001"
+                        )
                 );
+
+        ProcessVnpayWebhookService service = newService(
+                paymentRepository,
+                paymentAttemptRepository,
+                paymentProviderEventPort,
+                allocationRepository,
+                walletRepository,
+                ledgerPostingRepository,
+                outboxPort
+        );
 
         ProcessVnpayWebhookResult result =
                 service.execute(
@@ -186,6 +219,7 @@ class ProcessVnpayWebhookServiceTest {
         assertEquals(0, ledgerPostingRepository.savedPostings.size());
         assertEquals(0, outboxPort.events.size());
         assertTrue(paymentProviderEventPort.applied);
+        assertEquals(0, paymentAttemptRepository.savedAttempts.size());
     }
 
     @Test
@@ -226,9 +260,19 @@ class ProcessVnpayWebhookServiceTest {
         FakeOutboxPort outboxPort =
                 new FakeOutboxPort();
 
+        FakePaymentAttemptRepositoryPort
+                paymentAttemptRepository =
+                new FakePaymentAttemptRepositoryPort(
+                        createPendingAttempt(
+                                paymentId,
+                                "vnpay-txn-001"
+                        )
+                );
+
         ProcessVnpayWebhookService service =
                 newService(
                         paymentRepository,
+                        paymentAttemptRepository,
                         paymentProviderEventPort,
                         allocationRepository,
                         walletRepository,
@@ -236,10 +280,6 @@ class ProcessVnpayWebhookServiceTest {
                         outboxPort
                 );
 
-        /*
-         * Giả sử VNPAY gửi một event SUCCESS mới
-         * sau khi payment đã FAILED.
-         */
         ProcessVnpayWebhookResult result =
                 service.execute(
                         successCommand(
@@ -258,6 +298,7 @@ class ProcessVnpayWebhookServiceTest {
         assertEquals(0, ledgerPostingRepository.savedPostings.size());
         assertEquals(0, outboxPort.events.size());
         assertTrue(paymentProviderEventPort.applied);
+        assertEquals(0, paymentAttemptRepository.savedAttempts.size());
     }
 
     @Test
@@ -282,8 +323,18 @@ class ProcessVnpayWebhookServiceTest {
         FakeWalletRepositoryPort walletRepository =
                 new FakeWalletRepositoryPort();
 
+        FakePaymentAttemptRepositoryPort
+                paymentAttemptRepository =
+                new FakePaymentAttemptRepositoryPort(
+                        createPendingAttempt(
+                                paymentId,
+                                "vnpay-txn-002"
+                        )
+                );
+
         ProcessVnpayWebhookService service = newService(
                 paymentRepository,
+                paymentAttemptRepository,
                 paymentProviderEventPort,
                 allocationRepository,
                 walletRepository,
@@ -306,6 +357,26 @@ class ProcessVnpayWebhookServiceTest {
         assertTrue(paymentProviderEventPort.applied);
         assertTrue(outboxPort.events.stream()
                 .anyMatch(event -> event.eventType().equals("payment.failed")));
+        assertEquals(
+                PaymentAttemptStatus.FAILED,
+                paymentAttemptRepository
+                        .attempt
+                        .status()
+        );
+
+        assertEquals(
+                "VNPAY_24_02",
+                paymentAttemptRepository
+                        .attempt
+                        .failureCode()
+        );
+
+        assertEquals(
+                1,
+                paymentAttemptRepository
+                        .savedAttempts
+                        .size()
+        );
     }
 
     @Test
@@ -316,8 +387,18 @@ class ProcessVnpayWebhookServiceTest {
         FakePaymentRepositoryPort paymentRepository =
                 new FakePaymentRepositoryPort(createPendingVnpayPayment(paymentId, shopId));
 
+        FakePaymentAttemptRepositoryPort
+                paymentAttemptRepository =
+                new FakePaymentAttemptRepositoryPort(
+                        createPendingAttempt(
+                                paymentId,
+                                "vnpay-txn-001"
+                        )
+                );
+
         ProcessVnpayWebhookService service = newService(
                 paymentRepository,
+                paymentAttemptRepository,
                 new FakePaymentProviderEventPort(true),
                 new FakePaymentAllocationRepositoryPort(),
                 new FakeWalletRepositoryPort(),
@@ -335,8 +416,18 @@ class ProcessVnpayWebhookServiceTest {
     void shouldRejectUnknownPayment() {
         PaymentId paymentId = new PaymentId(UUID.randomUUID());
 
+        FakePaymentAttemptRepositoryPort
+                paymentAttemptRepository =
+                new FakePaymentAttemptRepositoryPort(
+                        createPendingAttempt(
+                                paymentId,
+                                "vnpay-txn-001"
+                        )
+                );
+
         ProcessVnpayWebhookService service = newService(
                 new FakePaymentRepositoryPort(null),
+                paymentAttemptRepository,
                 new FakePaymentProviderEventPort(true),
                 new FakePaymentAllocationRepositoryPort(),
                 new FakeWalletRepositoryPort(),
@@ -352,6 +443,7 @@ class ProcessVnpayWebhookServiceTest {
 
     private ProcessVnpayWebhookService newService(
             FakePaymentRepositoryPort paymentRepository,
+            FakePaymentAttemptRepositoryPort paymentAttemptRepository,
             FakePaymentProviderEventPort paymentProviderEventPort,
             FakePaymentAllocationRepositoryPort allocationRepository,
             FakeWalletRepositoryPort walletRepository,
@@ -360,6 +452,7 @@ class ProcessVnpayWebhookServiceTest {
     ) {
         return new ProcessVnpayWebhookService(
                 paymentRepository,
+                paymentAttemptRepository,
                 paymentProviderEventPort,
                 allocationRepository,
                 walletRepository,
@@ -373,6 +466,109 @@ class ProcessVnpayWebhookServiceTest {
                 new ImmediateTransactionPort(),
                 new AllocationCalculator(),
                 new LedgerPostingFactory()
+        );
+    }
+
+    @Test
+    void shouldResolvePaymentFromAttemptInsteadOfCommandPaymentId() {
+        PaymentId actualPaymentId =
+                new PaymentId(
+                        UUID.randomUUID()
+                );
+
+        UUID wrongPaymentId =
+                UUID.randomUUID();
+
+        ShopId shopId =
+                new ShopId(
+                        UUID.randomUUID()
+                );
+
+        FakePaymentRepositoryPort paymentRepository =
+                new FakePaymentRepositoryPort(
+                        createPendingVnpayPayment(
+                                actualPaymentId,
+                                shopId
+                        )
+                );
+
+        FakePaymentAttemptRepositoryPort
+                paymentAttemptRepository =
+                new FakePaymentAttemptRepositoryPort(
+                        createPendingAttempt(
+                                actualPaymentId,
+                                "vnpay-txn-001"
+                        )
+                );
+
+        ProcessVnpayWebhookService service =
+                newService(
+                        paymentRepository,
+                        paymentAttemptRepository,
+                        new FakePaymentProviderEventPort(
+                                true
+                        ),
+                        new FakePaymentAllocationRepositoryPort(),
+                        new FakeWalletRepositoryPort(),
+                        new FakeLedgerPostingRepositoryPort(),
+                        new FakeOutboxPort()
+                );
+
+        ProcessVnpayWebhookCommand command =
+                new ProcessVnpayWebhookCommand(
+                        wrongPaymentId,
+                        "vnpay-event-001",
+                        "vnpay-txn-001",
+                        "00",
+                        "00",
+                        100_000,
+                        "VND",
+                        "payload-hash",
+                        Map.of(
+                                "vnp_SecureHash",
+                                "signed-value"
+                        )
+                );
+
+        ProcessVnpayWebhookResult result =
+                service.execute(
+                        command
+                );
+
+        assertEquals(
+                actualPaymentId.value(),
+                result.paymentId()
+        );
+    }
+
+    @Test
+    void shouldRejectUnknownPaymentAttempt() {
+        ProcessVnpayWebhookService service =
+                newService(
+                        new FakePaymentRepositoryPort(
+                                null
+                        ),
+                        new FakePaymentAttemptRepositoryPort(
+                                null
+                        ),
+                        new FakePaymentProviderEventPort(
+                                true
+                        ),
+                        new FakePaymentAllocationRepositoryPort(),
+                        new FakeWalletRepositoryPort(),
+                        new FakeLedgerPostingRepositoryPort(),
+                        new FakeOutboxPort()
+                );
+
+        assertThrows(
+                PaymentAttemptNotFoundException.class,
+                () ->
+                        service.execute(
+                                successCommand(
+                                        UUID.randomUUID(),
+                                        100_000
+                                )
+                        )
         );
     }
 
@@ -487,6 +683,21 @@ class ProcessVnpayWebhookServiceTest {
         );
     }
 
+    private PaymentAttempt createPendingAttempt(
+            PaymentId paymentId,
+            String providerTransactionRef
+    ) {
+        return PaymentAttempt.create(
+                new PaymentAttemptId(UUID.randomUUID()),
+                paymentId,
+                "VNPAY",
+                providerTransactionRef,
+                "a".repeat(64),
+                "b".repeat(64),
+                Instant.parse("2026-01-01T00:15:00Z")
+        );
+    }
+
     private static final class FakePaymentRepositoryPort implements PaymentRepositoryPort {
 
         private final List<Payment> savedPayments = new ArrayList<>();
@@ -516,6 +727,82 @@ class ProcessVnpayWebhookServiceTest {
             this.payment = payment;
             this.savedPayments.add(payment);
             return payment;
+        }
+    }
+
+    private static final class FakePaymentAttemptRepositoryPort implements PaymentAttemptRepositoryPort {
+
+        private PaymentAttempt attempt;
+
+        private final List<PaymentAttempt>
+                savedAttempts =
+                new ArrayList<>();
+
+        private FakePaymentAttemptRepositoryPort(
+                PaymentAttempt attempt
+        ) {
+            this.attempt = attempt;
+        }
+
+        @Override
+        public PaymentAttempt save(
+                PaymentAttempt attempt
+        ) {
+            this.attempt = attempt;
+
+            savedAttempts.add(
+                    attempt
+            );
+
+            return attempt;
+        }
+
+        @Override
+        public Optional<PaymentAttempt>
+        findByProviderAndProviderTransactionRef(
+                String provider,
+                String providerTransactionRef
+        ) {
+            if (attempt == null) {
+                return Optional.empty();
+            }
+
+            if (!attempt.provider()
+                    .equals(provider)) {
+                return Optional.empty();
+            }
+
+            if (!attempt
+                    .providerTransactionRef()
+                    .equals(providerTransactionRef)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(attempt);
+        }
+
+        @Override
+        public List<PaymentAttempt>
+        findByPaymentId(
+                PaymentId paymentId
+        ) {
+            if (attempt == null
+                    || !attempt.paymentId().equals(paymentId)) {
+                return List.of();
+            }
+
+            return List.of(attempt);
+        }
+
+        @Override
+        public boolean existsPendingByPaymentId(
+                PaymentId paymentId
+        ) {
+            return attempt != null
+                    && attempt.paymentId()
+                    .equals(paymentId)
+                    && attempt.status()
+                    == PaymentAttemptStatus.PENDING;
         }
     }
 
