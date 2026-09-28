@@ -2,11 +2,18 @@ package com.taca.paymentwallet.presentation.rest.payment;
 
 import com.taca.paymentwallet.application.command.CreatePaymentCommand;
 import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
+import com.taca.paymentwallet.application.exception.IdempotencyKeyReuseException;
+import com.taca.paymentwallet.application.exception.InvalidVnpaySignatureException;
+import com.taca.paymentwallet.application.exception.PaymentAmountMismatchException;
+import com.taca.paymentwallet.application.exception.PaymentAttemptNotFoundException;
 import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
 import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
 import com.taca.paymentwallet.application.result.CreatePaymentResult;
 import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
 import com.taca.paymentwallet.application.result.WebhookProcessingAction;
+import com.taca.paymentwallet.domain.valueobject.Money;
+import com.taca.paymentwallet.domain.valueobject.PaymentId;
+import com.taca.paymentwallet.presentation.rest.GlobalRestExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -53,6 +60,9 @@ class PaymentControllerTest {
                 MockMvcBuilders
                         .standaloneSetup(
                                 controller
+                        )
+                        .setControllerAdvice(
+                                new GlobalRestExceptionHandler()
                         )
                         .build();
     }
@@ -276,6 +286,39 @@ class PaymentControllerTest {
                 )
                 .andExpect(
                         status().isBadRequest()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.error.code"
+                        ).value(
+                                "MISSING_REQUIRED_HEADER"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.error.message"
+                        ).value(
+                                "Missing required request header: Idempotency-Key"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.meta.request_id"
+                        ).value(
+                                "req-001"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.error.code"
+                        ).value(
+                                "MISSING_REQUIRED_HEADER"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.meta.request_id"
+                        ).isNotEmpty()
                 );
 
         verifyNoInteractions(
@@ -669,6 +712,278 @@ class PaymentControllerTest {
         verifyNoInteractions(
                 processVnpayWebhookUseCase
         );
+    }
+
+    @Test
+    void shouldReturnBadRequestWhenVnpaySignatureInvalid()
+            throws Exception {
+
+        when(
+                processVnpayWebhookUseCase.execute(
+                        any()
+                )
+        ).thenThrow(
+                new InvalidVnpaySignatureException()
+        );
+
+        mockMvc.perform(
+                        post(
+                                "/api/v1/payments/webhook"
+                        )
+                                .header(
+                                        "X-Request-ID",
+                                        "req-webhook-invalid-signature"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        validWebhookBody()
+                                )
+                )
+                .andExpect(
+                        status().isBadRequest()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.error.code"
+                        ).value(
+                                "INVALID_VNPAY_SIGNATURE"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.error.message"
+                        ).value(
+                                "Invalid VNPAY signature"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.meta.request_id"
+                        ).value(
+                                "req-webhook-invalid-signature"
+                        )
+                );
+    }
+
+    @Test
+    void shouldReturnConflictWhenWebhookAmountMismatch()
+            throws Exception {
+
+        UUID paymentId =
+                UUID.randomUUID();
+
+        when(
+                processVnpayWebhookUseCase.execute(
+                        any()
+                )
+        ).thenThrow(
+                new PaymentAmountMismatchException(
+                        new PaymentId(
+                                paymentId
+                        ),
+                        Money.vnd(
+                                100_000
+                        ),
+                        Money.vnd(
+                                90_000
+                        )
+                )
+        );
+
+        mockMvc.perform(
+                        post(
+                                "/api/v1/payments/webhook"
+                        )
+                                .header(
+                                        "X-Request-ID",
+                                        "req-webhook-amount"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        validWebhookBody()
+                                )
+                )
+                .andExpect(
+                        status().isConflict()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.error.code"
+                        ).value(
+                                "PAYMENT_AMOUNT_MISMATCH"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.meta.request_id"
+                        ).value(
+                                "req-webhook-amount"
+                        )
+                );
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenPaymentAttemptDoesNotExist()
+            throws Exception {
+
+        when(
+                processVnpayWebhookUseCase.execute(
+                        any()
+                )
+        ).thenThrow(
+                new PaymentAttemptNotFoundException(
+                        "VNPAY",
+                        "vnpay-txn-001"
+                )
+        );
+
+        mockMvc.perform(
+                        post(
+                                "/api/v1/payments/webhook"
+                        )
+                                .header(
+                                        "X-Request-ID",
+                                        "req-webhook-not-found"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        validWebhookBody()
+                                )
+                )
+                .andExpect(
+                        status().isNotFound()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.error.code"
+                        ).value(
+                                "PAYMENT_ATTEMPT_NOT_FOUND"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.meta.request_id"
+                        ).value(
+                                "req-webhook-not-found"
+                        )
+                );
+    }
+
+    @Test
+    void shouldReturnConflictWhenIdempotencyKeyIsReused()
+            throws Exception {
+
+        when(
+                createPaymentUseCase.execute(
+                        any()
+                )
+        ).thenThrow(
+                new IdempotencyKeyReuseException(
+                        "idem-001"
+                )
+        );
+
+        mockMvc.perform(
+                        post(
+                                "/api/v1/payments"
+                        )
+                                .header(
+                                        "Idempotency-Key",
+                                        "idem-001"
+                                )
+                                .header(
+                                        "X-Request-ID",
+                                        "req-idempotency-conflict"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        validBody()
+                                )
+                )
+                .andExpect(
+                        status().isConflict()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.error.code"
+                        ).value(
+                                "IDEMPOTENCY_KEY_REUSED"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.meta.request_id"
+                        ).value(
+                                "req-idempotency-conflict"
+                        )
+                );
+    }
+
+    @Test
+    void shouldHideUnexpectedInternalErrorDetails()
+            throws Exception {
+
+        when(
+                createPaymentUseCase.execute(
+                        any()
+                )
+        ).thenThrow(
+                new RuntimeException(
+                        "jdbc:mysql://secret-db:3306/payment password=secret"
+                )
+        );
+
+        mockMvc.perform(
+                        post(
+                                "/api/v1/payments"
+                        )
+                                .header(
+                                        "Idempotency-Key",
+                                        "idem-001"
+                                )
+                                .header(
+                                        "X-Request-ID",
+                                        "req-internal-error"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        validBody()
+                                )
+                )
+                .andExpect(
+                        status().isInternalServerError()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.error.code"
+                        ).value(
+                                "INTERNAL_ERROR"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.error.message"
+                        ).value(
+                                "Internal server error"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.meta.request_id"
+                        ).value(
+                                "req-internal-error"
+                        )
+                );
     }
 
     private String validBody() {
