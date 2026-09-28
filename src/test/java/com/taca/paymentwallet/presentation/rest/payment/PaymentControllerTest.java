@@ -1,8 +1,12 @@
 package com.taca.paymentwallet.presentation.rest.payment;
 
 import com.taca.paymentwallet.application.command.CreatePaymentCommand;
+import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
 import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
+import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
 import com.taca.paymentwallet.application.result.CreatePaymentResult;
+import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
+import com.taca.paymentwallet.application.result.WebhookProcessingAction;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -23,6 +27,8 @@ class PaymentControllerTest {
 
     private CreatePaymentUseCase createPaymentUseCase;
 
+    private ProcessVnpayWebhookUseCase processVnpayWebhookUseCase;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -32,9 +38,15 @@ class PaymentControllerTest {
                         CreatePaymentUseCase.class
                 );
 
+        processVnpayWebhookUseCase =
+                mock(
+                        ProcessVnpayWebhookUseCase.class
+                );
+
         PaymentController controller =
                 new PaymentController(
-                        createPaymentUseCase
+                        createPaymentUseCase,
+                        processVnpayWebhookUseCase
                 );
 
         mockMvc =
@@ -433,6 +445,232 @@ class PaymentControllerTest {
                 );
     }
 
+    @Test
+    void shouldProcessSuccessfulVnpayWebhook()
+            throws Exception {
+
+        UUID paymentId =
+                UUID.randomUUID();
+
+        when(
+                processVnpayWebhookUseCase.execute(
+                        any()
+                )
+        ).thenReturn(
+                new ProcessVnpayWebhookResult(
+                        paymentId,
+                        "SUCCESS",
+                        WebhookProcessingAction.APPLIED
+                )
+        );
+
+        String body =
+                """
+                {
+                  "provider_event_id": "vnpay-event-001",
+                  "provider_transaction_ref": "vnpay-txn-001",
+                  "response_code": "00",
+                  "transaction_status": "00",
+                  "amount": 100000,
+                  "currency": "VND",
+                  "payload_hash":
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "signed_payload": {
+                    "vnp_TxnRef": "vnpay-txn-001",
+                    "vnp_Amount": "10000000",
+                    "vnp_ResponseCode": "00",
+                    "vnp_TransactionStatus": "00",
+                    "vnp_SecureHash": "signed-value"
+                  }
+                }
+                """;
+
+        mockMvc.perform(
+                        post(
+                                "/api/v1/payments/webhook"
+                        )
+                                .header(
+                                        "X-Request-ID",
+                                        "req-webhook-001"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        body
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.data.payment_id"
+                        ).value(
+                                paymentId.toString()
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.data.payment_status"
+                        ).value(
+                                "SUCCESS"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.data.action"
+                        ).value(
+                                "APPLIED"
+                        )
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.meta.request_id"
+                        ).value(
+                                "req-webhook-001"
+                        )
+                );
+
+        ArgumentCaptor<ProcessVnpayWebhookCommand>
+                captor =
+                ArgumentCaptor.forClass(
+                        ProcessVnpayWebhookCommand.class
+                );
+
+        verify(
+                processVnpayWebhookUseCase
+        ).execute(
+                captor.capture()
+        );
+
+        ProcessVnpayWebhookCommand command =
+                captor.getValue();
+
+        assertEquals(
+                "vnpay-event-001",
+                command.providerEventId()
+        );
+
+        assertEquals(
+                "vnpay-txn-001",
+                command.providerTransactionRef()
+        );
+
+        assertEquals(
+                "00",
+                command.responseCode()
+        );
+
+        assertEquals(
+                "00",
+                command.transactionStatus()
+        );
+
+        assertEquals(
+                100_000L,
+                command.amount()
+        );
+
+        assertEquals(
+                "VND",
+                command.currency()
+        );
+
+        assertEquals(
+                "signed-value",
+                command.signedPayload()
+                        .get(
+                                "vnp_SecureHash"
+                        )
+        );
+    }
+
+    @Test
+    void shouldAcknowledgeDuplicateVnpayWebhook()
+            throws Exception {
+
+        UUID paymentId =
+                UUID.randomUUID();
+
+        when(
+                processVnpayWebhookUseCase.execute(
+                        any()
+                )
+        ).thenReturn(
+                new ProcessVnpayWebhookResult(
+                        paymentId,
+                        "SUCCESS",
+                        WebhookProcessingAction.DUPLICATE
+                )
+        );
+
+        mockMvc.perform(
+                        post(
+                                "/api/v1/payments/webhook"
+                        )
+                                .header(
+                                        "X-Request-ID",
+                                        "req-webhook-002"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        validWebhookBody()
+                                )
+                )
+                .andExpect(
+                        status().isOk()
+                )
+                .andExpect(
+                        jsonPath(
+                                "$.data.action"
+                        ).value(
+                                "DUPLICATE"
+                        )
+                );
+    }
+
+    @Test
+    void shouldRejectInvalidVnpayWebhookBody()
+            throws Exception {
+
+        String body =
+                """
+                {
+                  "provider_event_id": "",
+                  "provider_transaction_ref": "",
+                  "amount": 0,
+                  "currency": "",
+                  "signed_payload": {}
+                }
+                """;
+
+        mockMvc.perform(
+                        post(
+                                "/api/v1/payments/webhook"
+                        )
+                                .header(
+                                        "X-Request-ID",
+                                        "req-webhook-003"
+                                )
+                                .contentType(
+                                        MediaType.APPLICATION_JSON
+                                )
+                                .content(
+                                        body
+                                )
+                )
+                .andExpect(
+                        status().isBadRequest()
+                );
+
+        verifyNoInteractions(
+                processVnpayWebhookUseCase
+        );
+    }
+
     private String validBody() {
         return """
                 {
@@ -454,5 +692,27 @@ class PaymentControllerTest {
                   ]
                 }
                 """;
+    }
+
+    private String validWebhookBody() {
+        return """
+            {
+              "provider_event_id": "vnpay-event-001",
+              "provider_transaction_ref": "vnpay-txn-001",
+              "response_code": "00",
+              "transaction_status": "00",
+              "amount": 100000,
+              "currency": "VND",
+              "payload_hash":
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "signed_payload": {
+                "vnp_TxnRef": "vnpay-txn-001",
+                "vnp_Amount": "10000000",
+                "vnp_ResponseCode": "00",
+                "vnp_TransactionStatus": "00",
+                "vnp_SecureHash": "signed-value"
+              }
+            }
+            """;
     }
 }

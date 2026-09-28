@@ -70,7 +70,7 @@ class ProcessVnpayWebhookServiceTest {
                 outboxPort
         );
 
-        ProcessVnpayWebhookResult result = service.execute(successCommand(paymentId.value(), 100_000));
+        ProcessVnpayWebhookResult result = service.execute(successCommand(100_000));
 
         assertEquals(paymentId.value(), result.paymentId());
         assertEquals("SUCCESS", result.paymentStatus());
@@ -132,7 +132,7 @@ class ProcessVnpayWebhookServiceTest {
                 outboxPort
         );
 
-        ProcessVnpayWebhookResult result = service.execute(successCommand(paymentId.value(), 100_000));
+        ProcessVnpayWebhookResult result = service.execute(successCommand(100_000));
 
         assertEquals(paymentId.value(), result.paymentId());
         assertEquals("PENDING", result.paymentStatus());
@@ -206,7 +206,6 @@ class ProcessVnpayWebhookServiceTest {
         ProcessVnpayWebhookResult result =
                 service.execute(
                         successCommand(
-                                paymentId.value(),
                                 100_000
                         )
                 );
@@ -283,7 +282,6 @@ class ProcessVnpayWebhookServiceTest {
         ProcessVnpayWebhookResult result =
                 service.execute(
                         successCommand(
-                                paymentId.value(),
                                 100_000
                         )
                 );
@@ -342,7 +340,7 @@ class ProcessVnpayWebhookServiceTest {
                 outboxPort
         );
 
-        ProcessVnpayWebhookResult result = service.execute(failedCommand(paymentId.value(), 100_000));
+        ProcessVnpayWebhookResult result = service.execute(failedCommand(100_000));
 
         assertEquals(paymentId.value(), result.paymentId());
         assertEquals("FAILED", result.paymentStatus());
@@ -408,7 +406,7 @@ class ProcessVnpayWebhookServiceTest {
 
         assertThrows(
                 PaymentAmountMismatchException.class,
-                () -> service.execute(successCommand(paymentId.value(), 90_000))
+                () -> service.execute(successCommand(90_000))
         );
     }
 
@@ -437,7 +435,7 @@ class ProcessVnpayWebhookServiceTest {
 
         assertThrows(
                 PaymentNotFoundException.class,
-                () -> service.execute(successCommand(paymentId.value(), 100_000))
+                () -> service.execute(successCommand(100_000))
         );
     }
 
@@ -470,14 +468,12 @@ class ProcessVnpayWebhookServiceTest {
     }
 
     @Test
-    void shouldResolvePaymentFromAttemptInsteadOfCommandPaymentId() {
+    void shouldResolvePaymentFromProviderTransactionRef() {
         PaymentId actualPaymentId =
                 new PaymentId(
                         UUID.randomUUID()
                 );
 
-        UUID wrongPaymentId =
-                UUID.randomUUID();
 
         ShopId shopId =
                 new ShopId(
@@ -516,7 +512,6 @@ class ProcessVnpayWebhookServiceTest {
 
         ProcessVnpayWebhookCommand command =
                 new ProcessVnpayWebhookCommand(
-                        wrongPaymentId,
                         "vnpay-event-001",
                         "vnpay-txn-001",
                         "00",
@@ -565,7 +560,6 @@ class ProcessVnpayWebhookServiceTest {
                 () ->
                         service.execute(
                                 successCommand(
-                                        UUID.randomUUID(),
                                         100_000
                                 )
                         )
@@ -655,9 +649,10 @@ class ProcessVnpayWebhookServiceTest {
         );
     }
 
-    private ProcessVnpayWebhookCommand successCommand(UUID paymentId, long amount) {
+    private ProcessVnpayWebhookCommand successCommand(
+            long amount
+    ) {
         return new ProcessVnpayWebhookCommand(
-                paymentId,
                 "vnpay-event-001",
                 "vnpay-txn-001",
                 "00",
@@ -665,13 +660,17 @@ class ProcessVnpayWebhookServiceTest {
                 amount,
                 "VND",
                 "payload-hash-001",
-                Map.of("vnp_SecureHash", "signed-value")
+                Map.of(
+                        "vnp_SecureHash",
+                        "signed-value"
+                )
         );
     }
 
-    private ProcessVnpayWebhookCommand failedCommand(UUID paymentId, long amount) {
+    private ProcessVnpayWebhookCommand failedCommand(
+            long amount
+    ) {
         return new ProcessVnpayWebhookCommand(
-                paymentId,
                 "vnpay-event-002",
                 "vnpay-txn-002",
                 "24",
@@ -679,7 +678,10 @@ class ProcessVnpayWebhookServiceTest {
                 amount,
                 "VND",
                 "payload-hash-002",
-                Map.of("vnp_SecureHash", "signed-value")
+                Map.of(
+                        "vnp_SecureHash",
+                        "signed-value"
+                )
         );
     }
 

@@ -2,8 +2,11 @@ package com.taca.paymentwallet.presentation.rest.payment;
 
 import com.taca.paymentwallet.application.command.CreatePaymentCommand;
 import com.taca.paymentwallet.application.command.CreatePaymentOrderCommand;
+import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
 import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
+import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
 import com.taca.paymentwallet.application.result.CreatePaymentResult;
+import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
 import com.taca.paymentwallet.presentation.rest.ApiMeta;
 import com.taca.paymentwallet.presentation.rest.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,12 +23,20 @@ public class PaymentController {
 
     private final CreatePaymentUseCase createPaymentUseCase;
 
+    private final ProcessVnpayWebhookUseCase processVnpayWebhookUseCase;
+
     public PaymentController(
-            CreatePaymentUseCase createPaymentUseCase
+            CreatePaymentUseCase createPaymentUseCase,
+            ProcessVnpayWebhookUseCase processVnpayWebhookUseCase
     ) {
         this.createPaymentUseCase =
                 Objects.requireNonNull(
                         createPaymentUseCase
+                );
+
+        this.processVnpayWebhookUseCase =
+                Objects.requireNonNull(
+                        processVnpayWebhookUseCase
                 );
     }
 
@@ -71,6 +82,50 @@ public class PaymentController {
                 .body(
                         response
                 );
+    }
+
+    @PostMapping("/webhook")
+    public ResponseEntity<ApiResponse<VnpayWebhookData>>
+    processVnpayWebhook(
+            @RequestHeader("X-Request-ID")
+            String requestId,
+
+            @Valid
+            @RequestBody
+            VnpayWebhookRequest request
+    ) {
+        ProcessVnpayWebhookCommand command =
+                new ProcessVnpayWebhookCommand(
+                        request.providerEventId(),
+                        request.providerTransactionRef(),
+                        request.responseCode(),
+                        request.transactionStatus(),
+                        request.amount(),
+                        request.currency(),
+                        request.payloadHash(),
+                        request.signedPayload()
+                );
+
+        ProcessVnpayWebhookResult result =
+                processVnpayWebhookUseCase.execute(
+                        command
+                );
+
+        ApiResponse<VnpayWebhookData> response =
+                new ApiResponse<>(
+                        new VnpayWebhookData(
+                                result.paymentId(),
+                                result.paymentStatus(),
+                                result.action().name()
+                        ),
+                        new ApiMeta(
+                                requestId
+                        )
+                );
+
+        return ResponseEntity.ok(
+                response
+        );
     }
 
     private CreatePaymentCommand toCommand(
