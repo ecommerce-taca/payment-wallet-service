@@ -170,6 +170,8 @@ public class CreatePaymentService implements CreatePaymentUseCase {
                         expiresAt
                 );
 
+        paymentRepository.save(payment);
+
         CreatePaymentResult result =
                 switch (method) {
                     case VNPAY ->
@@ -179,11 +181,12 @@ public class CreatePaymentService implements CreatePaymentUseCase {
                                     requestHash
                             );
 
-                    case COD -> createCodPayment(payment);
-                };
+                    case COD ->
+                            createCodPayment(payment);
+            };
 
-        paymentRepository.save(payment);
         outboxPort.saveAll(payment.domainEvents());
+
         payment.clearDomainEvents();
 
         return result;
