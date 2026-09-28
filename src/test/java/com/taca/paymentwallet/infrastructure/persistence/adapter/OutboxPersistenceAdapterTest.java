@@ -5,6 +5,7 @@ import com.taca.paymentwallet.domain.payment.PaymentMethod;
 import com.taca.paymentwallet.domain.payment.PaymentStatus;
 import com.taca.paymentwallet.domain.payment.PaymentSucceededEvent;
 import com.taca.paymentwallet.domain.payout.PayoutFailedEvent;
+import com.taca.paymentwallet.domain.payout.PayoutStatus;
 import com.taca.paymentwallet.domain.refund.RefundRequestedEvent;
 import com.taca.paymentwallet.domain.settlement.SettlementBatchCompletedEvent;
 import com.taca.paymentwallet.domain.valueobject.*;
@@ -205,10 +206,16 @@ class OutboxPersistenceAdapterTest {
                 new PayoutFailedEvent(
                         UUID.randomUUID(),
                         OCCURRED_AT,
-                        new PayoutId(payoutId),
+                        new PayoutId(
+                                payoutId
+                        ),
                         new ShopId(
                                 UUID.randomUUID()
                         ),
+                        Money.vnd(
+                                100_000
+                        ),
+                        PayoutStatus.FAILED,
                         "BANK_TRANSFER_FAILED"
                 );
 
@@ -503,6 +510,72 @@ class OutboxPersistenceAdapterTest {
         assertEquals(
                 "wallet.allocated",
                 entity.getEventType()
+        );
+    }
+
+    @Test
+    void shouldSerializePayoutFailedEventWithAmountAndStatus() {
+        ObjectMapper realObjectMapper =
+                new ObjectMapper();
+
+        OutboxPersistenceAdapter realAdapter =
+                new OutboxPersistenceAdapter(
+                        repository,
+                        realObjectMapper
+                );
+
+        PayoutFailedEvent event =
+                new PayoutFailedEvent(
+                        EVENT_ID,
+                        OCCURRED_AT,
+                        new PayoutId(
+                                UUID.randomUUID()
+                        ),
+                        new ShopId(
+                                UUID.randomUUID()
+                        ),
+                        Money.vnd(
+                                100_000
+                        ),
+                        PayoutStatus.FAILED,
+                        "BANK_TRANSFER_FAILED"
+                );
+
+        realAdapter.save(event);
+
+        ArgumentCaptor<OutboxEventJpaEntity>
+                captor =
+                ArgumentCaptor.forClass(
+                        OutboxEventJpaEntity.class
+                );
+
+        verify(repository)
+                .save(
+                        captor.capture()
+                );
+
+        String payload =
+                captor.getValue()
+                        .getPayload();
+
+        assertNotNull(payload);
+
+        assertTrue(
+                payload.contains(
+                        "100000"
+                )
+        );
+
+        assertTrue(
+                payload.contains(
+                        "FAILED"
+                )
+        );
+
+        assertTrue(
+                payload.contains(
+                        "BANK_TRANSFER_FAILED"
+                )
         );
     }
 }

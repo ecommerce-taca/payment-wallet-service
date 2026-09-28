@@ -148,7 +148,14 @@ public class Payout extends AggregateRoot {
         this.failureCode = failureCode;
         this.status = PayoutStatus.FAILED;
 
-        registerEvent(PayoutFailedEvent.now(id, shopId, failureCode));
+        registerEvent(
+                PayoutFailedEvent.now(
+                        id,
+                        shopId,
+                        amount,
+                        failureCode
+                )
+        );
     }
 
     public void cancel() {
