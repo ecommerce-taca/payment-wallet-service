@@ -8,6 +8,7 @@ import com.taca.paymentwallet.domain.payout.PayoutFailedEvent;
 import com.taca.paymentwallet.domain.refund.RefundRequestedEvent;
 import com.taca.paymentwallet.domain.settlement.SettlementBatchCompletedEvent;
 import com.taca.paymentwallet.domain.valueobject.*;
+import com.taca.paymentwallet.domain.wallet.WalletAllocatedEvent;
 import com.taca.paymentwallet.infrastructure.persistence.entity.OutboxEventJpaEntity;
 import com.taca.paymentwallet.infrastructure.persistence.repository.OutboxEventJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -453,6 +454,55 @@ class OutboxPersistenceAdapterTest {
                                 entity.getEventType()
                         )
                 )
+        );
+    }
+
+    @Test
+    void shouldMapWalletAggregateType() throws Exception {
+
+        UUID walletId = UUID.randomUUID();
+
+        WalletAllocatedEvent event = new WalletAllocatedEvent(
+                UUID.randomUUID(),
+                OCCURRED_AT,
+                new WalletId(walletId),
+                new OrderId(UUID.randomUUID()),
+                new ShopId(UUID.randomUUID()),
+                Money.vnd(100_000),
+                Money.vnd(7_000),
+                Money.vnd(3_000),
+                Money.vnd(90_000)
+        );
+
+        when(
+                objectMapper.writeValueAsString(event)
+        ).thenReturn("{}");
+
+        adapter.save(event);
+
+        ArgumentCaptor<OutboxEventJpaEntity>
+                captor =
+                ArgumentCaptor.forClass(
+                        OutboxEventJpaEntity.class
+                );
+
+        verify(repository).save(captor.capture());
+
+        OutboxEventJpaEntity entity = captor.getValue();
+
+        assertEquals(
+                "WALLET",
+                entity.getAggregateType()
+        );
+
+        assertEquals(
+                walletId,
+                entity.getAggregateId()
+        );
+
+        assertEquals(
+                "wallet.allocated",
+                entity.getEventType()
         );
     }
 }

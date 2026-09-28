@@ -29,7 +29,9 @@ import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.domain.wallet.Wallet;
+import com.taca.paymentwallet.domain.wallet.WalletAllocatedEvent;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -157,7 +159,27 @@ public class ProcessCodPaymentService implements ProcessCodPaymentUseCase {
         ledgerPostingRepository.save(posting);
 
         outboxPort.saveAll(payment.domainEvents());
+
+        saveWalletAllocatedEvents(
+                allocations,
+                command.occurredAt()
+        );
+
         payment.clearDomainEvents();
+    }
+
+    private void saveWalletAllocatedEvents(
+            List<PaymentAllocation> allocations,
+            Instant occurredAt
+    ) {
+        for (PaymentAllocation allocation : allocations) {
+            outboxPort.save(
+                    WalletAllocatedEvent.from(
+                            allocation,
+                            occurredAt
+                    )
+            );
+        }
     }
 
     private Map<ShopId, Wallet> loadWalletsForUpdate(
