@@ -29,9 +29,28 @@ class VnpayWebhookVerifierAdapterTest {
         VnpayWebhookVerifierAdapter verifier =
                 createVerifier();
 
+        Map<String, String> payload =
+                new LinkedHashMap<>(
+                        validPayloadWithoutSignature()
+                );
+
+        payload.put(
+                "vnp_SecureHash",
+                validSignature(
+                        payload
+                )
+        );
+
         ProcessVnpayWebhookCommand command =
-                commandWithSignature(
-                        VALID_SIGNATURE
+                new ProcessVnpayWebhookCommand(
+                        "vnpay-event-001",
+                        "vnpay-txn-001",
+                        "00",
+                        "00",
+                        100_000,
+                        "VND",
+                        "payload-hash",
+                        payload
                 );
 
         assertThatCode(
@@ -74,15 +93,17 @@ class VnpayWebhookVerifierAdapterTest {
 
         ProcessVnpayWebhookCommand command =
                 new ProcessVnpayWebhookCommand(
-                        PAYMENT_ID,
                         "vnpay-event-001",
-                        "12345678",
+                        "vnpay-txn-001",
                         "00",
                         "00",
                         100_000,
                         "VND",
                         "payload-hash",
-                        payload
+                        Map.of(
+                                "vnp_SecureHash",
+                                "signed-value"
+                        )
                 );
 
         assertThatThrownBy(
@@ -105,6 +126,11 @@ class VnpayWebhookVerifierAdapterTest {
                         validPayloadWithoutSignature()
                 );
 
+        String signature =
+                validSignature(
+                        payload
+                );
+
         payload.put(
                 "vnp_SecureHashType",
                 "HmacSHA512"
@@ -112,14 +138,13 @@ class VnpayWebhookVerifierAdapterTest {
 
         payload.put(
                 "vnp_SecureHash",
-                VALID_SIGNATURE
+                signature
         );
 
         ProcessVnpayWebhookCommand command =
                 new ProcessVnpayWebhookCommand(
-                        PAYMENT_ID,
                         "vnpay-event-001",
-                        "12345678",
+                        "vnpay-txn-001",
                         "00",
                         "00",
                         100_000,
@@ -164,19 +189,23 @@ class VnpayWebhookVerifierAdapterTest {
         );
 
         return new ProcessVnpayWebhookCommand(
-                PAYMENT_ID,
                 "vnpay-event-001",
-                "12345678",
+                "vnpay-txn-001",
                 "00",
                 "00",
                 100_000,
                 "VND",
                 "payload-hash",
-                payload
+                Map.of(
+                        "vnp_SecureHash",
+                        "signed-value"
+                )
         );
     }
 
-    private Map<String, String> validPayloadWithoutSignature() {
+    private Map<String, String>
+    validPayloadWithoutSignature() {
+
         Map<String, String> payload =
                 new LinkedHashMap<>();
 
@@ -232,9 +261,19 @@ class VnpayWebhookVerifierAdapterTest {
 
         payload.put(
                 "vnp_TxnRef",
-                "11111111111111111111111111111111"
+                "vnpay-txn-001"
         );
 
         return payload;
+    }
+
+    private String validSignature(
+            Map<String, String> payload
+    ) {
+        return new VnpaySigner()
+                .sign(
+                        payload,
+                        "secret-key"
+                );
     }
 }

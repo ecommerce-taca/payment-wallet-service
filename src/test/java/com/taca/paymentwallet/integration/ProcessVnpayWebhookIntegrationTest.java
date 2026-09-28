@@ -213,7 +213,6 @@ class ProcessVnpayWebhookIntegrationTest {
         ProcessVnpayWebhookResult result =
                 service.execute(
                         new ProcessVnpayWebhookCommand(
-                                paymentId,
                                 PROVIDER_EVENT_ID,
                                 PROVIDER_TRANSACTION_REF,
                                 "00",
