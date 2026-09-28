@@ -18,7 +18,9 @@ import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.domain.wallet.Wallet;
+import com.taca.paymentwallet.domain.wallet.WalletAllocatedEvent;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -245,7 +247,9 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
         PaymentFeePolicy feePolicy =
                 feePolicyPort.currentPaymentFeePolicy();
 
-        payment.markSucceeded(clockPort.now());
+        Instant occurredAt = clockPort.now();
+
+        payment.markSucceeded(occurredAt);
 
         List<PaymentAllocation> allocations =
                 allocationCalculator.allocate(
@@ -282,7 +286,27 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
         ledgerPostingRepository.save(posting);
 
         outboxPort.saveAll(payment.domainEvents());
+
+        saveWalletAllocatedEvents(
+                allocations,
+                occurredAt
+        );
+
         payment.clearDomainEvents();
+    }
+
+    private void saveWalletAllocatedEvents(
+            List<PaymentAllocation> allocations,
+            Instant occurredAt
+    ) {
+        for (PaymentAllocation allocation : allocations) {
+            outboxPort.save(
+                    WalletAllocatedEvent.from(
+                            allocation,
+                            occurredAt
+                    )
+            );
+        }
     }
 
     private Map<ShopId, Wallet> loadWalletsForUpdate(

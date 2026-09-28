@@ -16,6 +16,7 @@ import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.domain.wallet.Wallet;
+import com.taca.paymentwallet.domain.wallet.WalletAllocatedEvent;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -82,13 +83,88 @@ class ProcessVnpayWebhookServiceTest {
         assertEquals(1, ledgerPostingRepository.savedPostings.size());
         assertEquals("PAYMENT_CAPTURE", ledgerPostingRepository.savedPostings.getFirst().postingType());
         assertTrue(paymentProviderEventPort.applied);
-        assertTrue(outboxPort.events.stream()
-                .anyMatch(event -> event.eventType().equals("payment.succeeded")));
+        assertEquals(
+                2,
+                outboxPort.events.size()
+        );
+
+        assertTrue(
+                outboxPort.events.stream()
+                        .anyMatch(event ->
+                                event instanceof PaymentSucceededEvent
+                        )
+        );
+
+        assertTrue(
+                outboxPort.events.stream()
+                        .anyMatch(event ->
+                                event instanceof WalletAllocatedEvent
+                        )
+        );
         assertEquals(
                 PaymentAttemptStatus.SUCCESS,
                 paymentAttemptRepository.attempt.status()
         );
         assertEquals(1, paymentAttemptRepository.savedAttempts.size());
+
+        PaymentAllocation allocation =
+                allocationRepository
+                        .savedAllocations
+                        .getFirst();
+
+        WalletAllocatedEvent allocatedEvent =
+                outboxPort.events
+                        .stream()
+                        .filter(
+                                WalletAllocatedEvent.class::isInstance
+                        )
+                        .map(
+                                WalletAllocatedEvent.class::cast
+                        )
+                        .findFirst()
+                        .orElseThrow();
+
+        assertEquals(
+                allocation.walletId(),
+                allocatedEvent.walletId()
+        );
+
+        assertEquals(
+                allocation.orderId(),
+                allocatedEvent.orderId()
+        );
+
+        assertEquals(
+                allocation.shopId(),
+                allocatedEvent.shopId()
+        );
+
+        assertEquals(
+                allocation.grossAmount(),
+                allocatedEvent.grossAmount()
+        );
+
+        assertEquals(
+                allocation.commissionAmount(),
+                allocatedEvent.commissionAmount()
+        );
+
+        assertEquals(
+                allocation.taxAmount(),
+                allocatedEvent.taxAmount()
+        );
+
+        assertEquals(
+                allocation.sellerNetAmount(),
+                allocatedEvent.sellerNetAmount()
+        );
+
+        assertEquals(
+                Instant.parse(
+                        "2026-01-01T00:00:00Z"
+                ),
+                allocatedEvent.occurredAt()
+        );
     }
 
     @Test
@@ -375,6 +451,25 @@ class ProcessVnpayWebhookServiceTest {
                         .savedAttempts
                         .size()
         );
+
+        assertEquals(
+                1,
+                outboxPort.events.size()
+        );
+
+        assertTrue(
+                outboxPort.events.stream()
+                        .anyMatch(event ->
+                                event instanceof PaymentFailedEvent
+                        )
+        );
+
+        assertTrue(
+                outboxPort.events.stream()
+                        .noneMatch(event ->
+                                event instanceof WalletAllocatedEvent
+                        )
+        );
     }
 
     @Test
@@ -633,20 +728,30 @@ class ProcessVnpayWebhookServiceTest {
         }
     }
 
-    private Payment createPendingVnpayPayment(PaymentId paymentId, ShopId shopId) {
-        return Payment.create(
-                paymentId,
-                new CheckoutGroupId(UUID.randomUUID()),
-                new BuyerUserId(UUID.randomUUID()),
-                PaymentMethod.VNPAY,
-                Money.vnd(100_000),
-                List.of(new PaymentOrder(
-                        new OrderId(UUID.randomUUID()),
-                        shopId,
-                        Money.vnd(100_000)
-                )),
-                Instant.parse("2026-01-01T00:15:00Z")
-        );
+    private Payment createPendingVnpayPayment(
+            PaymentId paymentId,
+            ShopId shopId
+    ) {
+        Payment payment =
+                Payment.create(
+                        paymentId,
+                        new CheckoutGroupId(UUID.randomUUID()),
+                        new BuyerUserId(UUID.randomUUID()),
+                        PaymentMethod.VNPAY,
+                        Money.vnd(100_000),
+                        List.of(
+                                new PaymentOrder(
+                                        new OrderId(UUID.randomUUID()),
+                                        shopId,
+                                        Money.vnd(100_000)
+                                )
+                        ),
+                        Instant.parse("2026-01-01T00:15:00Z")
+                );
+
+        payment.clearDomainEvents();
+
+        return payment;
     }
 
     private ProcessVnpayWebhookCommand successCommand(

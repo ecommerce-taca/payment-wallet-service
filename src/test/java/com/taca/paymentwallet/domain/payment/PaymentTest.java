@@ -15,6 +15,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class PaymentTest {
 
@@ -194,6 +195,103 @@ class PaymentTest {
         assertEquals(
                 "expiresAt must be null for COD payment",
                 exception.getMessage()
+        );
+    }
+
+    @Test
+    void shouldRegisterPaymentCreatedEvent() {
+        PaymentId paymentId =
+                new PaymentId(
+                        UUID.randomUUID()
+                );
+
+        OrderId orderId =
+                new OrderId(
+                        UUID.randomUUID()
+                );
+
+        Payment payment =
+                Payment.create(
+                        paymentId,
+                        new CheckoutGroupId(
+                                UUID.randomUUID()
+                        ),
+                        new BuyerUserId(
+                                UUID.randomUUID()
+                        ),
+                        PaymentMethod.VNPAY,
+                        Money.vnd(
+                                100_000
+                        ),
+                        List.of(
+                                new PaymentOrder(
+                                        orderId,
+                                        new ShopId(
+                                                UUID.randomUUID()
+                                        ),
+                                        Money.vnd(
+                                                100_000
+                                        )
+                                )
+                        ),
+                        Instant.now()
+                                .plusSeconds(
+                                        900
+                                )
+                );
+
+        assertThat(
+                payment.domainEvents()
+        ).hasSize(1);
+
+        assertThat(
+                payment.domainEvents()
+                        .getFirst()
+        ).isInstanceOf(
+                PaymentCreatedEvent.class
+        );
+
+        PaymentCreatedEvent event =
+                (PaymentCreatedEvent)
+                        payment.domainEvents()
+                                .getFirst();
+
+        assertThat(
+                event.eventType()
+        ).isEqualTo(
+                "payment.created"
+        );
+
+        assertThat(
+                event.paymentId()
+        ).isEqualTo(
+                paymentId
+        );
+
+        assertThat(
+                event.orderIds()
+        ).containsExactly(
+                orderId
+        );
+
+        assertThat(
+                event.amount()
+        ).isEqualTo(
+                Money.vnd(
+                        100_000
+                )
+        );
+
+        assertThat(
+                event.method()
+        ).isEqualTo(
+                PaymentMethod.VNPAY
+        );
+
+        assertThat(
+                event.status()
+        ).isEqualTo(
+                PaymentStatus.PENDING
         );
     }
 }

@@ -9,6 +9,7 @@ import com.taca.paymentwallet.domain.valueobject.PaymentId;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 public class Payment extends AggregateRoot {
 
@@ -147,20 +148,39 @@ public class Payment extends AggregateRoot {
             );
         }
 
-        return new Payment(
-                id,
-                checkoutGroupId,
-                buyerUserId,
-                method,
-                amount,
-                orders,
-                initialStatus,
-                Money.vnd(0),
-                Money.vnd(0),
-                null,
-                expiresAt,
-                null
+        Payment payment =
+                new Payment(
+                        id,
+                        checkoutGroupId,
+                        buyerUserId,
+                        method,
+                        amount,
+                        orders,
+                        initialStatus,
+                        Money.vnd(0),
+                        Money.vnd(0),
+                        null,
+                        expiresAt,
+                        null
+                );
+
+        payment.registerEvent(
+                new PaymentCreatedEvent(
+                        UUID.randomUUID(),
+                        Instant.now(),
+                        payment.id(),
+                        payment.checkoutGroupId(),
+                        payment.orders()
+                                .stream()
+                                .map(PaymentOrder::orderId)
+                                .toList(),
+                        payment.amount(),
+                        payment.method(),
+                        payment.status()
+                )
         );
+
+        return payment;
     }
 
     public static Payment rehydrate(

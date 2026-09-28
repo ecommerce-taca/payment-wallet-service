@@ -131,6 +131,10 @@ public class OutboxPersistenceAdapter
             return "PAYMENT";
         }
 
+        if (eventType.startsWith("wallet.")) {
+            return "WALLET";
+        }
+
         if (eventType.startsWith("refund.")) {
             return "REFUND";
         }

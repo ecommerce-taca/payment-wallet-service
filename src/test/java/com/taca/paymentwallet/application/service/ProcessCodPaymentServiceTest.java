@@ -16,6 +16,7 @@ import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.domain.wallet.Wallet;
+import com.taca.paymentwallet.domain.wallet.WalletAllocatedEvent;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -82,9 +83,39 @@ class ProcessCodPaymentServiceTest {
         assertThat(wallet.availableBalance()).isEqualTo(Money.vnd(0));
 
         assertThat(ledgerPostingRepository.postings).hasSize(1);
-        assertThat(outboxPort.events).hasSize(1);
+        assertThat(outboxPort.events).hasSize(2);
+
+        assertThat(outboxPort.events)
+                .anyMatch(event -> event instanceof PaymentSucceededEvent);
+
+        assertThat(outboxPort.events)
+                .anyMatch(event -> event instanceof WalletAllocatedEvent);
 
         PaymentAllocation allocation = paymentAllocationRepository.allocations.getFirst();
+
+        WalletAllocatedEvent allocatedEvent =
+                outboxPort.events
+                        .stream()
+                        .filter(WalletAllocatedEvent.class::isInstance)
+                        .map(WalletAllocatedEvent.class::cast)
+                        .findFirst()
+                        .orElseThrow();
+
+        assertThat(allocatedEvent.walletId()).isEqualTo(allocation.walletId());
+
+        assertThat(allocatedEvent.orderId()).isEqualTo(allocation.orderId());
+
+        assertThat(allocatedEvent.shopId()).isEqualTo(allocation.shopId());
+
+        assertThat(allocatedEvent.grossAmount()).isEqualTo(allocation.grossAmount());
+
+        assertThat(allocatedEvent.commissionAmount()).isEqualTo(allocation.commissionAmount());
+
+        assertThat(allocatedEvent.taxAmount()).isEqualTo(allocation.taxAmount());
+
+        assertThat(allocatedEvent.sellerNetAmount()).isEqualTo(allocation.sellerNetAmount());
+
+        assertThat(allocatedEvent.occurredAt()).isEqualTo(Instant.parse("2026-09-12T01:00:00Z"));
 
         assertThat(allocation.paymentId()).isEqualTo(payment.id());
         assertThat(allocation.walletId()).isEqualTo(wallet.id());
@@ -116,6 +147,17 @@ class ProcessCodPaymentServiceTest {
         assertThat(paymentAllocationRepository.allocations).isEmpty();
         assertThat(ledgerPostingRepository.postings).isEmpty();
         assertThat(outboxPort.events).hasSize(1);
+
+        assertThat(outboxPort.events)
+                .singleElement()
+                .isInstanceOf(
+                        PaymentFailedEvent.class
+                );
+
+        assertThat(outboxPort.events)
+                .noneMatch(event ->
+                        event instanceof WalletAllocatedEvent
+                );
     }
 
     @Test
@@ -137,6 +179,17 @@ class ProcessCodPaymentServiceTest {
         assertThat(result.paymentStatus()).isEqualTo("FAILED");
         assertThat(payment.failureCode()).isEqualTo("ORDER_CANCELLED");
         assertThat(outboxPort.events).hasSize(1);
+
+        assertThat(outboxPort.events)
+                .singleElement()
+                .isInstanceOf(
+                        PaymentFailedEvent.class
+                );
+
+        assertThat(outboxPort.events)
+                .noneMatch(event ->
+                        event instanceof WalletAllocatedEvent
+                );
     }
 
     @Test
@@ -208,35 +261,53 @@ class ProcessCodPaymentServiceTest {
         ))).isInstanceOf(UnsupportedPaymentMethodException.class);
     }
 
-    private Payment codPayment(ShopId shopId, Money amount) {
-        return Payment.create(
+    private Payment codPayment(
+            ShopId shopId,
+            Money amount
+    ) {
+        Payment payment = Payment.create(
                 new PaymentId(UUID.randomUUID()),
                 new CheckoutGroupId(UUID.randomUUID()),
                 new BuyerUserId(UUID.randomUUID()),
                 PaymentMethod.COD,
                 amount,
-                List.of(new PaymentOrder(
-                        new OrderId(UUID.randomUUID()),
-                        shopId,
-                        amount
-                ))
+                List.of(
+                        new PaymentOrder(
+                                new OrderId(UUID.randomUUID()),
+                                shopId,
+                                amount
+                        )
+                )
         );
+
+        payment.clearDomainEvents();
+
+        return payment;
     }
 
-    private Payment vnpayPayment(ShopId shopId, Money amount) {
-        return Payment.create(
+    private Payment vnpayPayment(
+            ShopId shopId,
+            Money amount
+    ) {
+        Payment payment = Payment.create(
                 new PaymentId(UUID.randomUUID()),
                 new CheckoutGroupId(UUID.randomUUID()),
                 new BuyerUserId(UUID.randomUUID()),
                 PaymentMethod.VNPAY,
                 amount,
-                List.of(new PaymentOrder(
-                        new OrderId(UUID.randomUUID()),
-                        shopId,
-                        amount
-                )),
+                List.of(
+                        new PaymentOrder(
+                                new OrderId(UUID.randomUUID()),
+                                shopId,
+                                amount
+                        )
+                ),
                 Instant.parse("2026-09-12T01:15:00Z")
         );
+
+        payment.clearDomainEvents();
+
+        return payment;
     }
 
     private static class FakePaymentRepositoryPort implements PaymentRepositoryPort {
