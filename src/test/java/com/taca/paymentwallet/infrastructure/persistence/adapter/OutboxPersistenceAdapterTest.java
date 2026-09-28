@@ -1,15 +1,13 @@
 package com.taca.paymentwallet.infrastructure.persistence.adapter;
 
+import com.taca.paymentwallet.domain.payment.PaymentCreatedEvent;
+import com.taca.paymentwallet.domain.payment.PaymentMethod;
+import com.taca.paymentwallet.domain.payment.PaymentStatus;
 import com.taca.paymentwallet.domain.payment.PaymentSucceededEvent;
 import com.taca.paymentwallet.domain.payout.PayoutFailedEvent;
 import com.taca.paymentwallet.domain.refund.RefundRequestedEvent;
 import com.taca.paymentwallet.domain.settlement.SettlementBatchCompletedEvent;
-import com.taca.paymentwallet.domain.valueobject.Money;
-import com.taca.paymentwallet.domain.valueobject.PaymentId;
-import com.taca.paymentwallet.domain.valueobject.PayoutId;
-import com.taca.paymentwallet.domain.valueobject.RefundId;
-import com.taca.paymentwallet.domain.valueobject.SettlementBatchId;
-import com.taca.paymentwallet.domain.valueobject.ShopId;
+import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.infrastructure.persistence.entity.OutboxEventJpaEntity;
 import com.taca.paymentwallet.infrastructure.persistence.repository.OutboxEventJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +18,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -400,6 +399,59 @@ class OutboxPersistenceAdapterTest {
         assertTrue(
                 payload.contains(
                         PAYMENT_ID.toString()
+                )
+        );
+    }
+
+    @Test
+    void shouldPersistPaymentCreatedEvent()
+            throws Exception {
+
+        UUID paymentId = UUID.randomUUID();
+
+        PaymentCreatedEvent event =
+                new PaymentCreatedEvent(
+                        UUID.randomUUID(),
+                        OCCURRED_AT,
+                        new PaymentId(paymentId),
+                        new CheckoutGroupId(UUID.randomUUID()),
+                        List.of(
+                                new OrderId(
+                                        UUID.randomUUID()
+                                )
+                        ),
+                        Money.vnd(
+                                100_000
+                        ),
+                        PaymentMethod.VNPAY,
+                        PaymentStatus.PENDING
+                );
+
+        when(
+                objectMapper.writeValueAsString(
+                        event
+                )
+        ).thenReturn(
+                "{}"
+        );
+
+        adapter.save(
+                event
+        );
+
+        verify(
+                repository
+        ).save(
+                argThat(entity ->
+                        "PAYMENT".equals(
+                                entity.getAggregateType()
+                        )
+                                && paymentId.equals(
+                                entity.getAggregateId()
+                        )
+                                && "payment.created".equals(
+                                entity.getEventType()
+                        )
                 )
         );
     }

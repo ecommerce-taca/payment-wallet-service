@@ -208,35 +208,53 @@ class ProcessCodPaymentServiceTest {
         ))).isInstanceOf(UnsupportedPaymentMethodException.class);
     }
 
-    private Payment codPayment(ShopId shopId, Money amount) {
-        return Payment.create(
+    private Payment codPayment(
+            ShopId shopId,
+            Money amount
+    ) {
+        Payment payment = Payment.create(
                 new PaymentId(UUID.randomUUID()),
                 new CheckoutGroupId(UUID.randomUUID()),
                 new BuyerUserId(UUID.randomUUID()),
                 PaymentMethod.COD,
                 amount,
-                List.of(new PaymentOrder(
-                        new OrderId(UUID.randomUUID()),
-                        shopId,
-                        amount
-                ))
+                List.of(
+                        new PaymentOrder(
+                                new OrderId(UUID.randomUUID()),
+                                shopId,
+                                amount
+                        )
+                )
         );
+
+        payment.clearDomainEvents();
+
+        return payment;
     }
 
-    private Payment vnpayPayment(ShopId shopId, Money amount) {
-        return Payment.create(
+    private Payment vnpayPayment(
+            ShopId shopId,
+            Money amount
+    ) {
+        Payment payment = Payment.create(
                 new PaymentId(UUID.randomUUID()),
                 new CheckoutGroupId(UUID.randomUUID()),
                 new BuyerUserId(UUID.randomUUID()),
                 PaymentMethod.VNPAY,
                 amount,
-                List.of(new PaymentOrder(
-                        new OrderId(UUID.randomUUID()),
-                        shopId,
-                        amount
-                )),
+                List.of(
+                        new PaymentOrder(
+                                new OrderId(UUID.randomUUID()),
+                                shopId,
+                                amount
+                        )
+                ),
                 Instant.parse("2026-09-12T01:15:00Z")
         );
+
+        payment.clearDomainEvents();
+
+        return payment;
     }
 
     private static class FakePaymentRepositoryPort implements PaymentRepositoryPort {
