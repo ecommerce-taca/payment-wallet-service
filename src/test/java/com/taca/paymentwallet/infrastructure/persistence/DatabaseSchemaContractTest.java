@@ -73,6 +73,12 @@ class DatabaseSchemaContractTest {
     }
 
     @Test
+    void paymentOrdersShouldStoreFinancialBreakdown() throws Exception {
+        assertColumnExists("payment_orders", "merchandise_amount");
+        assertColumnExists("payment_orders", "shipping_fee");
+    }
+
+    @Test
     void paymentEventsShouldAllowUnmatchedProviderEvent() throws Exception {
         assertColumnNullable("payment_events", "payment_id");
         assertColumnNullable("payment_events", "payment_attempt_id");

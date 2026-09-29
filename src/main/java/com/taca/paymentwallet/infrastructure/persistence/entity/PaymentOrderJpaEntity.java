@@ -34,6 +34,12 @@ public class PaymentOrderJpaEntity extends UuidEntity {
     @Column(name = "amount", nullable = false)
     private Long amount;
 
+    @Column(name = "merchandise_amount", nullable = false)
+    private Long merchandiseAmount;
+
+    @Column(name = "shipping_fee", nullable = false)
+    private Long shippingFee;
+
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
 

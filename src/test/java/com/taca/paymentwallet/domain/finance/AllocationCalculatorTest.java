@@ -203,4 +203,67 @@ class AllocationCalculatorTest {
                 )
         );
     }
+
+    @Test
+    void shouldExcludeShippingFeeFromSellerAllocation() {
+        PaymentId paymentId = new PaymentId(UUID.randomUUID());
+
+        OrderId orderId = new OrderId(UUID.randomUUID());
+
+        ShopId shopId = new ShopId(UUID.randomUUID());
+
+        WalletId walletId = new WalletId(UUID.randomUUID());
+
+        PaymentAllocationId allocationId = new PaymentAllocationId(UUID.randomUUID());
+
+        FeeConfigId feeConfigId = new FeeConfigId(UUID.randomUUID());
+
+        TaxConfigId taxConfigId = new TaxConfigId(UUID.randomUUID());
+
+        PaymentOrder order = new PaymentOrder(
+                orderId,
+                shopId,
+                Money.vnd(100_000),
+                Money.vnd(20_000)
+        );
+
+        List<PaymentAllocation> allocations =
+                calculator.allocate(
+                        paymentId,
+                        List.of(order),
+                        Map.of(orderId, allocationId),
+                        Map.of(shopId, walletId),
+                        feeConfigId,
+                        taxConfigId,
+                        RateBps.of(700),
+                        RateBps.of(100)
+                );
+
+        PaymentAllocation allocation = allocations.getFirst();
+
+        assertEquals(
+                Money.vnd(100_000),
+                allocation.grossAmount()
+        );
+
+        assertEquals(
+                Money.vnd(7_000),
+                allocation.commissionAmount()
+        );
+
+        assertEquals(
+                Money.vnd(1_000),
+                allocation.taxAmount()
+        );
+
+        assertEquals(
+                Money.vnd(92_000),
+                allocation.sellerNetAmount()
+        );
+
+        assertEquals(
+                Money.vnd(120_000),
+                order.totalAmount()
+        );
+    }
 }
