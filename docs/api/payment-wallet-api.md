@@ -55,28 +55,48 @@ Header `Idempotency-Key` bắt buộc. Chỉ gọi từ Order-Commerce (internal
 
 | Field | Kiểu | Bắt buộc | Ràng buộc |
 |---|---|---|---|
-| `order_id` | string | Có | — |
-| `checkout_group_id` | string | Có | Nhóm order multi-shop của cùng lần checkout |
-| `buyer_user_id` | string | Có | — |
-| `amount` | integer | Có | VND, > 0, **phải khớp** `grand_total` của Order (gồm `shipping_fee` — xem `order-commerce` api §3.6) |
+| `checkout_group_id` | string | Có | Một payment đại diện cho một checkout group |
+| `buyer_user_id` | string | Có | Phải khớp Order snapshot |
+| `amount` | integer | Có | VND, > 0, phải khớp `grand_total` của Order snapshot |
 | `currency` | string | Có | Cố định `"VND"` |
 | `method` | enum | Có | `VNPAY` \| `COD` |
-| `expires_at` | string | Có | ISO-8601 UTC |
 
+> Payment-Wallet không nhận authoritative shop allocation từ caller.
+> Service load order/payment snapshot qua `OrderSnapshotPort` bằng
+> `checkout_group_id`. Snapshot này là nguồn cho child orders, shop,
+> merchandise amount, shipping fee và grand total.
+
+> `expires_at` không phải request field. Với VNPAY, Payment-Wallet tự tính
+> `expires_at = now + PAYMENT_INTENT_TTL`; baseline hiện tại là 15 phút.
+> Với COD, `expires_at = null`.
+
+Request example:
+```json
+{
+  "checkout_group_id": "01912f90-7a1b-7c12-9c55-8b1c34a6d921",
+  "buyer_user_id": "01912f80-7a1b-7c12-9c55-8b1c34a6d921",
+  "amount": 1094000,
+  "currency": "VND",
+  "method": "VNPAY"
+}
+```
+
+Response example:
 ```json
 {
   "data": {
-    "payment_id": "payment-01912f95",
-    "order_id": "order-01912f91",
+    "payment_id": "01912f95-7a1b-7c12-9c55-8b1c34a6d921",
+    "checkout_group_id": "01912f90-7a1b-7c12-9c55-8b1c34a6d921",
     "status": "PENDING",
     "method": "VNPAY",
     "amount": 1094000,
     "currency": "VND",
-    "payment_url": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?…",
-    "qr_payload": "00020101021238…",
+    "payment_url": "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?...",
     "expires_at": "2026-08-30T09:15:00Z"
   },
-  "meta": { "request_id": "01912fa6-7a1b-7c12-9c55-8b1c34a6d921" }
+  "meta": {
+    "request_id": "01912fa6-7a1b-7c12-9c55-8b1c34a6d921"
+  }
 }
 ```
 
