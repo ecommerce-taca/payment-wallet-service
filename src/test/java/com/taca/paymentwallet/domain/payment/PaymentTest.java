@@ -294,4 +294,67 @@ class PaymentTest {
                 PaymentStatus.PENDING
         );
     }
+
+    @Test
+    void shouldIncludeShippingFeeInPaymentTotal() {
+        Payment payment = Payment.create(
+                new PaymentId(UUID.randomUUID()),
+                new CheckoutGroupId(UUID.randomUUID()),
+                new BuyerUserId(UUID.randomUUID()),
+                PaymentMethod.VNPAY,
+                Money.vnd(120_000),
+                List.of(
+                        new PaymentOrder(
+                                new OrderId(UUID.randomUUID()),
+                                new ShopId(UUID.randomUUID()),
+                                Money.vnd(100_000),
+                                Money.vnd(20_000)
+                        )
+                ),
+                Instant.parse("2026-01-01T00:15:00Z")
+        );
+
+        assertEquals(
+                Money.vnd(120_000),
+                payment.amount()
+        );
+
+        PaymentOrder order = payment.orders().getFirst();
+
+        assertEquals(Money.vnd(100_000), order.merchandiseAmount());
+
+        assertEquals(Money.vnd(20_000), order.shippingFee());
+
+        assertEquals(Money.vnd(120_000), order.totalAmount());
+    }
+
+    @Test
+    void shouldRejectPaymentWhenGrandTotalDoesNotIncludeShippingFee() {
+        IllegalArgumentException exception =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () ->
+                                Payment.create(
+                                        new PaymentId(UUID.randomUUID()),
+                                        new CheckoutGroupId(UUID.randomUUID()),
+                                        new BuyerUserId(UUID.randomUUID()),
+                                        PaymentMethod.VNPAY,
+                                        Money.vnd(100_000),
+                                        List.of(
+                                                new PaymentOrder(
+                                                        new OrderId(UUID.randomUUID()),
+                                                        new ShopId(UUID.randomUUID()),
+                                                        Money.vnd(100_000),
+                                                        Money.vnd(20_000)
+                                                )
+                                        ),
+                                        Instant.parse("2026-01-01T00:15:00Z")
+                                )
+                );
+
+        assertEquals(
+                "total order amount must equal payment amount",
+                exception.getMessage()
+        );
+    }
 }

@@ -150,7 +150,11 @@ public class PaymentPersistenceMapper {
                 new OrderId(entity.getOrderId()),
                 new ShopId(entity.getShopId()),
                 new Money(
-                        entity.getAmount(),
+                        entity.getMerchandiseAmount(),
+                        entity.getCurrency()
+                ),
+                new Money(
+                        entity.getShippingFee(),
                         entity.getCurrency()
                 )
         );
@@ -189,8 +193,10 @@ public class PaymentPersistenceMapper {
         entity.setPaymentId(paymentId.value());
         entity.setOrderId(order.orderId().value());
         entity.setShopId(order.shopId().value());
-        entity.setAmount(order.amount().amount());
-        entity.setCurrency(order.amount().currency());
+        entity.setAmount(order.totalAmount().amount());
+        entity.setMerchandiseAmount(order.merchandiseAmount().amount());
+        entity.setShippingFee(order.shippingFee().amount());
+        entity.setCurrency(order.totalAmount().currency());
         entity.setCreatedAt(createdAt);
 
         return entity;

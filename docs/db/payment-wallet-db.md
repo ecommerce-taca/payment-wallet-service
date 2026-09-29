@@ -113,7 +113,9 @@ Field chính:
 | `checkout_group_id` | `BINARY(16)` | ID của checkout group từ Order/Checkout context |
 | `buyer_user_id` | `BINARY(16)` | Reference tới user, không FK |
 | `method` | `VARCHAR(30)` | `VNPAY`, `COD` |
-| `amount` | `BIGINT` | Tổng tiền cần thanh toán |
+| `amount` | `BIGINT` | Grand total của order = merchandise + shipping |
+| `merchandise_amount` | `BIGINT` | Giá trị hàng hóa, dùng làm seller allocation gross |
+| `shipping_fee` | `BIGINT` | Phí vận chuyển, không thuộc seller gross |
 | `currency` | `CHAR(3)` | V1 là `VND` |
 | `status` | `VARCHAR(40)` | Xem enum `PaymentStatus` |
 | `captured_amount` | `BIGINT` | Số tiền đã capture thành công |
@@ -133,6 +135,11 @@ Ràng buộc:
 - `captured_amount >= 0`.
 - `refunded_amount >= 0`.
 - `refunded_amount <= captured_amount`.
+- `merchandise_amount > 0`.
+- `shipping_fee >= 0`.
+- `amount = merchandise_amount + shipping_fee`.
+- Commission/tax/seller net chỉ tính trên `merchandise_amount`.
+- `shipping_fee` không được đưa vào seller wallet allocation.
 - `currency = 'VND'` trong v1.
 - `amount` và `currency` không được thay đổi sau khi tạo.
 - Không có `order_id` trong bảng `payments`.

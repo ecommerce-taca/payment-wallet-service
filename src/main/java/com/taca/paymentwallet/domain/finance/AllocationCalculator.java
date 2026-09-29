@@ -116,7 +116,7 @@ public class AllocationCalculator {
             RateBps commissionRate,
             RateBps taxRate
     ) {
-        Money gross = order.amount();
+        Money gross = order.merchandiseAmount();
         Money commission = gross.multiplyBy(commissionRate);
         Money tax = gross.multiplyBy(taxRate);
         Money sellerNet = gross

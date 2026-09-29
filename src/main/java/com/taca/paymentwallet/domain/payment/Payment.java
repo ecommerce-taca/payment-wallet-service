@@ -255,13 +255,17 @@ public class Payment extends AggregateRoot {
     }
 
     private void validateTotalOrderAmount() {
-        long total = orders.stream()
-                .map(PaymentOrder::amount)
-                .mapToLong(Money::amount)
-                .sum();
+        Money total = orders.stream()
+                .map(PaymentOrder::totalAmount)
+                .reduce(
+                        Money.vnd(0),
+                        Money::add
+                );
 
-        if (total != amount.amount()) {
-            throw new IllegalArgumentException("total order amount must equal payment amount");
+        if (!total.equals(amount)) {
+            throw new IllegalArgumentException(
+                    "total order amount must equal payment amount"
+            );
         }
     }
 
