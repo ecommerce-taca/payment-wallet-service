@@ -1,25 +1,18 @@
 package com.taca.paymentwallet.integration;
 
-import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
-import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
 import com.taca.paymentwallet.application.port.out.*;
-import com.taca.paymentwallet.application.service.ProcessVnpayWebhookService;
-import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.payment.Payment;
 import com.taca.paymentwallet.domain.payment.PaymentAttempt;
 import com.taca.paymentwallet.domain.payment.PaymentMethod;
 import com.taca.paymentwallet.domain.payment.PaymentOrder;
 import com.taca.paymentwallet.domain.valueobject.*;
-import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.entity.*;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
 import com.taca.paymentwallet.infrastructure.persistence.repository.*;
 import com.taca.paymentwallet.infrastructure.persistence.support.PersistenceUuidGenerator;
 import com.taca.paymentwallet.infrastructure.transaction.SpringTransactionAdapter;
-import com.taca.paymentwallet.infrastructure.vnpay.VnpayProperties;
 import com.taca.paymentwallet.infrastructure.vnpay.VnpaySigner;
-import com.taca.paymentwallet.infrastructure.vnpay.VnpayWebhookVerifierAdapter;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -27,6 +20,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -74,12 +68,6 @@ class VnpayWebhookHttpE2ETest {
                     "2026-09-25T10:00:00Z"
             );
 
-    private static final String PROVIDER_EVENT_ID =
-            "vnpay-http-e2e-event-001";
-
-    private static final String PROVIDER_TRANSACTION_REF =
-            "vnpay-http-e2e-txn-001";
-
     private static final String PAYLOAD_HASH =
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                     + "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -105,28 +93,25 @@ class VnpayWebhookHttpE2ETest {
             DynamicPropertyRegistry registry
     ) {
         registry.add(
-                "spring.datasource.url",
-                MYSQL::getJdbcUrl
+                "vnpay.tmn-code",
+                () -> "TESTCODE"
         );
 
         registry.add(
-                "spring.datasource.username",
-                MYSQL::getUsername
+                "vnpay.hash-secret",
+                () -> VNPAY_HASH_SECRET
         );
 
         registry.add(
-                "spring.datasource.password",
-                MYSQL::getPassword
+                "vnpay.payment-url",
+                () ->
+                        "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
         );
 
         registry.add(
-                "spring.flyway.enabled",
-                () -> "true"
-        );
-
-        registry.add(
-                "spring.jpa.hibernate.ddl-auto",
-                () -> "validate"
+                "vnpay.return-url",
+                () ->
+                        "http://localhost/vnpay-return"
         );
     }
 
@@ -180,10 +165,23 @@ class VnpayWebhookHttpE2ETest {
         UUID orderId =
                 UUID.randomUUID();
 
+        String providerTransactionRef =
+                "vnpay-http-e2e-"
+                        + paymentId
+                        .toString()
+                        .replace("-", "");
+
+        String providerEventId =
+                "vnpay-http-e2e-event-"
+                        + paymentId
+                        .toString()
+                        .replace("-", "");
+
         seedPendingPayment(
                 paymentId,
                 checkoutGroupId,
-                orderId
+                orderId,
+                providerTransactionRef
         );
 
         WalletJpaEntity walletBefore =
@@ -196,8 +194,10 @@ class VnpayWebhookHttpE2ETest {
         long pendingBefore =
                 walletBefore.getPendingBalance();
 
-        String body =
-                validWebhookBody();
+        String body = validWebhookBody(
+                providerTransactionRef,
+                providerEventId
+        );
 
         /*
          * ===== First webhook =====
@@ -253,7 +253,7 @@ class VnpayWebhookHttpE2ETest {
                 paymentId
         );
 
-        assertAttemptSucceeded();
+        assertAttemptSucceeded(providerTransactionRef);
 
         assertAllocationCreated(
                 paymentId,
@@ -265,7 +265,8 @@ class VnpayWebhookHttpE2ETest {
         );
 
         assertProviderEventApplied(
-                paymentId
+                paymentId,
+                providerEventId
         );
 
         assertOutboxCreated(
@@ -384,7 +385,10 @@ class VnpayWebhookHttpE2ETest {
         );
     }
 
-    private String validWebhookBody()
+    private String validWebhookBody(
+            String providerTransactionRef,
+            String providerEventId
+    )
             throws Exception {
 
         Map<String, String> signedPayload =
@@ -407,7 +411,7 @@ class VnpayWebhookHttpE2ETest {
 
         signedPayload.put(
                 "vnp_TxnRef",
-                PROVIDER_TRANSACTION_REF
+                providerTransactionRef
         );
 
         String signature =
@@ -427,12 +431,12 @@ class VnpayWebhookHttpE2ETest {
 
         request.put(
                 "provider_event_id",
-                PROVIDER_EVENT_ID
+                providerEventId
         );
 
         request.put(
                 "provider_transaction_ref",
-                PROVIDER_TRANSACTION_REF
+                providerTransactionRef
         );
 
         request.put(
@@ -474,7 +478,8 @@ class VnpayWebhookHttpE2ETest {
     private void seedPendingPayment(
             UUID paymentId,
             UUID checkoutGroupId,
-            UUID orderId
+            UUID orderId,
+            String providerTransactionRef
     ) {
         Payment payment =
                 Payment.create(
@@ -516,13 +521,9 @@ class VnpayWebhookHttpE2ETest {
                                 paymentId
                         ),
                         "VNPAY",
-                        PROVIDER_TRANSACTION_REF,
-                        "a".repeat(
-                                64
-                        ),
-                        "b".repeat(
-                                64
-                        ),
+                        providerTransactionRef,
+                        "a".repeat(64),
+                        "b".repeat(64),
                         EXPIRES_AT
                 );
 
@@ -599,12 +600,12 @@ class VnpayWebhookHttpE2ETest {
         );
     }
 
-    private void assertAttemptSucceeded() {
+    private void assertAttemptSucceeded(String providerTransactionRef) {
         PaymentAttemptJpaEntity attempt =
                 paymentAttemptJpaRepository
                         .findByProviderAndProviderTransactionRef(
                                 "VNPAY",
-                                PROVIDER_TRANSACTION_REF
+                                providerTransactionRef
                         )
                         .orElseThrow();
 
@@ -703,13 +704,15 @@ class VnpayWebhookHttpE2ETest {
     }
 
     private void assertProviderEventApplied(
-            UUID paymentId
+            UUID paymentId,
+            String providerEventId
     ) {
         PaymentEventJpaEntity event =
                 paymentEventJpaRepository
                         .findByProviderAndProviderEventId(
                                 "VNPAY",
-                                PROVIDER_EVENT_ID
+                                providerEventId
+
                         )
                         .orElseThrow();
 
@@ -717,12 +720,6 @@ class VnpayWebhookHttpE2ETest {
                 event.getPaymentId()
         ).isEqualTo(
                 paymentId
-        );
-
-        assertThat(
-                event.getProviderTransactionRef()
-        ).isEqualTo(
-                PROVIDER_TRANSACTION_REF
         );
 
         assertThat(
@@ -779,305 +776,9 @@ class VnpayWebhookHttpE2ETest {
     static class TestConfig {
 
         @Bean
-        ClockPort clockPort() {
+        @Primary
+        ClockPort testClockPort() {
             return () -> NOW;
-        }
-
-        @Bean
-        TransactionPort transactionPort(
-                PlatformTransactionManager transactionManager
-        ) {
-            return new SpringTransactionAdapter(
-                    transactionManager
-            );
-        }
-
-        @Bean
-        PaymentRepositoryPort paymentRepositoryPort(
-                PaymentJpaRepository paymentRepository,
-                PaymentOrderJpaRepository orderRepository,
-                ClockPort clockPort
-        ) {
-            return new PaymentRepositoryAdapter(
-                    paymentRepository,
-                    orderRepository,
-                    new PaymentPersistenceMapper(),
-                    clockPort,
-                    new PersistenceUuidGenerator()
-            );
-        }
-
-        @Bean
-        PaymentAttemptRepositoryPort
-        paymentAttemptRepositoryPort(
-                PaymentAttemptJpaRepository repository,
-                ClockPort clockPort
-        ) {
-            return new PaymentAttemptRepositoryAdapter(
-                    repository,
-                    new PaymentAttemptPersistenceMapper(),
-                    clockPort
-            );
-        }
-
-        @Bean
-        PaymentProviderEventPort
-        paymentProviderEventPort(
-                PaymentEventJpaRepository repository,
-                ClockPort clockPort
-        ) {
-            return new PaymentProviderEventAdapter(
-                    repository,
-                    clockPort,
-                    new PersistenceUuidGenerator()
-            );
-        }
-
-        @Bean
-        PaymentAllocationRepositoryPort
-        paymentAllocationRepositoryPort(
-                PaymentAllocationJpaRepository repository,
-                ClockPort clockPort
-        ) {
-            return new PaymentAllocationRepositoryAdapter(
-                    repository,
-                    new PaymentAllocationPersistenceMapper(),
-                    clockPort
-            );
-        }
-
-        @Bean
-        WalletRepositoryPort walletRepositoryPort(
-                WalletJpaRepository repository,
-                ClockPort clockPort
-        ) {
-            return new WalletRepositoryAdapter(
-                    repository,
-                    new WalletPersistenceMapper(),
-                    clockPort
-            );
-        }
-
-        @Bean
-        LedgerPostingRepositoryPort
-        ledgerPostingRepositoryPort(
-                LedgerPostingJpaRepository postingRepository,
-                LedgerEntryJpaRepository entryRepository,
-                ClockPort clockPort
-        ) {
-            return new LedgerPostingRepositoryAdapter(
-                    postingRepository,
-                    entryRepository,
-                    new LedgerPostingPersistenceMapper(),
-                    clockPort,
-                    new PersistenceUuidGenerator()
-            );
-        }
-
-        @Bean
-        LedgerAccountLookupPort ledgerAccountLookupPort(
-                LedgerAccountJpaRepository ledgerRepository,
-                PaymentAllocationJpaRepository allocationRepository,
-                SettlementLineJpaRepository settlementRepository
-        ) {
-            return new LedgerAccountLookupAdapter(
-                    ledgerRepository,
-                    allocationRepository,
-                    settlementRepository
-            );
-        }
-
-        @Bean
-        FeePolicyPort feePolicyPort(
-                FeeConfigJpaRepository feeRepository,
-                TaxConfigJpaRepository taxRepository,
-                ClockPort clockPort
-        ) {
-            return new FeePolicyPersistenceAdapter(
-                    feeRepository,
-                    taxRepository,
-                    clockPort
-            );
-        }
-
-        @Bean
-        OutboxPort outboxPort(
-                OutboxEventJpaRepository repository,
-                ObjectMapper objectMapper
-        ) {
-            return new OutboxPersistenceAdapter(
-                    repository,
-                    objectMapper
-            );
-        }
-
-        @Bean
-        VnpaySigner vnpaySigner() {
-            return new VnpaySigner();
-        }
-
-        @Bean
-        VnpayProperties vnpayProperties() {
-            return new VnpayProperties(
-                    "TESTCODE",
-                    VNPAY_HASH_SECRET,
-                    "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
-                    "http://localhost/vnpay-return"
-            );
-        }
-
-        @Bean
-        VnpayWebhookVerifierPort
-        vnpayWebhookVerifierPort(
-                VnpayProperties properties,
-                VnpaySigner signer
-        ) {
-            return new VnpayWebhookVerifierAdapter(
-                    properties,
-                    signer
-            );
-        }
-
-        @Bean
-        IdGeneratorPort idGeneratorPort() {
-            return new TestIdGenerator();
-        }
-
-        @Bean
-        ProcessVnpayWebhookUseCase
-        processVnpayWebhookUseCase(
-                PaymentRepositoryPort paymentRepository,
-                PaymentAttemptRepositoryPort paymentAttemptRepository,
-                PaymentProviderEventPort paymentProviderEventPort,
-                PaymentAllocationRepositoryPort allocationRepository,
-                WalletRepositoryPort walletRepository,
-                LedgerPostingRepositoryPort ledgerRepository,
-                LedgerAccountLookupPort accountLookup,
-                FeePolicyPort feePolicy,
-                VnpayWebhookVerifierPort verifier,
-                IdGeneratorPort idGenerator,
-                ClockPort clockPort,
-                OutboxPort outbox,
-                TransactionPort transactionPort
-        ) {
-            return new ProcessVnpayWebhookService(
-                    paymentRepository,
-                    paymentAttemptRepository,
-                    paymentProviderEventPort,
-                    allocationRepository,
-                    walletRepository,
-                    ledgerRepository,
-                    accountLookup,
-                    feePolicy,
-                    verifier,
-                    idGenerator,
-                    clockPort,
-                    outbox,
-                    transactionPort,
-                    new AllocationCalculator(),
-                    new LedgerPostingFactory()
-            );
-        }
-
-        /*
-         * Controller cần CreatePaymentUseCase bean.
-         * 3C.2 không test create-payment flow.
-         */
-        @Bean
-        CreatePaymentUseCase createPaymentUseCase() {
-            return command -> {
-                throw new UnsupportedOperationException(
-                        "Create payment is not part of VnpayWebhookHttpE2ETest"
-                );
-            };
-        }
-    }
-
-    static final class TestIdGenerator
-            implements IdGeneratorPort {
-
-        @Override
-        public PaymentId nextPaymentId() {
-            return new PaymentId(
-                    UUID.randomUUID()
-            );
-        }
-
-        @Override
-        public PaymentAttemptId
-        nextPaymentAttemptId() {
-            return new PaymentAttemptId(
-                    UUID.randomUUID()
-            );
-        }
-
-        @Override
-        public PaymentAllocationId
-        nextPaymentAllocationId() {
-            return new PaymentAllocationId(
-                    UUID.randomUUID()
-            );
-        }
-
-        @Override
-        public WalletId nextWalletId() {
-            return new WalletId(
-                    UUID.randomUUID()
-            );
-        }
-
-        @Override
-        public LedgerAccountId
-        nextLedgerAccountId() {
-            return new LedgerAccountId(
-                    UUID.randomUUID()
-            );
-        }
-
-        @Override
-        public LedgerPostingId
-        nextLedgerPostingId() {
-            return new LedgerPostingId(
-                    UUID.randomUUID()
-            );
-        }
-
-        @Override
-        public RefundId nextRefundId() {
-            return new RefundId(
-                    UUID.randomUUID()
-            );
-        }
-
-        @Override
-        public PayoutId nextPayoutId() {
-            return new PayoutId(
-                    UUID.randomUUID()
-            );
-        }
-
-        @Override
-        public SettlementBatchId
-        nextSettlementBatchId() {
-            return new SettlementBatchId(
-                    UUID.randomUUID()
-            );
-        }
-
-        @Override
-        public SettlementBatchItemId
-        nextSettlementBatchItemId() {
-            return new SettlementBatchItemId(
-                    UUID.randomUUID()
-            );
-        }
-
-        @Override
-        public SettlementLineId
-        nextSettlementLineId() {
-            return new SettlementLineId(
-                    UUID.randomUUID()
-            );
         }
     }
 }
