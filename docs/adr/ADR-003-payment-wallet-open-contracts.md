@@ -101,6 +101,22 @@ Status:
 OPEN — do not implement an order.completed consumer unless the upstream
 contract is explicitly extended.
 
+### Settlement candidate eligibility
+
+The persistence layer may identify allocations that have not yet appeared in
+`settlement_lines`, but this is not sufficient to release seller funds.
+
+The following remain OPEN:
+
+- refund/return hold-window length;
+- exact eligible timestamp;
+- whether eligibility is based on shipment delivery, order lifecycle, or a
+  scheduled finance window;
+- treatment of allocations with pending or completed refunds.
+
+Until these are resolved, `SettlementCandidatePort` must not be wired to a
+production `RunSettlementUseCase`.
+
 ## 7. Rules
 
 An OPEN item in this ADR:
