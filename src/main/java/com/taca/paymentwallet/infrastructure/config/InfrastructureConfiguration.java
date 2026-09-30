@@ -349,6 +349,11 @@ public class InfrastructureConfiguration {
     }
 
     @Bean
+    OutboxPublishingPort outboxPublishingPort(OutboxEventJpaRepository repository) {
+        return new OutboxPublishingPersistenceAdapter(repository);
+    }
+
+    @Bean
     InboxEventPort inboxEventPort(
             InboxEventJpaRepository repository,
             PersistenceUuidGenerator uuidGenerator
