@@ -15,6 +15,8 @@ public interface LedgerAccountLookupPort {
 
     LedgerAccountId taxPayableAccount();
 
+    LedgerAccountId shipmentPayableAccount();
+
     Map<ShopId, LedgerAccountId> sellerPendingAccountsFor(List<ShopId> shopIds);
 
     LedgerAccountId refundClearingAccount();

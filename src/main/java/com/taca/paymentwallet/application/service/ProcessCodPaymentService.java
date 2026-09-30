@@ -143,10 +143,12 @@ public class ProcessCodPaymentService implements ProcessCodPaymentUseCase {
                         ledgerAccountLookupPort.codClearingAccount(),
                         ledgerAccountLookupPort.platformCommissionAccount(),
                         ledgerAccountLookupPort.taxPayableAccount(),
+                        ledgerAccountLookupPort.shipmentPayableAccount(),
                         ledgerAccountLookupPort.sellerPendingAccountsFor(
                                 distinctShopIds(payment.orders())
                         ),
-                        allocations
+                        allocations,
+                        totalShippingFee(payment.orders())
                 );
 
         creditSellerPendingWallets(
@@ -166,6 +168,15 @@ public class ProcessCodPaymentService implements ProcessCodPaymentUseCase {
         );
 
         payment.clearDomainEvents();
+    }
+
+    private Money totalShippingFee(List<PaymentOrder> orders) {
+        return orders.stream()
+                .map(PaymentOrder::shippingFee)
+                .reduce(
+                        Money.vnd(0),
+                        Money::add
+                );
     }
 
     private void saveWalletAllocatedEvents(

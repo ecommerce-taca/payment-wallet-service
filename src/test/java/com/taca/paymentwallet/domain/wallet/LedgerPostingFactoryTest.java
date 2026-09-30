@@ -25,6 +25,7 @@ class LedgerPostingFactoryTest {
         LedgerAccountId platformCommissionAccountId = accountId();
         LedgerAccountId taxPayableAccountId = accountId();
         LedgerAccountId sellerPendingAccountId = accountId();
+        LedgerAccountId shipmentPayableAccountId = accountId();
 
         PaymentAllocation allocation = new PaymentAllocation(
                 id,
@@ -50,18 +51,21 @@ class LedgerPostingFactoryTest {
                 clearingAccountId,
                 platformCommissionAccountId,
                 taxPayableAccountId,
+                shipmentPayableAccountId,
                 sellerPendingAccountIdsByShop,
-                List.of(allocation)
+                List.of(allocation),
+                Money.vnd(20_000)
         );
 
         assertEquals("PAYMENT_CAPTURE", posting.postingType());
         assertEquals("PAYMENT_CAPTURE:" + paymentId.value(), posting.businessKey());
-        assertEquals(4, posting.entries().size());
+        assertEquals(5, posting.entries().size());
 
-        assertEquals(new LedgerEntry(clearingAccountId, LedgerEntryType.DEBIT, Money.vnd(100_000)), posting.entries().get(0));
+        assertEquals(new LedgerEntry(clearingAccountId, LedgerEntryType.DEBIT, Money.vnd(120_000)), posting.entries().get(0));
         assertEquals(new LedgerEntry(platformCommissionAccountId, LedgerEntryType.CREDIT, Money.vnd(7_000)), posting.entries().get(1));
         assertEquals(new LedgerEntry(taxPayableAccountId, LedgerEntryType.CREDIT, Money.vnd(1_000)), posting.entries().get(2));
         assertEquals(new LedgerEntry(sellerPendingAccountId, LedgerEntryType.CREDIT, Money.vnd(92_000)), posting.entries().get(3));
+        assertEquals(new LedgerEntry(shipmentPayableAccountId, LedgerEntryType.CREDIT, Money.vnd(20_000)), posting.entries().get(4));
     }
 
     @Test
@@ -90,6 +94,64 @@ class LedgerPostingFactoryTest {
 
         assertThat(posting.postingType()).isEqualTo("PAYOUT_REVERSAL");
         assertThat(posting.entries()).hasSize(2);
+    }
+
+    @Test
+    void shouldNotCreateShipmentEntryWhenShippingFeeIsZero() {
+        PaymentId paymentId = new PaymentId(UUID.randomUUID());
+
+        ShopId shopId = new ShopId(UUID.randomUUID());
+
+        LedgerAccountId clearingAccountId = accountId();
+
+        LedgerAccountId platformCommissionAccountId = accountId();
+
+        LedgerAccountId taxPayableAccountId = accountId();
+
+        LedgerAccountId shipmentPayableAccountId = accountId();
+
+        LedgerAccountId sellerPendingAccountId = accountId();
+
+        PaymentAllocation allocation = new PaymentAllocation(
+                new PaymentAllocationId(UUID.randomUUID()),
+                paymentId,
+                new OrderId(UUID.randomUUID()),
+                shopId,
+                new WalletId(UUID.randomUUID()),
+                Money.vnd(100_000),
+                Money.vnd(7_000),
+                Money.vnd(1_000),
+                Money.vnd(92_000),
+                new FeeConfigId(UUID.randomUUID()),
+                new TaxConfigId(UUID.randomUUID())
+        );
+
+        LedgerPosting posting = factory.createPaymentCapturePosting(
+                new LedgerPostingId(UUID.randomUUID()),
+                paymentId,
+                clearingAccountId,
+                platformCommissionAccountId,
+                taxPayableAccountId,
+                shipmentPayableAccountId,
+                Map.of(
+                        shopId,
+                        sellerPendingAccountId
+                ),
+                List.of(allocation),
+                Money.vnd(0)
+        );
+
+        assertThat(posting.entries()).hasSize(4);
+
+        assertThat(
+                posting.entries()
+                        .stream()
+                        .noneMatch(
+                                entry ->
+                                        entry.accountId()
+                                                .equals(shipmentPayableAccountId)
+                        )
+        ).isTrue();
     }
 
     private LedgerAccountId accountId() {

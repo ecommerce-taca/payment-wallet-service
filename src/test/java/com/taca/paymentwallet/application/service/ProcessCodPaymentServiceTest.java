@@ -426,6 +426,11 @@ class ProcessCodPaymentServiceTest {
         }
 
         @Override
+        public LedgerAccountId shipmentPayableAccount() {
+            return new LedgerAccountId(UUID.randomUUID());
+        }
+
+        @Override
         public Map<ShopId, LedgerAccountId> sellerPendingAccountsFor(List<ShopId> shopIds) {
             Map<ShopId, LedgerAccountId> result = new HashMap<>();
 
