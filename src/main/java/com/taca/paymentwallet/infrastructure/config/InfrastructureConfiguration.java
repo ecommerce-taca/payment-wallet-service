@@ -7,6 +7,7 @@ import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256PaymentUrlHashAdapter;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256RequestHashAdapter;
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaTopicProperties;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
 import com.taca.paymentwallet.infrastructure.persistence.repository.*;
@@ -26,9 +27,10 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Duration;
 
 @Configuration
-@EnableConfigurationProperties(
-        VnpayProperties.class
-)
+@EnableConfigurationProperties({
+        VnpayProperties.class,
+        KafkaTopicProperties.class
+})
 public class InfrastructureConfiguration {
 
     @Bean
