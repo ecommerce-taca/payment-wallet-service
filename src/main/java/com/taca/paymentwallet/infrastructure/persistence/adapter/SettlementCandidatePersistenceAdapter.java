@@ -1,7 +1,7 @@
 package com.taca.paymentwallet.infrastructure.persistence.adapter;
 
-import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
-import com.taca.paymentwallet.application.settlement.SettlementCandidate;
+import com.taca.paymentwallet.application.port.out.UnsettledSettlementCandidatePort;
+import com.taca.paymentwallet.application.settlement.UnsettledSettlementCandidate;
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.domain.valueobject.PaymentAllocationId;
 import com.taca.paymentwallet.domain.valueobject.ShopId;
@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Objects;
 
 public class SettlementCandidatePersistenceAdapter
-        implements SettlementCandidatePort {
+        implements UnsettledSettlementCandidatePort {
 
     private final PaymentAllocationJpaRepository repository;
 
@@ -29,7 +29,7 @@ public class SettlementCandidatePersistenceAdapter
     }
 
     @Override
-    public List<SettlementCandidate> findEligibleCandidates(
+    public List<UnsettledSettlementCandidate> findUnsettledCandidates(
             Instant periodStart,
             Instant periodEnd
     ) {
@@ -67,7 +67,7 @@ public class SettlementCandidatePersistenceAdapter
                 .toList();
     }
 
-    private SettlementCandidate toCandidate(
+    private UnsettledSettlementCandidate toCandidate(
             SettlementCandidateProjection projection
     ) {
         Money gross =
@@ -94,7 +94,7 @@ public class SettlementCandidatePersistenceAdapter
                         projection.getCurrency()
                 );
 
-        return new SettlementCandidate(
+        return new UnsettledSettlementCandidate(
                 new PaymentAllocationId(
                         projection.getPaymentAllocationId()
                 ),
@@ -108,8 +108,9 @@ public class SettlementCandidatePersistenceAdapter
                 commission,
                 tax,
                 sellerNet,
-                sellerNet,
-                Money.vnd(0)
+                PersistenceTimeMapper.toInstant(
+                        projection.getCreatedAt()
+                )
         );
     }
 }

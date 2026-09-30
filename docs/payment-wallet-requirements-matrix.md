@@ -14,17 +14,19 @@ Status:
 | Payment | COD PENDING_COD | DONE | Payment domain |
 | Payment | Get payment detail API | TODO | No query use case/controller |
 | Payment | Order authoritative snapshot | TODO | `OrderSnapshotPort` missing |
-| Payment | Shipping fee separated from seller gross | TODO | Current allocation uses order amount as gross |
+| Payment | Shipping fee separated from seller gross | DONE | `PaymentOrder.merchandiseAmount`, `shippingFee`; `AllocationCalculator` uses merchandise only |
 | VNPAY | Payment URL creation | DONE | VNPAY adapter |
 | VNPAY | Verified webhook + dedupe | DONE | Webhook service |
 | VNPAY | Provider IP policy | TODO | Missing |
 | Wallet | pending/available projection | DONE | Wallet domain/persistence |
 | Ledger | double-entry posting | DONE | LedgerPosting |
-| Ledger | shipment payable | TODO | Account type missing |
+| Ledger | shipment payable | DONE | `SHIPMENT_PAYABLE`; capture posting credits shipping separately |
 | Refund | request/application workflow | PARTIAL | Use case exists; REST/provider worker missing |
 | Payout | reserve workflow | PARTIAL | Use case exists; KYC/provider/API missing |
 | Payout | KYC/status projection | TODO | Missing |
-| Settlement | domain/persistence | PARTIAL | Candidate adapter/retry incomplete |
+| Settlement | domain/persistence | DONE | Settlement aggregate, repository, lines and unsettled candidate persistence foundation |
+| Settlement | eligibility policy | BLOCKED | Refund/return window and authoritative eligible timestamp remain open in ADR-003 |
+| Settlement | production execution | BLOCKED | `SettlementCandidatePort` and `RunSettlementUseCase` intentionally not wired until eligibility is resolved |
 | Kafka | outbox persistence | PARTIAL | DB + adapter only |
 | Kafka | publisher/retry/DLQ | TODO | Missing |
 | Kafka | consumers | TODO | Missing |

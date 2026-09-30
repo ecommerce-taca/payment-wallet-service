@@ -1,10 +1,9 @@
 package com.taca.paymentwallet.integration;
 
-import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
-import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
-import com.taca.paymentwallet.application.port.in.RequestPayoutUseCase;
-import com.taca.paymentwallet.application.port.in.RequestRefundUseCase;
+import com.taca.paymentwallet.application.port.in.*;
+import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -90,6 +89,12 @@ class ProductionContextSmokeTest {
     @Autowired
     private RequestPayoutUseCase requestPayoutUseCase;
 
+    @Autowired
+    private ObjectProvider<RunSettlementUseCase> runSettlementUseCaseProvider;
+
+    @Autowired
+    private ObjectProvider<SettlementCandidatePort> settlementCandidatePortProvider;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -99,5 +104,9 @@ class ProductionContextSmokeTest {
         assertThat(requestRefundUseCase).isNotNull();
 
         assertThat(requestPayoutUseCase).isNotNull();
+
+        assertThat(runSettlementUseCaseProvider.getIfAvailable()).isNull();
+
+        assertThat(settlementCandidatePortProvider.getIfAvailable()).isNull();
     }
 }

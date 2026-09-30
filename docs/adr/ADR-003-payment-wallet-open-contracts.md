@@ -117,6 +117,30 @@ The following remain OPEN:
 Until these are resolved, `SettlementCandidatePort` must not be wired to a
 production `RunSettlementUseCase`.
 
+### Production wiring guard
+
+The persistence foundation distinguishes between:
+
+- `UnsettledSettlementCandidate`: an allocation that has not yet appeared in
+  `settlement_lines`;
+- `SettlementCandidate`: an allocation that has passed the authoritative
+  settlement eligibility policy and may be released.
+
+`SettlementCandidatePersistenceAdapter` only produces
+`UnsettledSettlementCandidate`.
+
+It must not be treated as a production implementation of
+`SettlementCandidatePort`.
+
+Until the eligibility contract is resolved:
+
+- no production `SettlementCandidatePort` bean is registered;
+- no production `RunSettlementUseCase` bean is registered;
+- `RunSettlementService` remains testable with explicit fake eligible
+  candidates;
+- no allocation may move from `SELLER_PENDING` to `SELLER_AVAILABLE`
+  solely because it is absent from `settlement_lines`.
+
 ## 7. Rules
 
 An OPEN item in this ADR:

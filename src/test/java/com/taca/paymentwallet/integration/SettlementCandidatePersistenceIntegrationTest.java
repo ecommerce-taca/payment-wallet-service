@@ -1,8 +1,9 @@
 package com.taca.paymentwallet.integration;
 
-import com.taca.paymentwallet.application.settlement.SettlementCandidate;
+import com.taca.paymentwallet.application.settlement.UnsettledSettlementCandidate;
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.SettlementCandidatePersistenceAdapter;
+import com.taca.paymentwallet.infrastructure.persistence.mapper.PersistenceTimeMapper;
 import com.taca.paymentwallet.infrastructure.persistence.repository.PaymentAllocationJpaRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -188,8 +189,8 @@ class SettlementCandidatePersistenceIntegrationTest {
                         paymentAllocationJpaRepository
                 );
 
-        List<SettlementCandidate> candidates =
-                adapter.findEligibleCandidates(
+        List<UnsettledSettlementCandidate> candidates =
+                adapter.findUnsettledCandidates(
                         PERIOD_START,
                         PERIOD_END
                 );
@@ -200,8 +201,7 @@ class SettlementCandidatePersistenceIntegrationTest {
                 1
         );
 
-        SettlementCandidate candidate =
-                candidates.getFirst();
+        UnsettledSettlementCandidate candidate = candidates.getFirst();
 
         assertThat(
                 candidate.paymentAllocationId()
@@ -256,28 +256,12 @@ class SettlementCandidatePersistenceIntegrationTest {
                 )
         );
 
-        /*
-         * Phase 2.3 chỉ là persistence foundation.
-         *
-         * Settlement hold/refund-window policy vẫn chưa
-         * được contract chốt, nên adapter hiện map tạm
-         * toàn bộ seller net thành releasable.
-         *
-         * Adapter này CHƯA được wire vào production
-         * RunSettlementUseCase.
-         */
         assertThat(
-                candidate.releasableAmount()
+                candidate.allocationCreatedAt()
         ).isEqualTo(
-                Money.vnd(
-                        90_000
+                Instant.parse(
+                        "2026-09-01T10:05:00Z"
                 )
-        );
-
-        assertThat(
-                candidate.heldAmount()
-        ).isEqualTo(
-                Money.vnd(0)
         );
     }
 
@@ -327,7 +311,7 @@ class SettlementCandidatePersistenceIntegrationTest {
                         .toString(),
                 UUID.randomUUID()
                         .toString(),
-                Timestamp.from(
+                PersistenceTimeMapper.toLocalDateTime(
                         createdAt
                 ),
                 Timestamp.from(
@@ -385,7 +369,7 @@ class SettlementCandidatePersistenceIntegrationTest {
                 WALLET_ID.toString(),
                 FEE_CONFIG_ID.toString(),
                 TAX_CONFIG_ID.toString(),
-                Timestamp.from(
+                PersistenceTimeMapper.toLocalDateTime(
                         createdAt
                 )
         );
@@ -436,7 +420,7 @@ class SettlementCandidatePersistenceIntegrationTest {
                 )
                 """,
                 batchId.toString(),
-                Timestamp.from(
+                PersistenceTimeMapper.toLocalDateTime(
                         PERIOD_START
                 ),
                 Timestamp.from(

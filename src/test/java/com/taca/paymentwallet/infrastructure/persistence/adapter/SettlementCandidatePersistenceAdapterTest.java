@@ -1,6 +1,6 @@
 package com.taca.paymentwallet.infrastructure.persistence.adapter;
 
-import com.taca.paymentwallet.application.settlement.SettlementCandidate;
+import com.taca.paymentwallet.application.settlement.UnsettledSettlementCandidate;
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.infrastructure.persistence.projection.SettlementCandidateProjection;
 import com.taca.paymentwallet.infrastructure.persistence.repository.PaymentAllocationJpaRepository;
@@ -107,13 +107,25 @@ class SettlementCandidatePersistenceAdapterTest {
                 )
         );
 
+        when(
+                projection.getCreatedAt()
+        ).thenReturn(
+                java.time.LocalDateTime.of(
+                        2026,
+                        9,
+                        1,
+                        10,
+                        5
+                )
+        );
+
         SettlementCandidatePersistenceAdapter adapter =
                 new SettlementCandidatePersistenceAdapter(
                         repository
                 );
 
-        List<SettlementCandidate> result =
-                adapter.findEligibleCandidates(
+        List<UnsettledSettlementCandidate> result =
+                adapter.findUnsettledCandidates(
                         periodStart,
                         periodEnd
                 );
@@ -124,8 +136,7 @@ class SettlementCandidatePersistenceAdapterTest {
                 1
         );
 
-        SettlementCandidate candidate =
-                result.getFirst();
+        UnsettledSettlementCandidate candidate = result.getFirst();
 
         assertThat(
                 candidate.paymentAllocationId()
@@ -181,17 +192,11 @@ class SettlementCandidatePersistenceAdapterTest {
         );
 
         assertThat(
-                candidate.releasableAmount()
+                candidate.allocationCreatedAt()
         ).isEqualTo(
-                Money.vnd(
-                        92_000
+                Instant.parse(
+                        "2026-09-01T10:05:00Z"
                 )
-        );
-
-        assertThat(
-                candidate.heldAmount()
-        ).isEqualTo(
-                Money.vnd(0)
         );
     }
 
@@ -215,7 +220,7 @@ class SettlementCandidatePersistenceAdapterTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () ->
-                        adapter.findEligibleCandidates(
+                        adapter.findUnsettledCandidates(
                                 now,
                                 now
                         )
