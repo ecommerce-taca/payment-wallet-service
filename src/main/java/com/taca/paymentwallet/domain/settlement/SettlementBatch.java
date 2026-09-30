@@ -18,11 +18,12 @@ public class SettlementBatch extends AggregateRoot {
     private final List<SettlementBatchItem> items;
     private SettlementBatchStatus status;
 
-    public SettlementBatch(
+    private SettlementBatch(
             SettlementBatchId id,
             Instant periodStart,
             Instant periodEnd,
-            List<SettlementBatchItem> items
+            List<SettlementBatchItem> items,
+            SettlementBatchStatus status
     ) {
         if (id == null) {
             throw new IllegalArgumentException("id must not be null");
@@ -37,19 +38,74 @@ public class SettlementBatch extends AggregateRoot {
         }
 
         if (!periodStart.isBefore(periodEnd)) {
-            throw new IllegalArgumentException("periodStart must be before periodEnd");
+            throw new IllegalArgumentException(
+                    "periodStart must be before periodEnd"
+            );
         }
+
         if (items == null || items.isEmpty()) {
             throw new IllegalArgumentException("items must not be empty");
+        }
+
+        if (status == null) {
+            throw new IllegalArgumentException("status must not be null");
         }
 
         this.id = id;
         this.periodStart = periodStart;
         this.periodEnd = periodEnd;
         this.items = List.copyOf(items);
-        this.status = SettlementBatchStatus.PENDING;
+        this.status = status;
 
         validateNoDuplicatePaymentAllocation();
+        validateState();
+    }
+
+    public static SettlementBatch create(
+            SettlementBatchId id,
+            Instant periodStart,
+            Instant periodEnd,
+            List<SettlementBatchItem> items
+    ) {
+        return new SettlementBatch(
+                id,
+                periodStart,
+                periodEnd,
+                items,
+                SettlementBatchStatus.PENDING
+        );
+    }
+
+    public static SettlementBatch rehydrate(
+            SettlementBatchId id,
+            Instant periodStart,
+            Instant periodEnd,
+            List<SettlementBatchItem> items,
+            SettlementBatchStatus status
+    ) {
+        return new SettlementBatch(
+                id,
+                periodStart,
+                periodEnd,
+                items,
+                status
+        );
+    }
+
+    private void validateState() {
+        if (status == SettlementBatchStatus.COMPLETED) {
+            boolean allCompleted = items.stream()
+                    .allMatch(item ->
+                            item.status()
+                                    == SettlementBatchItemStatus.COMPLETED
+                    );
+
+            if (!allCompleted) {
+                throw new IllegalArgumentException(
+                        "completed settlement batch requires all items completed"
+                );
+            }
+        }
     }
 
     public void markProcessing() {

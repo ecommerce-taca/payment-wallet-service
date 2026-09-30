@@ -17,57 +17,106 @@ public class LedgerPostingFactory {
             LedgerAccountId clearingAccountId,
             LedgerAccountId platformCommissionAccountId,
             LedgerAccountId taxPayableAccountId,
+            LedgerAccountId shipmentPayableAccountId,
             Map<ShopId, LedgerAccountId> sellerPendingAccountIdsByShop,
-            List<PaymentAllocation> allocations
+            List<PaymentAllocation> allocations,
+            Money totalShippingFee
     ) {
-        if (paymentId == null) {
-            throw new IllegalArgumentException("paymentId must not be null");
-        }
+        require(postingId, "postingId");
+        require(paymentId, "paymentId");
+        require(clearingAccountId, "clearingAccountId");
+        require(platformCommissionAccountId, "platformCommissionAccountId");
+        require(taxPayableAccountId, "taxPayableAccountId");
+        require(shipmentPayableAccountId, "shipmentPayableAccountId");
 
-        if (clearingAccountId == null) {
-            throw new IllegalArgumentException("clearingAccountId must not be null");
-        }
-
-        if (platformCommissionAccountId == null) {
-            throw new IllegalArgumentException("platformCommissionAccountId must not be null");
-        }
-
-        if (taxPayableAccountId == null) {
-            throw new IllegalArgumentException("taxPayableAccountId must not be null");
-        }
-
-        if (sellerPendingAccountIdsByShop == null || sellerPendingAccountIdsByShop.isEmpty()) {
-            throw new IllegalArgumentException("sellerPendingAccountIdsByShop must not be empty");
+        if (sellerPendingAccountIdsByShop == null
+                || sellerPendingAccountIdsByShop.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "sellerPendingAccountIdsByShop must not be empty"
+            );
         }
 
         if (allocations == null || allocations.isEmpty()) {
-            throw new IllegalArgumentException("allocations must not be empty");
+            throw new IllegalArgumentException(
+                    "allocations must not be empty"
+            );
+        }
+
+        if (totalShippingFee == null) {
+            throw new IllegalArgumentException(
+                    "totalShippingFee must not be null"
+            );
         }
 
         Money totalGross = sumGross(allocations);
+
+        if (!totalGross.currency()
+                .equals(totalShippingFee.currency())) {
+            throw new IllegalArgumentException(
+                    "totalShippingFee must use the same currency as allocations"
+            );
+        }
+
+        Money totalCapturedAmount = totalGross.add(totalShippingFee);
+
         Money totalCommission = sumCommission(allocations);
+
         Money totalTax = sumTax(allocations);
-        Map<LedgerAccountId, Money> sellerNetByAccount = groupSellerNetByAccount(
-                allocations,
-                sellerPendingAccountIdsByShop
-        );
+
+        Map<LedgerAccountId, Money> sellerNetByAccount =
+                groupSellerNetByAccount(
+                        allocations,
+                        sellerPendingAccountIdsByShop
+                );
 
         List<LedgerEntry> entries = new ArrayList<>();
-        entries.add(LedgerEntry.debit(clearingAccountId, totalGross));
+
+        entries.add(
+                LedgerEntry.debit(
+                        clearingAccountId,
+                        totalCapturedAmount
+                )
+        );
 
         if (totalCommission.isPositive()) {
-            entries.add(LedgerEntry.credit(platformCommissionAccountId, totalCommission));
+            entries.add(
+                    LedgerEntry.credit(
+                            platformCommissionAccountId,
+                            totalCommission
+                    )
+            );
         }
 
         if (totalTax.isPositive()) {
-            entries.add(LedgerEntry.credit(taxPayableAccountId, totalTax));
+            entries.add(
+                    LedgerEntry.credit(
+                            taxPayableAccountId,
+                            totalTax
+                    )
+            );
         }
 
-        sellerNetByAccount.forEach((accountId, amount) -> {
-            if (amount.isPositive()) {
-                entries.add(LedgerEntry.credit(accountId, amount));
-            }
-        });
+        sellerNetByAccount.forEach(
+                (accountId, amount) -> {
+                    if (amount.isPositive()) {
+                        entries.add(
+                                LedgerEntry.credit(
+                                        accountId,
+                                        amount
+                                )
+                        );
+                    }
+                }
+        );
+
+        if (totalShippingFee.isPositive()) {
+            entries.add(
+                    LedgerEntry.credit(
+                            shipmentPayableAccountId,
+                            totalShippingFee
+                    )
+            );
+        }
 
         return new LedgerPosting(
                 postingId,
@@ -96,11 +145,17 @@ public class LedgerPostingFactory {
                 postingId,
                 "SETTLEMENT_RELEASE",
                 "SETTLEMENT_RELEASE:" + settlementBatchItemId.value(),
-                "SETTLEMENT_BATCH_ITEM",
+                "SETTLEMENT",
                 settlementBatchItemId.value().toString(),
                 List.of(
-                        LedgerEntry.debit(sellerPendingAccountId, releasedAmount),
-                        LedgerEntry.credit(sellerAvailableAccountId, releasedAmount)
+                        LedgerEntry.debit(
+                                sellerPendingAccountId,
+                                releasedAmount
+                        ),
+                        LedgerEntry.credit(
+                                sellerAvailableAccountId,
+                                releasedAmount
+                        )
                 )
         );
     }

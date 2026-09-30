@@ -9,8 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 class PayoutTest {
 
@@ -34,22 +33,118 @@ class PayoutTest {
     void shouldMarkPayoutSucceededFromProcessing() {
         Payout payout = createPayout();
 
-        payout.markProcessing();
-        payout.markSucceeded("BANK_TXN_001");
+        payout.clearDomainEvents();
 
-        assertEquals(PayoutStatus.SUCCESS, payout.status());
-        assertEquals("BANK_TXN_001", payout.providerRef());
+        payout.markProcessing();
+        payout.markSucceeded(
+                "BANK_TXN_001"
+        );
+
+        assertEquals(
+                PayoutStatus.SUCCESS,
+                payout.status()
+        );
+
+        assertEquals(
+                "BANK_TXN_001",
+                payout.providerRef()
+        );
+
+        assertEquals(
+                1,
+                payout.domainEvents().size()
+        );
+
+        PayoutSucceededEvent event =
+                assertInstanceOf(
+                        PayoutSucceededEvent.class,
+                        payout.domainEvents()
+                                .getFirst()
+                );
+
+        assertEquals(
+                payout.id(),
+                event.payoutId()
+        );
+
+        assertEquals(
+                payout.shopId(),
+                event.shopId()
+        );
+
+        assertEquals(
+                payout.amount(),
+                event.amount()
+        );
+
+        assertEquals(
+                PayoutStatus.SUCCESS,
+                event.status()
+        );
+
+        assertEquals(
+                "BANK_TXN_001",
+                event.providerReference()
+        );
     }
 
     @Test
     void shouldMarkPayoutFailedFromProcessing() {
         Payout payout = createPayout();
 
-        payout.markProcessing();
-        payout.markFailed("BANK_REJECTED");
+        payout.clearDomainEvents();
 
-        assertEquals(PayoutStatus.FAILED, payout.status());
-        assertEquals("BANK_REJECTED", payout.failureCode());
+        payout.markProcessing();
+        payout.markFailed(
+                "BANK_REJECTED"
+        );
+
+        assertEquals(
+                PayoutStatus.FAILED,
+                payout.status()
+        );
+
+        assertEquals(
+                "BANK_REJECTED",
+                payout.failureCode()
+        );
+
+        assertEquals(
+                1,
+                payout.domainEvents().size()
+        );
+
+        PayoutFailedEvent event =
+                assertInstanceOf(
+                        PayoutFailedEvent.class,
+                        payout.domainEvents()
+                                .getFirst()
+                );
+
+        assertEquals(
+                payout.id(),
+                event.payoutId()
+        );
+
+        assertEquals(
+                payout.shopId(),
+                event.shopId()
+        );
+
+        assertEquals(
+                payout.amount(),
+                event.amount()
+        );
+
+        assertEquals(
+                PayoutStatus.FAILED,
+                event.status()
+        );
+
+        assertEquals(
+                "BANK_REJECTED",
+                event.failureCode()
+        );
     }
 
     @Test

@@ -75,6 +75,29 @@ public class Refund extends AggregateRoot {
         return refund;
     }
 
+    public static Refund rehydrate(
+            RefundId id,
+            PaymentId paymentId,
+            Money amount,
+            String reason,
+            IdempotencyKey idempotencyKey,
+            RefundStatus status,
+            String failureCode
+    ) {
+        Refund refund = new Refund(
+                id,
+                paymentId,
+                amount,
+                reason,
+                idempotencyKey,
+                status
+        );
+
+        refund.failureCode = failureCode;
+
+        return refund;
+    }
+
     public void markProcessing() {
         if (status != RefundStatus.REQUESTED) {
             throw new InvalidRefundStateException(status, "mark processing");

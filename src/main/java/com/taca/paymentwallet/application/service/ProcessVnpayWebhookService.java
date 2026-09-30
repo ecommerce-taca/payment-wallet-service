@@ -2,36 +2,25 @@ package com.taca.paymentwallet.application.service;
 
 import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
 import com.taca.paymentwallet.application.exception.PaymentAmountMismatchException;
+import com.taca.paymentwallet.application.exception.PaymentAttemptNotFoundException;
 import com.taca.paymentwallet.application.exception.PaymentNotFoundException;
+import com.taca.paymentwallet.application.exception.WalletNotFoundException;
 import com.taca.paymentwallet.application.fee.PaymentFeePolicy;
 import com.taca.paymentwallet.application.paymentevent.PaymentProviderEvent;
 import com.taca.paymentwallet.application.paymentevent.PaymentProviderEventStatus;
 import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
-import com.taca.paymentwallet.application.port.out.ClockPort;
-import com.taca.paymentwallet.application.port.out.FeePolicyPort;
-import com.taca.paymentwallet.application.port.out.IdGeneratorPort;
-import com.taca.paymentwallet.application.port.out.LedgerAccountLookupPort;
-import com.taca.paymentwallet.application.port.out.LedgerPostingRepositoryPort;
-import com.taca.paymentwallet.application.port.out.OutboxPort;
-import com.taca.paymentwallet.application.port.out.PaymentAllocationRepositoryPort;
-import com.taca.paymentwallet.application.port.out.PaymentProviderEventPort;
-import com.taca.paymentwallet.application.port.out.PaymentRepositoryPort;
-import com.taca.paymentwallet.application.port.out.TransactionPort;
-import com.taca.paymentwallet.application.port.out.VnpayWebhookVerifierPort;
+import com.taca.paymentwallet.application.port.out.*;
 import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
 import com.taca.paymentwallet.application.result.WebhookProcessingAction;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
-import com.taca.paymentwallet.domain.payment.Payment;
-import com.taca.paymentwallet.domain.payment.PaymentAllocation;
-import com.taca.paymentwallet.domain.payment.PaymentOrder;
-import com.taca.paymentwallet.domain.valueobject.Money;
-import com.taca.paymentwallet.domain.valueobject.OrderId;
-import com.taca.paymentwallet.domain.valueobject.PaymentAllocationId;
-import com.taca.paymentwallet.domain.valueobject.PaymentId;
-import com.taca.paymentwallet.domain.valueobject.ShopId;
+import com.taca.paymentwallet.domain.payment.*;
+import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
+import com.taca.paymentwallet.domain.wallet.Wallet;
+import com.taca.paymentwallet.domain.wallet.WalletAllocatedEvent;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,6 +34,7 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
     private final PaymentRepositoryPort paymentRepository;
     private final PaymentProviderEventPort paymentProviderEventPort;
     private final PaymentAllocationRepositoryPort paymentAllocationRepository;
+    private final WalletRepositoryPort walletRepository;
     private final LedgerPostingRepositoryPort ledgerPostingRepository;
     private final LedgerAccountLookupPort ledgerAccountLookupPort;
     private final FeePolicyPort feePolicyPort;
@@ -55,11 +45,14 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
     private final TransactionPort transactionPort;
     private final AllocationCalculator allocationCalculator;
     private final LedgerPostingFactory ledgerPostingFactory;
+    private final PaymentAttemptRepositoryPort paymentAttemptRepository;
 
     public ProcessVnpayWebhookService(
             PaymentRepositoryPort paymentRepository,
+            PaymentAttemptRepositoryPort paymentAttemptRepository,
             PaymentProviderEventPort paymentProviderEventPort,
             PaymentAllocationRepositoryPort paymentAllocationRepository,
+            WalletRepositoryPort walletRepository,
             LedgerPostingRepositoryPort ledgerPostingRepository,
             LedgerAccountLookupPort ledgerAccountLookupPort,
             FeePolicyPort feePolicyPort,
@@ -72,8 +65,10 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
             LedgerPostingFactory ledgerPostingFactory
     ) {
         this.paymentRepository = Objects.requireNonNull(paymentRepository);
+        this.paymentAttemptRepository = Objects.requireNonNull(paymentAttemptRepository);
         this.paymentProviderEventPort = Objects.requireNonNull(paymentProviderEventPort);
         this.paymentAllocationRepository = Objects.requireNonNull(paymentAllocationRepository);
+        this.walletRepository = Objects.requireNonNull(walletRepository);
         this.ledgerPostingRepository = Objects.requireNonNull(ledgerPostingRepository);
         this.ledgerAccountLookupPort = Objects.requireNonNull(ledgerAccountLookupPort);
         this.feePolicyPort = Objects.requireNonNull(feePolicyPort);
@@ -95,28 +90,56 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
         return transactionPort.execute(() -> process(command));
     }
 
-    private ProcessVnpayWebhookResult process(ProcessVnpayWebhookCommand command) {
-        PaymentId paymentId = new PaymentId(command.paymentId());
-        Money webhookAmount = new Money(command.amount(), command.currency());
+    private ProcessVnpayWebhookResult process(
+            ProcessVnpayWebhookCommand command
+    ) {
+        PaymentAttempt attempt =
+                paymentAttemptRepository
+                        .findByProviderAndProviderTransactionRef(
+                                PROVIDER,
+                                command.providerTransactionRef()
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new PaymentAttemptNotFoundException(
+                                                PROVIDER,
+                                                command.providerTransactionRef()
+                                        )
+                        );
 
-        boolean inserted = paymentProviderEventPort.recordIfAbsent(
-                new PaymentProviderEvent(
-                        PROVIDER,
-                        command.providerEventId(),
-                        command.providerTransactionRef(),
-                        paymentId,
-                        command.responseCode(),
-                        command.transactionStatus(),
-                        webhookAmount,
-                        command.payloadHash(),
-                        clockPort.now(),
-                        PaymentProviderEventStatus.RECEIVED
-                )
-        );
+        PaymentId paymentId =
+                attempt.paymentId();
+
+        Money webhookAmount =
+                new Money(
+                        command.amount(),
+                        command.currency()
+                );
+
+        boolean inserted =
+                paymentProviderEventPort
+                        .recordIfAbsent(
+                                new PaymentProviderEvent(
+                                        PROVIDER,
+                                        command.providerEventId(),
+                                        command.providerTransactionRef(),
+                                        paymentId,
+                                        command.responseCode(),
+                                        command.transactionStatus(),
+                                        webhookAmount,
+                                        command.payloadHash(),
+                                        clockPort.now(),
+                                        PaymentProviderEventStatus.RECEIVED
+                                )
+                        );
 
         if (!inserted) {
-            Payment payment = paymentRepository.findById(paymentId)
-                    .orElseThrow(() -> new PaymentNotFoundException(paymentId));
+            Payment payment =
+                    paymentRepository
+                            .findById(paymentId)
+                            .orElseThrow(
+                                    () -> new PaymentNotFoundException(paymentId)
+                            );
 
             return new ProcessVnpayWebhookResult(
                     payment.id().value(),
@@ -125,21 +148,55 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
             );
         }
 
-        Payment payment = paymentRepository.findByIdForUpdate(paymentId)
-                .orElseThrow(() -> new PaymentNotFoundException(paymentId));
+        Payment payment =
+                paymentRepository
+                        .findByIdForUpdate(
+                                paymentId
+                        )
+                        .orElseThrow(
+                                () ->
+                                        new PaymentNotFoundException(
+                                                paymentId
+                                        )
+                        );
 
-        ensureAmountMatches(payment, webhookAmount);
+        if (isTerminal(payment)) {
+            paymentProviderEventPort.markApplied(
+                    PROVIDER,
+                    command.providerEventId()
+            );
 
-        if (isVnpaySuccess(command)) {
-            applySuccessfulPayment(payment);
-        } else {
-            payment.markFailed(vnpayFailureCode(command));
-            paymentRepository.save(payment);
-            outboxPort.saveAll(payment.domainEvents());
-            payment.clearDomainEvents();
+            return new ProcessVnpayWebhookResult(
+                    payment.id().value(),
+                    payment.status().name(),
+                    WebhookProcessingAction.DUPLICATE
+            );
         }
 
-        paymentProviderEventPort.markApplied(PROVIDER, command.providerEventId());
+        ensureAmountMatches(
+                payment,
+                webhookAmount
+        );
+
+        if (isVnpaySuccess(command)) {
+            applySuccessfulPayment(
+                    payment
+            );
+
+            markAttemptSucceeded(attempt);
+
+        } else {
+            applyFailedPayment(
+                    payment,
+                    attempt,
+                    command
+            );
+        }
+
+        paymentProviderEventPort.markApplied(
+                PROVIDER,
+                command.providerEventId()
+        );
 
         return new ProcessVnpayWebhookResult(
                 payment.id().value(),
@@ -148,33 +205,190 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
         );
     }
 
+    private void markAttemptSucceeded(PaymentAttempt attempt) {
+        attempt.markSucceeded(clockPort.now());
+
+        paymentAttemptRepository.save(attempt);
+    }
+
+    private void applyFailedPayment(
+            Payment payment,
+            PaymentAttempt attempt,
+            ProcessVnpayWebhookCommand command
+    ) {
+        String failureCode =
+                vnpayFailureCode(
+                        command
+                );
+
+        payment.markFailed(failureCode);
+        attempt.markFailed(failureCode, clockPort.now());
+
+        paymentRepository.save(payment);
+        paymentAttemptRepository.save(attempt);
+
+        outboxPort.saveAll(payment.domainEvents());
+
+        payment.clearDomainEvents();
+    }
+
+    private boolean isTerminal(Payment payment) {
+        return payment.status() == PaymentStatus.SUCCESS
+                || payment.status() == PaymentStatus.FAILED
+                || payment.status() == PaymentStatus.EXPIRED
+                || payment.status() == PaymentStatus.PARTIALLY_REFUNDED
+                || payment.status() == PaymentStatus.REFUNDED;
+    }
+
     private void applySuccessfulPayment(Payment payment) {
-        payment.markSucceeded(clockPort.now());
+        Map<ShopId, Wallet> walletsByShop =
+                loadWalletsForUpdate(payment.orders());
 
-        PaymentFeePolicy feePolicy = feePolicyPort.currentPaymentFeePolicy();
+        PaymentFeePolicy feePolicy =
+                feePolicyPort.currentPaymentFeePolicy();
 
-        List<PaymentAllocation> allocations = allocationCalculator.allocate(
-                payment.orders(),
-                allocationIdsByOrder(payment.orders()),
-                feePolicy.commissionRate(),
-                feePolicy.taxRate()
-        );
+        Instant occurredAt = clockPort.now();
 
-        LedgerPosting posting = ledgerPostingFactory.createPaymentCapturePosting(
-                idGeneratorPort.nextLedgerPostingId(),
-                payment.id(),
-                ledgerAccountLookupPort.vnpayClearingAccount(),
-                ledgerAccountLookupPort.platformCommissionAccount(),
-                ledgerAccountLookupPort.taxPayableAccount(),
-                ledgerAccountLookupPort.sellerPendingAccountsFor(distinctShopIds(payment.orders())),
-                allocations
+        payment.markSucceeded(occurredAt);
+
+        List<PaymentAllocation> allocations =
+                allocationCalculator.allocate(
+                        payment.id(),
+                        payment.orders(),
+                        allocationIdsByOrder(payment.orders()),
+                        walletIdsByShop(walletsByShop),
+                        feePolicy.feeConfigId(),
+                        feePolicy.taxConfigId(),
+                        feePolicy.commissionRate(),
+                        feePolicy.taxRate()
+                );
+
+        LedgerPosting posting =
+                ledgerPostingFactory.createPaymentCapturePosting(
+                        idGeneratorPort.nextLedgerPostingId(),
+                        payment.id(),
+                        ledgerAccountLookupPort.vnpayClearingAccount(),
+                        ledgerAccountLookupPort.platformCommissionAccount(),
+                        ledgerAccountLookupPort.taxPayableAccount(),
+                        ledgerAccountLookupPort.shipmentPayableAccount(),
+                        ledgerAccountLookupPort.sellerPendingAccountsFor(
+                                distinctShopIds(payment.orders())
+                        ),
+                        allocations,
+                        totalShippingFee(payment.orders())
+                );
+
+        creditSellerPendingWallets(
+                allocations,
+                walletsByShop
         );
 
         paymentRepository.save(payment);
         paymentAllocationRepository.saveAll(allocations);
         ledgerPostingRepository.save(posting);
+
         outboxPort.saveAll(payment.domainEvents());
+
+        saveWalletAllocatedEvents(
+                allocations,
+                occurredAt
+        );
+
         payment.clearDomainEvents();
+    }
+
+    private void saveWalletAllocatedEvents(
+            List<PaymentAllocation> allocations,
+            Instant occurredAt
+    ) {
+        for (PaymentAllocation allocation : allocations) {
+            outboxPort.save(
+                    WalletAllocatedEvent.from(
+                            allocation,
+                            occurredAt
+                    )
+            );
+        }
+    }
+
+    private Map<ShopId, Wallet> loadWalletsForUpdate(
+            List<PaymentOrder> orders
+    ) {
+        Map<ShopId, Wallet> result = new LinkedHashMap<>();
+
+        for (PaymentOrder order : orders) {
+            ShopId shopId = order.shopId();
+
+            if (result.containsKey(shopId)) {
+                continue;
+            }
+
+            String currency = order.amount().currency();
+
+            Wallet wallet = walletRepository
+                    .findByShopIdAndCurrencyForUpdate(
+                            shopId,
+                            currency
+                    )
+                    .orElseThrow(() -> new WalletNotFoundException(
+                            shopId,
+                            currency
+                    ));
+
+            result.put(shopId, wallet);
+        }
+
+        return result;
+    }
+
+    private void creditSellerPendingWallets(
+            List<PaymentAllocation> allocations,
+            Map<ShopId, Wallet> walletsByShop
+    ) {
+        Map<ShopId, Money> sellerNetAmountByShop =
+                new LinkedHashMap<>();
+
+        for (PaymentAllocation allocation : allocations) {
+            sellerNetAmountByShop.merge(
+                    allocation.shopId(),
+                    allocation.sellerNetAmount(),
+                    Money::add
+            );
+        }
+
+        for (Map.Entry<ShopId, Money> entry
+                : sellerNetAmountByShop.entrySet()) {
+
+            ShopId shopId = entry.getKey();
+
+            Money sellerNetAmount = entry.getValue();
+
+            Wallet wallet = walletsByShop.get(shopId);
+
+            if (wallet == null) {
+                throw new IllegalStateException(
+                        "Wallet not loaded for shop "
+                                + shopId.value()
+                );
+            }
+
+            wallet.creditPending(sellerNetAmount);
+
+            walletRepository.save(wallet);
+        }
+    }
+
+    private Map<ShopId, WalletId> walletIdsByShop(
+            Map<ShopId, Wallet> walletsByShop
+    ) {
+        Map<ShopId, WalletId> result = new LinkedHashMap<>();
+
+        walletsByShop.forEach(
+                (shopId, wallet) ->
+                        result.put(shopId, wallet.id())
+        );
+
+        return result;
     }
 
     private Map<OrderId, PaymentAllocationId> allocationIdsByOrder(List<PaymentOrder> orders) {
@@ -192,6 +406,15 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
                 .map(PaymentOrder::shopId)
                 .distinct()
                 .toList();
+    }
+
+    private Money totalShippingFee(List<PaymentOrder> orders) {
+        return orders.stream()
+                .map(PaymentOrder::shippingFee)
+                .reduce(
+                        Money.vnd(0),
+                        Money::add
+                );
     }
 
     private void ensureAmountMatches(Payment payment, Money webhookAmount) {

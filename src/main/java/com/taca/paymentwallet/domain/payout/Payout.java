@@ -86,6 +86,33 @@ public class Payout extends AggregateRoot {
         return payout;
     }
 
+    public static Payout rehydrate(
+            PayoutId id,
+            WalletId walletId,
+            ShopId shopId,
+            Money amount,
+            BankAccountSnapshot bankAccountSnapshot,
+            IdempotencyKey idempotencyKey,
+            PayoutStatus status,
+            String providerRef,
+            String failureCode
+    ) {
+        Payout payout = new Payout(
+                id,
+                walletId,
+                shopId,
+                amount,
+                bankAccountSnapshot,
+                idempotencyKey,
+                status
+        );
+
+        payout.providerRef = providerRef;
+        payout.failureCode = failureCode;
+
+        return payout;
+    }
+
     public void markProcessing() {
         if (status != PayoutStatus.REQUESTED) {
             throw new InvalidPayoutStateException(status, "mark processing");
@@ -121,7 +148,14 @@ public class Payout extends AggregateRoot {
         this.failureCode = failureCode;
         this.status = PayoutStatus.FAILED;
 
-        registerEvent(PayoutFailedEvent.now(id, shopId, failureCode));
+        registerEvent(
+                PayoutFailedEvent.now(
+                        id,
+                        shopId,
+                        amount,
+                        failureCode
+                )
+        );
     }
 
     public void cancel() {

@@ -73,6 +73,12 @@ class DatabaseSchemaContractTest {
     }
 
     @Test
+    void paymentOrdersShouldStoreFinancialBreakdown() throws Exception {
+        assertColumnExists("payment_orders", "merchandise_amount");
+        assertColumnExists("payment_orders", "shipping_fee");
+    }
+
+    @Test
     void paymentEventsShouldAllowUnmatchedProviderEvent() throws Exception {
         assertColumnNullable("payment_events", "payment_id");
         assertColumnNullable("payment_events", "payment_attempt_id");
@@ -133,6 +139,37 @@ class DatabaseSchemaContractTest {
         assertColumnExists("outbox_events", "payload");
         assertColumnExists("outbox_events", "headers");
         assertColumnExists("audit_logs", "metadata");
+    }
+
+    @Test
+    void shouldSeedShipmentPayableLedgerAccount() throws Exception {
+        assertThat(ledgerAccountExists("SHIPMENT_PAYABLE:VND"))
+                .as("SHIPMENT_PAYABLE system account should exist")
+                .isTrue();
+    }
+
+    private boolean ledgerAccountExists(String accountCode) throws Exception {
+        try (
+            Connection connection = connection();
+
+            var statement = connection.prepareStatement(
+                    """
+                    SELECT COUNT(*)
+                    FROM ledger_accounts
+                    WHERE account_code = ?
+                    """
+            )
+        ) {
+            statement.setString(1, accountCode);
+
+            try (
+                    ResultSet resultSet = statement.executeQuery()
+            ) {
+                resultSet.next();
+
+                return resultSet.getInt(1) == 1;
+            }
+        }
     }
 
     private void assertTableExists(String tableName) throws Exception {

@@ -25,15 +25,13 @@ import com.taca.paymentwallet.domain.payment.PaymentAllocation;
 import com.taca.paymentwallet.domain.payment.PaymentMethod;
 import com.taca.paymentwallet.domain.payment.PaymentOrder;
 import com.taca.paymentwallet.domain.payment.PaymentStatus;
-import com.taca.paymentwallet.domain.valueobject.CheckoutGroupId;
-import com.taca.paymentwallet.domain.valueobject.Money;
-import com.taca.paymentwallet.domain.valueobject.OrderId;
-import com.taca.paymentwallet.domain.valueobject.PaymentAllocationId;
-import com.taca.paymentwallet.domain.valueobject.ShopId;
+import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.domain.wallet.Wallet;
+import com.taca.paymentwallet.domain.wallet.WalletAllocatedEvent;
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -118,39 +116,132 @@ public class ProcessCodPaymentService implements ProcessCodPaymentUseCase {
             Payment payment,
             ProcessCodPaymentCommand command
     ) {
+        Map<ShopId, Wallet> walletsByShop =
+                loadWalletsForUpdate(payment.orders());
+
+        PaymentFeePolicy feePolicy =
+                feePolicyPort.currentPaymentFeePolicy();
+
         payment.markSucceeded(command.occurredAt());
 
-        PaymentFeePolicy feePolicy = feePolicyPort.currentPaymentFeePolicy();
+        List<PaymentAllocation> allocations =
+                allocationCalculator.allocate(
+                        payment.id(),
+                        payment.orders(),
+                        allocationIdsByOrder(payment.orders()),
+                        walletIdsByShop(walletsByShop),
+                        feePolicy.feeConfigId(),
+                        feePolicy.taxConfigId(),
+                        feePolicy.commissionRate(),
+                        feePolicy.taxRate()
+                );
 
-        List<PaymentAllocation> allocations = allocationCalculator.allocate(
-                payment.orders(),
-                allocationIdsByOrder(payment.orders()),
-                feePolicy.commissionRate(),
-                feePolicy.taxRate()
+        LedgerPosting posting =
+                ledgerPostingFactory.createPaymentCapturePosting(
+                        idGeneratorPort.nextLedgerPostingId(),
+                        payment.id(),
+                        ledgerAccountLookupPort.codClearingAccount(),
+                        ledgerAccountLookupPort.platformCommissionAccount(),
+                        ledgerAccountLookupPort.taxPayableAccount(),
+                        ledgerAccountLookupPort.shipmentPayableAccount(),
+                        ledgerAccountLookupPort.sellerPendingAccountsFor(
+                                distinctShopIds(payment.orders())
+                        ),
+                        allocations,
+                        totalShippingFee(payment.orders())
+                );
+
+        creditSellerPendingWallets(
+                allocations,
+                walletsByShop
         );
-
-        LedgerPosting posting = ledgerPostingFactory.createPaymentCapturePosting(
-                idGeneratorPort.nextLedgerPostingId(),
-                payment.id(),
-                ledgerAccountLookupPort.codClearingAccount(),
-                ledgerAccountLookupPort.platformCommissionAccount(),
-                ledgerAccountLookupPort.taxPayableAccount(),
-                ledgerAccountLookupPort.sellerPendingAccountsFor(distinctShopIds(payment.orders())),
-                allocations
-        );
-
-        creditSellerPendingWallets(allocations);
 
         paymentRepository.save(payment);
         paymentAllocationRepository.saveAll(allocations);
         ledgerPostingRepository.save(posting);
 
         outboxPort.saveAll(payment.domainEvents());
+
+        saveWalletAllocatedEvents(
+                allocations,
+                command.occurredAt()
+        );
+
         payment.clearDomainEvents();
     }
 
-    private void creditSellerPendingWallets(List<PaymentAllocation> allocations) {
-        Map<ShopId, Money> sellerNetAmountByShop = new LinkedHashMap<>();
+    private Money totalShippingFee(List<PaymentOrder> orders) {
+        return orders.stream()
+                .map(PaymentOrder::shippingFee)
+                .reduce(
+                        Money.vnd(0),
+                        Money::add
+                );
+    }
+
+    private void saveWalletAllocatedEvents(
+            List<PaymentAllocation> allocations,
+            Instant occurredAt
+    ) {
+        for (PaymentAllocation allocation : allocations) {
+            outboxPort.save(
+                    WalletAllocatedEvent.from(
+                            allocation,
+                            occurredAt
+                    )
+            );
+        }
+    }
+
+    private Map<ShopId, Wallet> loadWalletsForUpdate(
+            List<PaymentOrder> orders
+    ) {
+        Map<ShopId, Wallet> result = new LinkedHashMap<>();
+
+        for (PaymentOrder order : orders) {
+            ShopId shopId = order.shopId();
+
+            if (result.containsKey(shopId)) {
+                continue;
+            }
+
+            String currency = order.amount().currency();
+
+            Wallet wallet = walletRepository
+                    .findByShopIdAndCurrencyForUpdate(
+                            shopId,
+                            currency
+                    )
+                    .orElseThrow(() -> new WalletNotFoundException(
+                            shopId,
+                            currency
+                    ));
+
+            result.put(shopId, wallet);
+        }
+
+        return result;
+    }
+
+    private Map<ShopId, WalletId> walletIdsByShop(
+            Map<ShopId, Wallet> walletsByShop
+    ) {
+        Map<ShopId, WalletId> result = new LinkedHashMap<>();
+
+        walletsByShop.forEach(
+                (shopId, wallet) ->
+                        result.put(shopId, wallet.id())
+        );
+
+        return result;
+    }
+
+    private void creditSellerPendingWallets(
+            List<PaymentAllocation> allocations,
+            Map<ShopId, Wallet> walletsByShop
+    ) {
+        Map<ShopId, Money> sellerNetAmountByShop =
+                new LinkedHashMap<>();
 
         for (PaymentAllocation allocation : allocations) {
             sellerNetAmountByShop.merge(
@@ -160,16 +251,20 @@ public class ProcessCodPaymentService implements ProcessCodPaymentUseCase {
             );
         }
 
-        for (Map.Entry<ShopId, Money> entry : sellerNetAmountByShop.entrySet()) {
+        for (Map.Entry<ShopId, Money> entry
+                : sellerNetAmountByShop.entrySet()) {
+
             ShopId shopId = entry.getKey();
             Money sellerNetAmount = entry.getValue();
 
-            Wallet wallet = walletRepository
-                    .findByShopIdAndCurrencyForUpdate(shopId, sellerNetAmount.currency())
-                    .orElseThrow(() -> new WalletNotFoundException(
-                            shopId,
-                            sellerNetAmount.currency()
-                    ));
+            Wallet wallet = walletsByShop.get(shopId);
+
+            if (wallet == null) {
+                throw new IllegalStateException(
+                        "Wallet not loaded for shop "
+                                + shopId.value()
+                );
+            }
 
             wallet.creditPending(sellerNetAmount);
             walletRepository.save(wallet);

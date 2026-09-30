@@ -134,7 +134,10 @@ public class ProcessRefundResultService implements ProcessRefundResultUseCase {
 
         paymentRepository.save(payment);
         refundRepository.save(refund);
-        refundAllocationRepository.saveAll(refundAllocations);
+        refundAllocationRepository.saveAll(
+                refund.id(),
+                refundAllocations
+        );
         ledgerPostingRepository.save(posting);
 
         outboxPort.saveAll(refund.domainEvents());

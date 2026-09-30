@@ -43,16 +43,23 @@ public record CreatePaymentCommand(
             throw new IllegalArgumentException("orders must not be empty");
         }
 
-        long totalOrderAmount = orders.stream()
-                .mapToLong(CreatePaymentOrderCommand::amount)
-                .sum();
+        method = method.trim().toUpperCase();
+
+        currency = currency.trim().toUpperCase();
+
+        if (!"VND".equals(currency)) {
+            throw new IllegalArgumentException("currency must be VND");
+        }
+
+        long totalOrderAmount =
+                orders.stream()
+                        .mapToLong(CreatePaymentOrderCommand::amount)
+                        .sum();
 
         if (totalOrderAmount != amount) {
             throw new IllegalArgumentException("total order amount must equal payment amount");
         }
 
-        method = method.trim().toUpperCase();
-        currency = currency.trim().toUpperCase();
         idempotencyKey = idempotencyKey.trim();
         orders = List.copyOf(orders);
         clientIp = clientIp == null ? null : clientIp.trim();

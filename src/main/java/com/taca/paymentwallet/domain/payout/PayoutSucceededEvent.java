@@ -14,6 +14,7 @@ public record PayoutSucceededEvent(
         PayoutId payoutId,
         ShopId shopId,
         Money amount,
+        PayoutStatus status,
         String providerReference
 ) implements DomainEvent {
 
@@ -21,7 +22,7 @@ public record PayoutSucceededEvent(
         if (eventId == null) {
             throw new IllegalArgumentException("Event id must not be null");
         }
-        
+
         if (occurredAt == null) {
             throw new IllegalArgumentException("Occurred at must not be null");
         }
@@ -36,6 +37,10 @@ public record PayoutSucceededEvent(
 
         if (amount == null) {
             throw new IllegalArgumentException("Amount must not be null");
+        }
+
+        if (status == null) {
+            throw new IllegalArgumentException("Status must not be null");
         }
 
         if (providerReference == null || providerReference.isBlank()) {
@@ -55,6 +60,7 @@ public record PayoutSucceededEvent(
                 payoutId,
                 shopId,
                 amount,
+                PayoutStatus.SUCCESS,
                 providerReference
         );
     }

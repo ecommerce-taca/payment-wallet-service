@@ -113,7 +113,9 @@ Field chính:
 | `checkout_group_id` | `BINARY(16)` | ID của checkout group từ Order/Checkout context |
 | `buyer_user_id` | `BINARY(16)` | Reference tới user, không FK |
 | `method` | `VARCHAR(30)` | `VNPAY`, `COD` |
-| `amount` | `BIGINT` | Tổng tiền cần thanh toán |
+| `amount` | `BIGINT` | Grand total của order = merchandise + shipping |
+| `merchandise_amount` | `BIGINT` | Giá trị hàng hóa, dùng làm seller allocation gross |
+| `shipping_fee` | `BIGINT` | Phí vận chuyển, không thuộc seller gross |
 | `currency` | `CHAR(3)` | V1 là `VND` |
 | `status` | `VARCHAR(40)` | Xem enum `PaymentStatus` |
 | `captured_amount` | `BIGINT` | Số tiền đã capture thành công |
@@ -133,6 +135,11 @@ Ràng buộc:
 - `captured_amount >= 0`.
 - `refunded_amount >= 0`.
 - `refunded_amount <= captured_amount`.
+- `merchandise_amount > 0`.
+- `shipping_fee >= 0`.
+- `amount = merchandise_amount + shipping_fee`.
+- Commission/tax/seller net chỉ tính trên `merchandise_amount`.
+- `shipping_fee` không được đưa vào seller wallet allocation.
 - `currency = 'VND'` trong v1.
 - `amount` và `currency` không được thay đổi sau khi tạo.
 - Không có `order_id` trong bảng `payments`.
@@ -223,23 +230,23 @@ Lưu webhook hoặc callback đã nhận từ provider.
 
 Field chính:
 
-| Field | Type | Ghi chú |
-|---|---:|---|
-| `id` | `BINARY(16)` | PK |
-| `payment_id` | `BINARY(16)` | FK tới `payments.id`, nullable nếu event không match payment |
-| `payment_attempt_id` | `BINARY(16)` | FK tới `payment_attempts.id`, nullable |
-| `provider` | `VARCHAR(40)` | Ví dụ `VNPAY` |
+| Field |           Type | Ghi chú |
+|---|---------------:|---|
+| `id` |   `BINARY(16)` | PK |
+| `payment_id` |   `BINARY(16)` | FK tới `payments.id`, nullable nếu event không match payment |
+| `payment_attempt_id` |   `BINARY(16)` | FK tới `payment_attempts.id`, nullable |
+| `provider` |  `VARCHAR(40)` | Ví dụ `VNPAY` |
 | `provider_event_id` | `VARCHAR(120)` | ID dedupe webhook |
 | `provider_transaction_ref` | `VARCHAR(120)` | Mã giao dịch provider |
-| `provider_response_code` | `VARCHAR(40)` | Code provider |
-| `provider_transaction_status` | `VARCHAR(40)` | Status provider |
-| `amount` | `BIGINT` | Amount provider gửi về |
-| `currency` | `CHAR(3)` | V1 là `VND` |
-| `payload_hash` | `VARCHAR(128)` | Hash payload đã canonicalize |
-| `received_at` | `DATETIME(6)` | UTC |
-| `applied_at` | `DATETIME(6)` | Nullable |
-| `status` | `VARCHAR(40)` | `RECEIVED`, `APPLIED`, `IGNORED`, `FAILED` |
-| `failure_code` | `VARCHAR(80)` | Nullable |
+| `provider_response_code` |  `VARCHAR(40)` | Code provider |
+| `provider_transaction_status` |  `VARCHAR(40)` | Status provider |
+| `amount` |       `BIGINT` | Amount provider gửi về |
+| `currency` |      `CHAR(3)` | V1 là `VND` |
+| `payload_hash` |     `CHAR(64)` | Hash payload đã canonicalize |
+| `received_at` |  `DATETIME(6)` | UTC |
+| `applied_at` |  `DATETIME(6)` | Nullable |
+| `status` |  `VARCHAR(40)` | `RECEIVED`, `APPLIED`, `IGNORED`, `FAILED` |
+| `failure_code` |  `VARCHAR(80)` | Nullable |
 
 Ràng buộc:
 
@@ -359,6 +366,7 @@ PLATFORM_COMMISSION
 TAX_PAYABLE
 SELLER_PENDING
 SELLER_AVAILABLE
+SHIPMENT_PAYABLE
 PAYOUT_CLEARING
 REFUND_CLEARING
 ```
@@ -369,6 +377,10 @@ Ràng buộc:
 - Seller account phải có `owner_type = SHOP` và `owner_id = shop_id`.
 - System account phải có `owner_type = SYSTEM`.
 - Không hard-delete account.
+- `SHIPMENT_PAYABLE` là system liability account nhận phần shipping fee
+  khi payment được capture.
+- Shipping fee không thuộc `SELLER_PENDING`.
+- Commission và tax không tính trên shipping fee.
 
 Index:
 
@@ -769,18 +781,18 @@ shop.kyc.approved
 
 Field chính:
 
-| Field | Type | Ghi chú |
-|---|---:|---|
-| `id` | `BINARY(16)` | PK |
+| Field |           Type | Ghi chú |
+|---|---------------:|---|
+| `id` |   `BINARY(16)` | PK |
 | `consumer_name` | `VARCHAR(120)` | Tên consumer trong payment-wallet |
 | `source` | `VARCHAR(120)` | Tên service phát event |
 | `event_id` | `VARCHAR(160)` | ID event từ producer |
 | `event_type` | `VARCHAR(120)` | Ví dụ `shipment.delivered` |
-| `payload_hash` | `VARCHAR(128)` | Hash payload |
-| `received_at` | `DATETIME(6)` | UTC |
-| `processed_at` | `DATETIME(6)` | Nullable |
-| `status` | `VARCHAR(40)` | `RECEIVED`, `PROCESSED`, `FAILED`, `IGNORED` |
-| `failure_code` | `VARCHAR(80)` | Nullable |
+| `payload_hash` |     `CHAR(64)` | Hash payload |
+| `received_at` |  `DATETIME(6)` | UTC |
+| `processed_at` |  `DATETIME(6)` | Nullable |
+| `status` |  `VARCHAR(40)` | `RECEIVED`, `PROCESSED`, `FAILED`, `IGNORED` |
+| `failure_code` |  `VARCHAR(80)` | Nullable |
 
 Ràng buộc:
 

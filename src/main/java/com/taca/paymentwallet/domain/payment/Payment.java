@@ -9,6 +9,7 @@ import com.taca.paymentwallet.domain.valueobject.PaymentId;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 public class Payment extends AggregateRoot {
 
@@ -22,6 +23,7 @@ public class Payment extends AggregateRoot {
     private String failureCode;
     private Money capturedAmount;
     private Money refundedAmount;
+    private Instant expiresAt;
     private Instant paidAt;
 
     private Payment(
@@ -31,8 +33,55 @@ public class Payment extends AggregateRoot {
             PaymentMethod method,
             Money amount,
             List<PaymentOrder> orders,
-            PaymentStatus status
+            PaymentStatus status,
+            Money capturedAmount,
+            Money refundedAmount,
+            String failureCode,
+            Instant expiresAt,
+            Instant paidAt
     ) {
+        if (id == null) {
+            throw new IllegalArgumentException("id must not be null");
+        }
+
+        if (checkoutGroupId == null) {
+            throw new IllegalArgumentException("checkoutGroupId must not be null");
+        }
+
+        if (buyerUserId == null) {
+            throw new IllegalArgumentException("buyerUserId must not be null");
+        }
+
+        if (method == null) {
+            throw new IllegalArgumentException("method must not be null");
+        }
+
+        if (amount == null || !amount.isPositive()) {
+            throw new IllegalArgumentException("amount must be positive");
+        }
+
+        if (orders == null || orders.isEmpty()) {
+            throw new IllegalArgumentException("orders must not be empty");
+        }
+
+        if (status == null) {
+            throw new IllegalArgumentException("status must not be null");
+        }
+
+        if (capturedAmount == null) {
+            throw new IllegalArgumentException("capturedAmount must not be null");
+        }
+
+        if (refundedAmount == null) {
+            throw new IllegalArgumentException("refundedAmount must not be null");
+        }
+
+        if (refundedAmount.isGreaterThan(capturedAmount)) {
+            throw new IllegalArgumentException(
+                    "refundedAmount must not be greater than capturedAmount"
+            );
+        }
+
         this.id = id;
         this.checkoutGroupId = checkoutGroupId;
         this.buyerUserId = buyerUserId;
@@ -40,8 +89,11 @@ public class Payment extends AggregateRoot {
         this.amount = amount;
         this.orders = List.copyOf(orders);
         this.status = status;
-        this.capturedAmount = Money.vnd(0);
-        this.refundedAmount = Money.vnd(0);
+        this.capturedAmount = capturedAmount;
+        this.refundedAmount = refundedAmount;
+        this.failureCode = failureCode;
+        this.expiresAt = expiresAt;
+        this.paidAt = paidAt;
 
         validateTotalOrderAmount();
     }
@@ -54,10 +106,97 @@ public class Payment extends AggregateRoot {
             Money amount,
             List<PaymentOrder> orders
     ) {
+        if (method == PaymentMethod.VNPAY) {
+            throw new IllegalArgumentException(
+                    "VNPAY payment requires expiresAt"
+            );
+        }
+
+        return create(
+                id,
+                checkoutGroupId,
+                buyerUserId,
+                method,
+                amount,
+                orders,
+                null
+        );
+    }
+
+    public static Payment create(
+            PaymentId id,
+            CheckoutGroupId checkoutGroupId,
+            BuyerUserId buyerUserId,
+            PaymentMethod method,
+            Money amount,
+            List<PaymentOrder> orders,
+            Instant expiresAt
+    ) {
         PaymentStatus initialStatus = method == PaymentMethod.COD
                 ? PaymentStatus.PENDING_COD
                 : PaymentStatus.PENDING;
 
+        if (method == PaymentMethod.VNPAY && expiresAt == null) {
+            throw new IllegalArgumentException(
+                    "expiresAt must not be null for VNPAY payment"
+            );
+        }
+
+        if (method == PaymentMethod.COD && expiresAt != null) {
+            throw new IllegalArgumentException(
+                    "expiresAt must be null for COD payment"
+            );
+        }
+
+        Payment payment =
+                new Payment(
+                        id,
+                        checkoutGroupId,
+                        buyerUserId,
+                        method,
+                        amount,
+                        orders,
+                        initialStatus,
+                        Money.vnd(0),
+                        Money.vnd(0),
+                        null,
+                        expiresAt,
+                        null
+                );
+
+        payment.registerEvent(
+                new PaymentCreatedEvent(
+                        UUID.randomUUID(),
+                        Instant.now(),
+                        payment.id(),
+                        payment.checkoutGroupId(),
+                        payment.orders()
+                                .stream()
+                                .map(PaymentOrder::orderId)
+                                .toList(),
+                        payment.amount(),
+                        payment.method(),
+                        payment.status()
+                )
+        );
+
+        return payment;
+    }
+
+    public static Payment rehydrate(
+            PaymentId id,
+            CheckoutGroupId checkoutGroupId,
+            BuyerUserId buyerUserId,
+            PaymentMethod method,
+            Money amount,
+            List<PaymentOrder> orders,
+            PaymentStatus status,
+            Money capturedAmount,
+            Money refundedAmount,
+            String failureCode,
+            Instant expiresAt,
+            Instant paidAt
+    ) {
         return new Payment(
                 id,
                 checkoutGroupId,
@@ -65,7 +204,13 @@ public class Payment extends AggregateRoot {
                 method,
                 amount,
                 orders,
-                initialStatus);
+                status,
+                capturedAmount,
+                refundedAmount,
+                failureCode,
+                expiresAt,
+                paidAt
+        );
     }
 
     public void markSucceeded(Instant paidAt) {
@@ -110,13 +255,17 @@ public class Payment extends AggregateRoot {
     }
 
     private void validateTotalOrderAmount() {
-        long total = orders.stream()
-                .map(PaymentOrder::amount)
-                .mapToLong(Money::amount)
-                .sum();
+        Money total = orders.stream()
+                .map(PaymentOrder::totalAmount)
+                .reduce(
+                        Money.vnd(0),
+                        Money::add
+                );
 
-        if (total != amount.amount()) {
-            throw new IllegalArgumentException("total order amount must equal payment amount");
+        if (!total.equals(amount)) {
+            throw new IllegalArgumentException(
+                    "total order amount must equal payment amount"
+            );
         }
     }
 
@@ -162,6 +311,10 @@ public class Payment extends AggregateRoot {
 
     public Instant paidAt() {
         return paidAt;
+    }
+
+    public Instant expiresAt() {
+        return expiresAt;
     }
 
     public void validateRefundRequest(
