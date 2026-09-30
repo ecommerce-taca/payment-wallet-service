@@ -492,6 +492,11 @@ class ProcessRefundResultServiceTest {
         }
 
         @Override
+        public LedgerAccountId shipmentPayableAccount() {
+            return new LedgerAccountId(UUID.randomUUID());
+        }
+
+        @Override
         public LedgerAccountId refundClearingAccount() {
             return new LedgerAccountId(UUID.randomUUID());
         }

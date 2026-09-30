@@ -87,6 +87,13 @@ public class LedgerAccountLookupAdapter
     }
 
     @Override
+    public LedgerAccountId shipmentPayableAccount() {
+        return systemAccount(
+                LedgerAccountType.SHIPMENT_PAYABLE
+        );
+    }
+
+    @Override
     public LedgerAccountId payoutClearingAccount() {
         return systemAccount(
                 LedgerAccountType.PAYOUT_CLEARING

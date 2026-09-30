@@ -13,10 +13,7 @@ import com.taca.paymentwallet.domain.event.DomainEvent;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.payment.*;
 import com.taca.paymentwallet.domain.valueobject.*;
-import com.taca.paymentwallet.domain.wallet.LedgerPosting;
-import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
-import com.taca.paymentwallet.domain.wallet.Wallet;
-import com.taca.paymentwallet.domain.wallet.WalletAllocatedEvent;
+import com.taca.paymentwallet.domain.wallet.*;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -661,6 +658,122 @@ class ProcessVnpayWebhookServiceTest {
         );
     }
 
+    @Test
+    void shouldPostShippingFeeToShipmentPayableOnSuccessfulVnpayCapture() {
+        PaymentId paymentId = new PaymentId(UUID.randomUUID());
+
+        ShopId shopId = new ShopId(UUID.randomUUID());
+
+        String providerTransactionRef = "vnpay-txn-shipping-001";
+
+        Payment payment = Payment.create(
+                paymentId,
+                new CheckoutGroupId(UUID.randomUUID()),
+                new BuyerUserId(UUID.randomUUID()),
+                PaymentMethod.VNPAY,
+                Money.vnd(120_000),
+                List.of(
+                        new PaymentOrder(
+                                new OrderId(UUID.randomUUID()),
+                                shopId,
+                                Money.vnd(100_000),
+                                Money.vnd(20_000)
+                        )
+                ),
+                Instant.parse("2026-01-01T00:15:00Z")
+        );
+
+        payment.clearDomainEvents();
+
+        FakePaymentRepositoryPort paymentRepository =
+                new FakePaymentRepositoryPort(payment);
+
+        FakePaymentProviderEventPort paymentProviderEventPort =
+                new FakePaymentProviderEventPort(true);
+
+        FakePaymentAllocationRepositoryPort allocationRepository =
+                new FakePaymentAllocationRepositoryPort();
+
+        FakeWalletRepositoryPort walletRepository =
+                new FakeWalletRepositoryPort();
+
+        FakeLedgerPostingRepositoryPort ledgerPostingRepository =
+                new FakeLedgerPostingRepositoryPort();
+
+        FakeOutboxPort outboxPort =
+                new FakeOutboxPort();
+
+        FakePaymentAttemptRepositoryPort paymentAttemptRepository =
+                new FakePaymentAttemptRepositoryPort(
+                        createPendingAttempt(
+                                paymentId,
+                                providerTransactionRef
+                        )
+                );
+
+        ProcessVnpayWebhookService service = newService(
+                paymentRepository,
+                paymentAttemptRepository,
+                paymentProviderEventPort,
+                allocationRepository,
+                walletRepository,
+                ledgerPostingRepository,
+                outboxPort
+        );
+
+        ProcessVnpayWebhookResult result = service.execute(
+                successCommand(
+                        120_000,
+                        providerTransactionRef
+                )
+        );
+
+        assertEquals("SUCCESS", result.paymentStatus());
+
+        PaymentAllocation allocation =
+                allocationRepository
+                        .savedAllocations
+                        .getFirst();
+
+        assertEquals(
+                Money.vnd(100_000),
+                allocation.grossAmount()
+        );
+
+        LedgerPosting posting =
+                ledgerPostingRepository
+                        .savedPostings
+                        .getFirst();
+
+        long debit =
+                posting.entries()
+                        .stream()
+                        .filter(
+                                entry ->
+                                        entry.entryType()
+                                                == LedgerEntryType.DEBIT
+                        )
+                        .map(LedgerEntry::amount)
+                        .mapToLong(Money::amount)
+                        .sum();
+
+        long credit =
+                posting.entries()
+                        .stream()
+                        .filter(
+                                entry ->
+                                        entry.entryType()
+                                                == LedgerEntryType.CREDIT
+                        )
+                        .map(LedgerEntry::amount)
+                        .mapToLong(Money::amount)
+                        .sum();
+
+        assertEquals(120_000L, debit);
+
+        assertEquals(120_000L, credit);
+    }
+
     private static final class FakeWalletRepositoryPort
             implements WalletRepositoryPort {
 
@@ -760,6 +873,25 @@ class ProcessVnpayWebhookServiceTest {
         return new ProcessVnpayWebhookCommand(
                 "vnpay-event-001",
                 "vnpay-txn-001",
+                "00",
+                "00",
+                amount,
+                "VND",
+                "payload-hash-001",
+                Map.of(
+                        "vnp_SecureHash",
+                        "signed-value"
+                )
+        );
+    }
+
+    private ProcessVnpayWebhookCommand successCommand(
+            long amount,
+            String providerTransactionRef
+    ) {
+        return new ProcessVnpayWebhookCommand(
+                "vnpay-event-001",
+                providerTransactionRef,
                 "00",
                 "00",
                 amount,
@@ -974,6 +1106,11 @@ class ProcessVnpayWebhookServiceTest {
 
         @Override
         public LedgerAccountId taxPayableAccount() {
+            return new LedgerAccountId(UUID.randomUUID());
+        }
+
+        @Override
+        public LedgerAccountId shipmentPayableAccount() {
             return new LedgerAccountId(UUID.randomUUID());
         }
 

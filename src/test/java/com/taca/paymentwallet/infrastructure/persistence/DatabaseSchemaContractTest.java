@@ -141,6 +141,37 @@ class DatabaseSchemaContractTest {
         assertColumnExists("audit_logs", "metadata");
     }
 
+    @Test
+    void shouldSeedShipmentPayableLedgerAccount() throws Exception {
+        assertThat(ledgerAccountExists("SHIPMENT_PAYABLE:VND"))
+                .as("SHIPMENT_PAYABLE system account should exist")
+                .isTrue();
+    }
+
+    private boolean ledgerAccountExists(String accountCode) throws Exception {
+        try (
+            Connection connection = connection();
+
+            var statement = connection.prepareStatement(
+                    """
+                    SELECT COUNT(*)
+                    FROM ledger_accounts
+                    WHERE account_code = ?
+                    """
+            )
+        ) {
+            statement.setString(1, accountCode);
+
+            try (
+                    ResultSet resultSet = statement.executeQuery()
+            ) {
+                resultSet.next();
+
+                return resultSet.getInt(1) == 1;
+            }
+        }
+    }
+
     private void assertTableExists(String tableName) throws Exception {
         assertThat(tableExists(tableName))
                 .as("table %s should exist", tableName)

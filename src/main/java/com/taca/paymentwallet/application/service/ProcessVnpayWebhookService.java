@@ -270,10 +270,12 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
                         ledgerAccountLookupPort.vnpayClearingAccount(),
                         ledgerAccountLookupPort.platformCommissionAccount(),
                         ledgerAccountLookupPort.taxPayableAccount(),
+                        ledgerAccountLookupPort.shipmentPayableAccount(),
                         ledgerAccountLookupPort.sellerPendingAccountsFor(
                                 distinctShopIds(payment.orders())
                         ),
-                        allocations
+                        allocations,
+                        totalShippingFee(payment.orders())
                 );
 
         creditSellerPendingWallets(
@@ -404,6 +406,15 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
                 .map(PaymentOrder::shopId)
                 .distinct()
                 .toList();
+    }
+
+    private Money totalShippingFee(List<PaymentOrder> orders) {
+        return orders.stream()
+                .map(PaymentOrder::shippingFee)
+                .reduce(
+                        Money.vnd(0),
+                        Money::add
+                );
     }
 
     private void ensureAmountMatches(Payment payment, Money webhookAmount) {

@@ -366,6 +366,7 @@ PLATFORM_COMMISSION
 TAX_PAYABLE
 SELLER_PENDING
 SELLER_AVAILABLE
+SHIPMENT_PAYABLE
 PAYOUT_CLEARING
 REFUND_CLEARING
 ```
@@ -376,6 +377,10 @@ Ràng buộc:
 - Seller account phải có `owner_type = SHOP` và `owner_id = shop_id`.
 - System account phải có `owner_type = SYSTEM`.
 - Không hard-delete account.
+- `SHIPMENT_PAYABLE` là system liability account nhận phần shipping fee
+  khi payment được capture.
+- Shipping fee không thuộc `SELLER_PENDING`.
+- Commission và tax không tính trên shipping fee.
 
 Index:
 
