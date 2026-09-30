@@ -3,11 +3,55 @@ package com.taca.paymentwallet.infrastructure.persistence.repository;
 import com.taca.paymentwallet.infrastructure.persistence.entity.OutboxEventJpaEntity;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
 public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventJpaEntity, UUID> {
 
     List<OutboxEventJpaEntity> findByPublishedAtIsNullOrderByOccurredAtAsc(Pageable pageable);
+
+    @Query(value = """
+            SELECT *
+            FROM outbox_events
+            WHERE published_at IS NULL
+              AND retry_count < :maxRetries
+            ORDER BY occurred_at ASC, id ASC
+            LIMIT :batchSize
+            FOR UPDATE SKIP LOCKED
+            """, nativeQuery = true)
+    List<OutboxEventJpaEntity> lockNextBatch(
+            @Param("batchSize") int batchSize,
+            @Param("maxRetries") int maxRetries
+    );
+
+    @Modifying
+    @Query("""
+            update OutboxEventJpaEntity e
+            set e.publishedAt = :publishedAt,
+                e.lastError = null
+            where e.id = :eventId
+              and e.publishedAt is null
+            """)
+    int markPublished(
+            @Param("eventId") UUID eventId,
+            @Param("publishedAt") LocalDateTime publishedAt
+    );
+
+    @Modifying
+    @Query("""
+            update OutboxEventJpaEntity e
+            set e.retryCount = e.retryCount + 1,
+                e.lastError = :lastError
+            where e.id = :eventId
+              and e.publishedAt is null
+            """)
+    int incrementFailure(
+            @Param("eventId") UUID eventId,
+            @Param("lastError") String lastError
+    );
 }
