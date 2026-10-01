@@ -10,6 +10,7 @@ import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaOutboxMessagePublisherAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaTopicProperties;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaTopicRouter;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxPublisherProperties;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
 import com.taca.paymentwallet.infrastructure.persistence.repository.*;
@@ -32,7 +33,8 @@ import java.time.Duration;
 @Configuration
 @EnableConfigurationProperties({
         VnpayProperties.class,
-        KafkaTopicProperties.class
+        KafkaTopicProperties.class,
+        OutboxPublisherProperties.class
 })
 public class InfrastructureConfiguration {
 

@@ -75,6 +75,11 @@ class ProductionContextSmokeTest {
                 () ->
                         "http://localhost/payment-return"
         );
+
+        registry.add(
+                "app.outbox.publisher.enabled",
+                () -> "false"
+        );
     }
 
     @Autowired
@@ -88,6 +93,9 @@ class ProductionContextSmokeTest {
 
     @Autowired
     private RequestPayoutUseCase requestPayoutUseCase;
+
+    @Autowired
+    private PublishOutboxUseCase publishOutboxUseCase;
 
     @Autowired
     private ObjectProvider<RunSettlementUseCase> runSettlementUseCaseProvider;
@@ -104,6 +112,8 @@ class ProductionContextSmokeTest {
         assertThat(requestRefundUseCase).isNotNull();
 
         assertThat(requestPayoutUseCase).isNotNull();
+
+        assertThat(publishOutboxUseCase).isNotNull();
 
         assertThat(runSettlementUseCaseProvider.getIfAvailable()).isNull();
 

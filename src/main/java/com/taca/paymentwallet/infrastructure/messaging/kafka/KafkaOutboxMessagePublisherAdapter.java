@@ -5,11 +5,16 @@ import com.taca.paymentwallet.application.port.out.OutboxMessagePublisherPort;
 import org.springframework.kafka.core.KafkaTemplate;
 
 import java.util.Objects;
+import java.util.Set;
 
 public class KafkaOutboxMessagePublisherAdapter implements OutboxMessagePublisherPort {
 
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final KafkaTopicRouter topicRouter;
+    private static final Set<String> SUPPORTED_EVENT_TYPES = Set.of(
+            "payment.created",
+            "wallet.allocated"
+    );
 
     public KafkaOutboxMessagePublisherAdapter(
             KafkaTemplate<String, String> kafkaTemplate,
@@ -22,6 +27,11 @@ public class KafkaOutboxMessagePublisherAdapter implements OutboxMessagePublishe
     @Override
     public boolean supports(OutboxMessage message) {
         return topicRouter.route(message).isPresent();
+    }
+
+    @Override
+    public Set<String> supportedEventTypes() {
+        return SUPPORTED_EVENT_TYPES;
     }
 
     @Override

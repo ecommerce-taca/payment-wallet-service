@@ -14,3 +14,12 @@ management:
     health:
       probes:
         enabled: true
+
+app:
+  outbox:
+    publisher:
+      enabled: false
+      batch-size: 50
+      max-retries: 3
+      retry-backoff: 2s
+      poll-interval-ms: 1000

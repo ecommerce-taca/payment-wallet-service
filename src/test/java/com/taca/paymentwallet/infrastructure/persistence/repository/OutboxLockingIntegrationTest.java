@@ -17,6 +17,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -26,6 +27,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @TestPropertySource(properties = "spring.jpa.hibernate.ddl-auto=validate")
 class OutboxLockingIntegrationTest {
+
+
+    private static final LocalDateTime NOW =
+            LocalDateTime.of(2026, 10, 1, 0, 0);
+
+    private static final Set<String> SUPPORTED_EVENT_TYPES =
+            Set.of("payment.created", "wallet.allocated");
 
     @Container
     static final MySQLContainer<?> MYSQL =
@@ -62,7 +70,14 @@ class OutboxLockingIntegrationTest {
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
         List<OutboxEventJpaEntity> events =
-                transaction.execute(status -> repository.lockNextBatch(10, 3));
+                transaction.execute(status ->
+                        repository.lockNextBatch(
+                                10,
+                                3,
+                                NOW,
+                                SUPPORTED_EVENT_TYPES
+                        )
+                );
 
         assertThat(events)
                 .extracting(OutboxEventJpaEntity::getId)
@@ -75,7 +90,9 @@ class OutboxLockingIntegrationTest {
 
         OutboxEventJpaEntity published =
                 newEvent(LocalDateTime.of(2026, 9, 30, 10, 1));
-        published.setPublishedAt(LocalDateTime.of(2026, 9, 30, 10, 2));
+        published.setPublishedAt(
+                LocalDateTime.of(2026, 9, 30, 10, 2)
+        );
         repository.saveAndFlush(published);
 
         OutboxEventJpaEntity exhausted =
@@ -86,11 +103,94 @@ class OutboxLockingIntegrationTest {
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
         List<OutboxEventJpaEntity> events =
-                transaction.execute(status -> repository.lockNextBatch(10, 3));
+                transaction.execute(status ->
+                        repository.lockNextBatch(
+                                10,
+                                3,
+                                NOW,
+                                SUPPORTED_EVENT_TYPES
+                        )
+                );
 
         assertThat(events).hasSize(1);
         assertThat(events.getFirst().getPublishedAt()).isNull();
         assertThat(events.getFirst().getRetryCount()).isZero();
+    }
+
+    @Test
+    void shouldNotLockEventBeforeNextAttemptAt() {
+        OutboxEventJpaEntity entity =
+                newEvent(LocalDateTime.of(2026, 9, 30, 10, 0));
+
+        entity.setNextAttemptAt(
+                LocalDateTime.of(2026, 10, 1, 0, 0, 2)
+        );
+
+        repository.saveAndFlush(entity);
+
+        TransactionTemplate transaction =
+                new TransactionTemplate(transactionManager);
+
+        List<OutboxEventJpaEntity> events =
+                transaction.execute(status ->
+                        repository.lockNextBatch(
+                                10,
+                                3,
+                                LocalDateTime.of(2026, 10, 1, 0, 0, 1),
+                                SUPPORTED_EVENT_TYPES
+                        )
+                );
+
+        assertThat(events).isEmpty();
+    }
+
+    @Test
+    void shouldLockEventWhenBackoffHasElapsed() {
+        OutboxEventJpaEntity entity =
+                newEvent(LocalDateTime.of(2026, 9, 30, 10, 0));
+
+        entity.setNextAttemptAt(
+                LocalDateTime.of(2026, 10, 1, 0, 0, 2)
+        );
+
+        repository.saveAndFlush(entity);
+
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+
+        List<OutboxEventJpaEntity> events =
+                transaction.execute(status ->
+                        repository.lockNextBatch(
+                                10,
+                                3,
+                                LocalDateTime.of(2026, 10, 1, 0, 0, 2),
+                                SUPPORTED_EVENT_TYPES
+                        )
+                );
+
+        assertThat(events).hasSize(1);
+    }
+
+    @Test
+    void shouldExcludeUnsupportedEventTypes() {
+        OutboxEventJpaEntity unsupported =
+                newEvent(LocalDateTime.of(2026, 9, 30, 10, 0));
+
+        unsupported.setEventType("payment.succeeded");
+        repository.saveAndFlush(unsupported);
+
+        TransactionTemplate transaction = new TransactionTemplate(transactionManager);
+
+        List<OutboxEventJpaEntity> events =
+                transaction.execute(status ->
+                        repository.lockNextBatch(
+                                10,
+                                3,
+                                NOW,
+                                SUPPORTED_EVENT_TYPES
+                        )
+                );
+
+        assertThat(events).isEmpty();
     }
 
     private UUID insertEvent(LocalDateTime occurredAt) {
@@ -104,12 +204,13 @@ class OutboxLockingIntegrationTest {
         entity.setId(UUID.randomUUID());
         entity.setAggregateType("PAYMENT");
         entity.setAggregateId(UUID.randomUUID());
-        entity.setEventType("payment.succeeded");
+        entity.setEventType("payment.created");
         entity.setPayload("{}");
         entity.setHeaders(null);
         entity.setOccurredAt(occurredAt);
         entity.setPublishedAt(null);
         entity.setRetryCount(0);
+        entity.setNextAttemptAt(null);
         entity.setLastError(null);
         return entity;
     }

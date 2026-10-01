@@ -104,6 +104,15 @@ class KafkaOutboxMessagePublisherAdapterTest {
         assertThrows(KafkaOutboxPublishException.class, () -> adapter.publish(message));
     }
 
+    @Test
+    void shouldExposeSupportedEventTypes() {
+        assertThat(adapter.supportedEventTypes())
+                .containsExactlyInAnyOrder(
+                        "payment.created",
+                        "wallet.allocated"
+                );
+    }
+
     private OutboxMessage message(String aggregateType, String eventType) {
         return new OutboxMessage(
                 UUID.randomUUID(),
