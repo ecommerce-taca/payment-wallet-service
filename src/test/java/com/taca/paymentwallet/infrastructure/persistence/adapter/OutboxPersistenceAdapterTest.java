@@ -10,8 +10,11 @@ import com.taca.paymentwallet.domain.refund.RefundRequestedEvent;
 import com.taca.paymentwallet.domain.settlement.SettlementBatchCompletedEvent;
 import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.WalletAllocatedEvent;
+import com.taca.paymentwallet.application.metadata.RequestMetadata;
+import com.taca.paymentwallet.application.metadata.RequestMetadataContext;
 import com.taca.paymentwallet.infrastructure.persistence.entity.OutboxEventJpaEntity;
 import com.taca.paymentwallet.infrastructure.persistence.repository.OutboxEventJpaRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -55,11 +58,30 @@ class OutboxPersistenceAdapterTest {
         objectMapper =
                 mock(ObjectMapper.class);
 
+        try {
+            when(
+                    objectMapper.writeValueAsString(
+                            any(
+                                    com.taca.paymentwallet.infrastructure.messaging.metadata.OutboxHeaders.class
+                            )
+                    )
+            ).thenReturn(
+                    "{}"
+            );
+        } catch (Exception exception) {
+            throw new RuntimeException(exception);
+        }
+
         adapter =
                 new OutboxPersistenceAdapter(
                         repository,
                         objectMapper
                 );
+    }
+
+    @AfterEach
+    void clearMetadata() {
+        RequestMetadataContext.clear();
     }
 
     @Test
@@ -80,6 +102,16 @@ class OutboxPersistenceAdapterTest {
         when(
                 objectMapper.writeValueAsString(event)
         ).thenReturn(payload);
+
+        when(
+                objectMapper.writeValueAsString(
+                        any(com.taca.paymentwallet.infrastructure.messaging.metadata.OutboxHeaders.class)
+                )
+        ).thenReturn(
+                """
+                {"eventId":"01991e80-1111-7000-8000-000000000001"}
+                """
+        );
 
         adapter.save(event);
 
@@ -122,8 +154,12 @@ class OutboxPersistenceAdapterTest {
                 entity.getPayload()
         );
 
-        assertNull(
-                entity.getHeaders()
+        assertNotNull(entity.getHeaders());
+
+        assertTrue(
+                entity.getHeaders().contains(
+                        EVENT_ID.toString()
+                )
         );
 
         assertEquals(
@@ -577,5 +613,60 @@ class OutboxPersistenceAdapterTest {
                         "BANK_TRANSFER_FAILED"
                 )
         );
+    }
+
+    @Test
+    void shouldPersistRequestAndTraceMetadata()
+            throws Exception {
+
+        PaymentSucceededEvent event =
+                new PaymentSucceededEvent(
+                        EVENT_ID,
+                        OCCURRED_AT,
+                        new PaymentId(PAYMENT_ID),
+                        Money.vnd(100_000)
+                );
+
+        RequestMetadataContext.set(
+                new RequestMetadata(
+                        "req-001",
+                        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                        "vendor=value"
+                )
+        );
+
+        when(
+                objectMapper.writeValueAsString(event)
+        ).thenReturn("{}");
+
+        when(
+                objectMapper.writeValueAsString(
+                        any(com.taca.paymentwallet.infrastructure.messaging.metadata.OutboxHeaders.class)
+                )
+        ).thenReturn(
+                """
+                {
+                  "eventId":"01991e80-1111-7000-8000-000000000001",
+                  "requestId":"req-001",
+                  "traceparent":"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                  "tracestate":"vendor=value"
+                }
+                """
+        );
+
+        adapter.save(event);
+
+        ArgumentCaptor<OutboxEventJpaEntity> captor =
+                ArgumentCaptor.forClass(
+                        OutboxEventJpaEntity.class
+                );
+
+        verify(repository).save(captor.capture());
+
+        String headers = captor.getValue().getHeaders();
+
+        assertTrue(headers.contains("req-001"));
+        assertTrue(headers.contains("traceparent"));
+        assertTrue(headers.contains("vendor=value"));
     }
 }

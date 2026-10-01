@@ -359,13 +359,32 @@ public class InfrastructureConfiguration {
     KafkaTopicRouter kafkaTopicRouter(KafkaTopicProperties properties) {
         return new KafkaTopicRouter(properties);
     }
+    
+    @Bean
+    KafkaDeadLetterHeaderMapper kafkaDeadLetterHeaderMapper(
+            ObjectMapper objectMapper
+    ) {
+        return new KafkaDeadLetterHeaderMapper(objectMapper);
+    }
 
     @Bean
     OutboxMessagePublisherPort outboxMessagePublisherPort(
             KafkaTemplate<String, String> kafkaTemplate,
-            KafkaTopicRouter topicRouter
+            KafkaTopicRouter topicRouter,
+            KafkaHeaderMapper headerMapper
     ) {
-        return new KafkaOutboxMessagePublisherAdapter(kafkaTemplate, topicRouter);
+        return new KafkaOutboxMessagePublisherAdapter(
+                kafkaTemplate,
+                topicRouter,
+                headerMapper
+        );
+    }
+
+    @Bean
+    KafkaHeaderMapper kafkaHeaderMapper(
+            ObjectMapper objectMapper
+    ) {
+        return new KafkaHeaderMapper(objectMapper);
     }
 
     @Bean
@@ -449,12 +468,14 @@ public class InfrastructureConfiguration {
     DeadLetterPublisherPort deadLetterPublisherPort(
             KafkaTemplate<String, String> kafkaTemplate,
             KafkaTopicProperties properties,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            KafkaDeadLetterHeaderMapper headerMapper
     ) {
         return new KafkaDeadLetterPublisherAdapter(
                 kafkaTemplate,
                 properties,
-                objectMapper
+                objectMapper,
+                headerMapper
         );
     }
 }
