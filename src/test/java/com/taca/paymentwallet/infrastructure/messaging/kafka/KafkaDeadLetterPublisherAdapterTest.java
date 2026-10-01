@@ -1,18 +1,21 @@
 package com.taca.paymentwallet.infrastructure.messaging.kafka;
 
 import com.taca.paymentwallet.application.outbox.OutboxDeadLetter;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import tools.jackson.databind.ObjectMapper;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class KafkaDeadLetterPublisherAdapterTest {
@@ -21,6 +24,9 @@ class KafkaDeadLetterPublisherAdapterTest {
     private final KafkaTemplate<String, String> kafkaTemplate =
             mock(KafkaTemplate.class);
 
+    private final ObjectMapper objectMapper =
+            new ObjectMapper();
+
     private final KafkaTopicProperties properties =
             new KafkaTopicProperties(
                     "payment.events.v1",
@@ -28,78 +34,212 @@ class KafkaDeadLetterPublisherAdapterTest {
                     "payment-wallet.outbox.dlq.v1"
             );
 
-    private final ObjectMapper objectMapper =
-            new ObjectMapper();
+    private final KafkaDeadLetterHeaderMapper headerMapper =
+            new KafkaDeadLetterHeaderMapper(
+                    objectMapper
+            );
 
     private final KafkaDeadLetterPublisherAdapter adapter =
             new KafkaDeadLetterPublisherAdapter(
                     kafkaTemplate,
                     properties,
-                    objectMapper
+                    objectMapper,
+                    headerMapper
             );
 
     @Test
-    void shouldPublishDeadLetterToDlqUsingAggregateIdAsKey() {
-        OutboxDeadLetter deadLetter = deadLetter();
+    void shouldPublishToDlqUsingAggregateIdAsKey()
+            throws Exception {
 
-        when(kafkaTemplate.send(
-                eq("payment-wallet.outbox.dlq.v1"),
-                eq(deadLetter.aggregateId().toString()),
-                anyString()
-        )).thenReturn(
+        OutboxDeadLetter deadLetter =
+                deadLetter(null);
+
+        when(
+                kafkaTemplate.send(
+                        any(ProducerRecord.class)
+                )
+        ).thenReturn(
                 CompletableFuture.completedFuture(null)
         );
 
         adapter.publish(deadLetter);
 
+        ArgumentCaptor<ProducerRecord<String, String>> captor =
+                producerRecordCaptor();
+
         verify(kafkaTemplate).send(
-                eq("payment-wallet.outbox.dlq.v1"),
-                eq(deadLetter.aggregateId().toString()),
-                argThat(payload ->
-                        payload.contains(deadLetter.eventId().toString())
-                                && payload.contains("payment.created")
-                                && payload.contains("Kafka unavailable")
+                captor.capture()
+        );
+
+        ProducerRecord<String, String> record =
+                captor.getValue();
+
+        assertThat(record.topic())
+                .isEqualTo(
+                        "payment-wallet.outbox.dlq.v1"
+                );
+
+        assertThat(record.key())
+                .isEqualTo(
+                        deadLetter.aggregateId()
+                                .toString()
+                );
+
+        assertThat(record.value())
+                .contains(
+                        deadLetter.eventId()
+                                .toString()
+                );
+
+        assertThat(record.value())
+                .contains("payment.created");
+
+        assertThat(record.value())
+                .contains("Kafka unavailable");
+
+        assertThat(record.value())
+                .contains("\"retryCount\":3");
+    }
+
+    @Test
+    void shouldPropagateOriginalHeadersToDlq()
+            throws Exception {
+
+        UUID eventId = UUID.randomUUID();
+
+        String headers = """
+                {
+                  "eventId":"%s",
+                  "requestId":"req-dlq-001",
+                  "traceparent":"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                  "tracestate":"vendor=value"
+                }
+                """.formatted(eventId);
+
+        OutboxDeadLetter deadLetter =
+                new OutboxDeadLetter(
+                        eventId,
+                        "PAYMENT",
+                        UUID.randomUUID(),
+                        "payment.created",
+                        "{}",
+                        headers,
+                        Instant.parse(
+                                "2026-10-01T10:00:00Z"
+                        ),
+                        3,
+                        "Kafka unavailable"
+                );
+
+        when(
+                kafkaTemplate.send(
+                        any(ProducerRecord.class)
                 )
+        ).thenReturn(
+                CompletableFuture.completedFuture(null)
+        );
+
+        adapter.publish(deadLetter);
+
+        ArgumentCaptor<ProducerRecord<String, String>> captor =
+                producerRecordCaptor();
+
+        verify(kafkaTemplate).send(
+                captor.capture()
+        );
+
+        ProducerRecord<String, String> record =
+                captor.getValue();
+
+        assertThat(
+                headerValue(
+                        record,
+                        KafkaHeaderNames.EVENT_ID
+                )
+        ).isEqualTo(eventId.toString());
+
+        assertThat(
+                headerValue(
+                        record,
+                        KafkaHeaderNames.REQUEST_ID
+                )
+        ).isEqualTo(
+                "req-dlq-001"
+        );
+
+        assertThat(
+                headerValue(
+                        record,
+                        KafkaHeaderNames.TRACEPARENT
+                )
+        ).isEqualTo(
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        );
+
+        assertThat(
+                headerValue(
+                        record,
+                        KafkaHeaderNames.TRACESTATE
+                )
+        ).isEqualTo(
+                "vendor=value"
         );
     }
 
     @Test
-    void shouldIncludeRetryCountInDlqPayload() {
-        OutboxDeadLetter deadLetter = deadLetter();
+    void shouldAlwaysPublishEventIdHeader()
+            throws Exception {
 
-        when(kafkaTemplate.send(
-                anyString(),
-                anyString(),
-                anyString()
-        )).thenReturn(
+        OutboxDeadLetter deadLetter =
+                deadLetter(null);
+
+        when(
+                kafkaTemplate.send(
+                        any(ProducerRecord.class)
+                )
+        ).thenReturn(
                 CompletableFuture.completedFuture(null)
         );
 
         adapter.publish(deadLetter);
 
+        ArgumentCaptor<ProducerRecord<String, String>> captor =
+                producerRecordCaptor();
+
         verify(kafkaTemplate).send(
-                anyString(),
-                anyString(),
-                argThat(payload -> payload.contains("\"retryCount\":3"))
+                captor.capture()
+        );
+
+        assertThat(
+                headerValue(
+                        captor.getValue(),
+                        KafkaHeaderNames.EVENT_ID
+                )
+        ).isEqualTo(
+                deadLetter.eventId()
+                        .toString()
         );
     }
 
     @Test
     void shouldWrapKafkaFailure() {
-        OutboxDeadLetter deadLetter = deadLetter();
+        OutboxDeadLetter deadLetter =
+                deadLetter(null);
 
         CompletableFuture<SendResult<String, String>> future =
                 new CompletableFuture<>();
 
         future.completeExceptionally(
-                new RuntimeException("Kafka unavailable")
+                new RuntimeException(
+                        "DLQ unavailable"
+                )
         );
 
-        when(kafkaTemplate.send(
-                anyString(),
-                anyString(),
-                anyString()
-        )).thenReturn(future);
+        when(
+                kafkaTemplate.send(
+                        any(ProducerRecord.class)
+                )
+        ).thenReturn(future);
 
         assertThrows(
                 KafkaOutboxPublishException.class,
@@ -107,46 +247,50 @@ class KafkaDeadLetterPublisherAdapterTest {
         );
     }
 
-    @Test
-    void shouldRestoreInterruptFlagWhenInterrupted() {
-        OutboxDeadLetter deadLetter = deadLetter();
-
-        CompletableFuture<SendResult<String, String>> future =
-                mock(CompletableFuture.class);
-
-        try {
-            when(future.get()).thenThrow(new InterruptedException());
-
-            when(kafkaTemplate.send(
-                    anyString(),
-                    anyString(),
-                    anyString()
-            )).thenReturn(future);
-
-            assertThrows(
-                    KafkaOutboxPublishException.class,
-                    () -> adapter.publish(deadLetter)
-            );
-
-            assertThat(Thread.currentThread().isInterrupted()).isTrue();
-        } catch (Exception exception) {
-            throw new RuntimeException(exception);
-        } finally {
-            Thread.interrupted();
-        }
-    }
-
-    private OutboxDeadLetter deadLetter() {
+    private OutboxDeadLetter deadLetter(
+            String headers
+    ) {
         return new OutboxDeadLetter(
                 UUID.randomUUID(),
                 "PAYMENT",
                 UUID.randomUUID(),
                 "payment.created",
                 "{\"status\":\"PENDING\"}",
-                null,
-                Instant.parse("2026-10-01T10:00:00Z"),
+                headers,
+                Instant.parse(
+                        "2026-10-01T10:00:00Z"
+                ),
                 3,
                 "Kafka unavailable"
+        );
+    }
+
+    @SuppressWarnings({
+            "unchecked",
+            "rawtypes"
+    })
+    private ArgumentCaptor<ProducerRecord<String, String>>
+    producerRecordCaptor() {
+        return ArgumentCaptor.forClass(
+                (Class) ProducerRecord.class
+        );
+    }
+
+    private String headerValue(
+            ProducerRecord<String, String> record,
+            String name
+    ) {
+        var header =
+                record.headers()
+                        .lastHeader(name);
+
+        if (header == null) {
+            return null;
+        }
+
+        return new String(
+                header.value(),
+                StandardCharsets.UTF_8
         );
     }
 }
