@@ -246,4 +246,24 @@ public class ApplicationConfiguration {
                 properties.retryBackoff()
         );
     }
+
+    @Bean
+    PublishOutboxDeadLetterUseCase publishOutboxDeadLetterUseCase(
+            OutboxDeadLetterPort deadLetterPort,
+            DeadLetterPublisherPort deadLetterPublisherPort,
+            OutboxMessagePublisherPort messagePublisherPort,
+            TransactionPort transactionPort,
+            ClockPort clockPort,
+            OutboxPublisherProperties properties
+    ) {
+        return new PublishOutboxDeadLetterService(
+                deadLetterPort,
+                deadLetterPublisherPort,
+                messagePublisherPort,
+                transactionPort,
+                clockPort,
+                properties.batchSize(),
+                properties.maxRetries()
+        );
+    }
 }

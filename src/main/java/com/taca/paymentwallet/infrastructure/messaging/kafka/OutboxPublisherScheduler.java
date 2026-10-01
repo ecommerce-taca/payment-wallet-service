@@ -1,5 +1,6 @@
 package com.taca.paymentwallet.infrastructure.messaging.kafka;
 
+import com.taca.paymentwallet.application.port.in.PublishOutboxDeadLetterUseCase;
 import com.taca.paymentwallet.application.port.in.PublishOutboxUseCase;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -17,8 +18,14 @@ public class OutboxPublisherScheduler {
 
     private final PublishOutboxUseCase publishOutboxUseCase;
 
-    public OutboxPublisherScheduler(PublishOutboxUseCase publishOutboxUseCase) {
+    private final PublishOutboxDeadLetterUseCase publishDeadLetterUseCase;
+
+    public OutboxPublisherScheduler(
+            PublishOutboxUseCase publishOutboxUseCase,
+            PublishOutboxDeadLetterUseCase publishDeadLetterUseCase
+    ) {
         this.publishOutboxUseCase = Objects.requireNonNull(publishOutboxUseCase);
+        this.publishDeadLetterUseCase = Objects.requireNonNull(publishDeadLetterUseCase);
     }
 
     @Scheduled(
@@ -26,5 +33,6 @@ public class OutboxPublisherScheduler {
     )
     public void publish() {
         publishOutboxUseCase.publishNextBatch();
+        publishDeadLetterUseCase.publishNextBatch();
     }
 }

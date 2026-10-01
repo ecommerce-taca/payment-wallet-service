@@ -193,6 +193,133 @@ class OutboxLockingIntegrationTest {
         assertThat(events).isEmpty();
     }
 
+    @Test
+    void shouldNotDeadLetterEventBeforeMaxRetries() {
+        OutboxEventJpaEntity entity =
+                newEvent(LocalDateTime.of(2026, 10, 1, 10, 0));
+
+        entity.setRetryCount(2);
+        entity.setLastError("Kafka unavailable");
+        repository.saveAndFlush(entity);
+
+        TransactionTemplate transaction =
+                new TransactionTemplate(transactionManager);
+
+        List<OutboxEventJpaEntity> result =
+                transaction.execute(status ->
+                        repository.lockNextDeadLetterBatch(
+                                10,
+                                3,
+                                SUPPORTED_EVENT_TYPES
+                        )
+                );
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldLockEventForDeadLetterWhenMaxRetriesReached() {
+        OutboxEventJpaEntity entity =
+                newEvent(LocalDateTime.of(2026, 10, 1, 10, 0));
+
+        entity.setRetryCount(3);
+        entity.setLastError("Kafka unavailable");
+        repository.saveAndFlush(entity);
+
+        TransactionTemplate transaction =
+                new TransactionTemplate(transactionManager);
+
+        List<OutboxEventJpaEntity> result =
+                transaction.execute(status ->
+                        repository.lockNextDeadLetterBatch(
+                                10,
+                                3,
+                                SUPPORTED_EVENT_TYPES
+                        )
+                );
+
+        assertThat(result)
+                .extracting(OutboxEventJpaEntity::getId)
+                .containsExactly(entity.getId());
+    }
+
+    @Test
+    void shouldNotDeadLetterPublishedEvent() {
+        OutboxEventJpaEntity entity =
+                newEvent(LocalDateTime.of(2026, 10, 1, 10, 0));
+
+        entity.setRetryCount(3);
+        entity.setPublishedAt(LocalDateTime.of(2026, 10, 1, 10, 1));
+        entity.setLastError("old error");
+        repository.saveAndFlush(entity);
+
+        TransactionTemplate transaction =
+                new TransactionTemplate(transactionManager);
+
+        List<OutboxEventJpaEntity> result =
+                transaction.execute(status ->
+                        repository.lockNextDeadLetterBatch(
+                                10,
+                                3,
+                                SUPPORTED_EVENT_TYPES
+                        )
+                );
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldNotLockAlreadyDeadLetteredEvent() {
+        OutboxEventJpaEntity entity =
+                newEvent(LocalDateTime.of(2026, 10, 1, 10, 0));
+
+        entity.setRetryCount(3);
+        entity.setLastError("Kafka unavailable");
+        entity.setDeadLetteredAt(
+                LocalDateTime.of(2026, 10, 1, 10, 5)
+        );
+        repository.saveAndFlush(entity);
+
+        TransactionTemplate transaction =
+                new TransactionTemplate(transactionManager);
+
+        List<OutboxEventJpaEntity> result =
+                transaction.execute(status ->
+                        repository.lockNextDeadLetterBatch(
+                                10,
+                                3,
+                                SUPPORTED_EVENT_TYPES
+                        )
+                );
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void shouldNotDeadLetterUnsupportedEventType() {
+        OutboxEventJpaEntity entity =
+                newEvent(LocalDateTime.of(2026, 10, 1, 10, 0));
+
+        entity.setEventType("payment.succeeded");
+        entity.setRetryCount(3);
+        entity.setLastError("Kafka unavailable");
+        repository.saveAndFlush(entity);
+
+        TransactionTemplate transaction =
+                new TransactionTemplate(transactionManager);
+
+        List<OutboxEventJpaEntity> result =
+                transaction.execute(status ->
+                        repository.lockNextDeadLetterBatch(
+                                10,
+                                3,
+                                SUPPORTED_EVENT_TYPES
+                        )
+                );
+
+        assertThat(result).isEmpty();
+    }
+
     private UUID insertEvent(LocalDateTime occurredAt) {
         OutboxEventJpaEntity entity = newEvent(occurredAt);
         repository.saveAndFlush(entity);
@@ -211,6 +338,7 @@ class OutboxLockingIntegrationTest {
         entity.setPublishedAt(null);
         entity.setRetryCount(0);
         entity.setNextAttemptAt(null);
+        entity.setDeadLetteredAt(null);
         entity.setLastError(null);
         return entity;
     }
