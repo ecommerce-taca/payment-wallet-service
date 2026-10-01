@@ -49,6 +49,9 @@ public class OutboxEventJpaEntity extends UuidEntity {
     @Column(name = "next_attempt_at")
     private LocalDateTime nextAttemptAt;
 
+    @Column(name = "dead_lettered_at")
+    private LocalDateTime deadLetteredAt;
+
     @Column(name = "last_error", length = 1000)
     private String lastError;
 }

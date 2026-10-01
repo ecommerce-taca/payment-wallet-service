@@ -9,8 +9,11 @@ class KafkaTopicPropertiesTest {
 
     @Test
     void shouldCreateValidTopicProperties() {
-        KafkaTopicProperties properties =
-                new KafkaTopicProperties("payment.events.v1", "wallet.events.v1");
+        KafkaTopicProperties properties = new KafkaTopicProperties(
+            "payment.events.v1",
+            "wallet.events.v1",
+            "payment-wallet.outbox.dlq.v1"
+        );
 
         assertThat(properties.paymentEvents()).isEqualTo("payment.events.v1");
         assertThat(properties.walletEvents()).isEqualTo("wallet.events.v1");
@@ -20,7 +23,11 @@ class KafkaTopicPropertiesTest {
     void shouldRejectBlankPaymentTopic() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new KafkaTopicProperties(" ", "wallet.events.v1")
+                () -> new KafkaTopicProperties(
+                        " ",
+                        "wallet.events.v1",
+                        "payment-wallet.outbox.dlq.v1"
+                )
         );
     }
 
@@ -28,7 +35,36 @@ class KafkaTopicPropertiesTest {
     void shouldRejectBlankWalletTopic() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new KafkaTopicProperties("payment.events.v1", " ")
+                () -> new KafkaTopicProperties(
+                        "payment.events.v1",
+                        " ",
+                        "payment-wallet.outbox.dlq.v1"
+                )
         );
+    }
+
+    @Test
+    void shouldRejectBlankOutboxDlqTopic() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new KafkaTopicProperties(
+                        "payment.events.v1",
+                        "wallet.events.v1",
+                        " "
+                )
+        );
+    }
+
+    @Test
+    void shouldExposeOutboxDlqTopic() {
+        KafkaTopicProperties properties =
+                new KafkaTopicProperties(
+                        "payment.events.v1",
+                        "wallet.events.v1",
+                        "payment-wallet.outbox.dlq.v1"
+                );
+
+        assertThat(properties.outboxDlq())
+                .isEqualTo("payment-wallet.outbox.dlq.v1");
     }
 }

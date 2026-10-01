@@ -7,10 +7,7 @@ import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256PaymentUrlHashAdapter;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256RequestHashAdapter;
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
-import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaOutboxMessagePublisherAdapter;
-import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaTopicProperties;
-import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaTopicRouter;
-import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxPublisherProperties;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
 import com.taca.paymentwallet.infrastructure.persistence.repository.*;
@@ -438,6 +435,26 @@ public class InfrastructureConfiguration {
                 lineRepository,
                 mapper,
                 clockPort
+        );
+    }
+
+    @Bean
+    OutboxDeadLetterPort outboxDeadLetterPort(
+            OutboxEventJpaRepository repository
+    ) {
+        return new OutboxDeadLetterPersistenceAdapter(repository);
+    }
+
+    @Bean
+    DeadLetterPublisherPort deadLetterPublisherPort(
+            KafkaTemplate<String, String> kafkaTemplate,
+            KafkaTopicProperties properties,
+            ObjectMapper objectMapper
+    ) {
+        return new KafkaDeadLetterPublisherAdapter(
+                kafkaTemplate,
+                properties,
+                objectMapper
         );
     }
 }

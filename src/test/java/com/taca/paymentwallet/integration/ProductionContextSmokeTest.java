@@ -98,6 +98,9 @@ class ProductionContextSmokeTest {
     private PublishOutboxUseCase publishOutboxUseCase;
 
     @Autowired
+    private PublishOutboxDeadLetterUseCase publishOutboxDeadLetterUseCase;
+
+    @Autowired
     private ObjectProvider<RunSettlementUseCase> runSettlementUseCaseProvider;
 
     @Autowired
@@ -118,5 +121,7 @@ class ProductionContextSmokeTest {
         assertThat(runSettlementUseCaseProvider.getIfAvailable()).isNull();
 
         assertThat(settlementCandidatePortProvider.getIfAvailable()).isNull();
+
+        assertThat(publishOutboxDeadLetterUseCase).isNotNull();
     }
 }

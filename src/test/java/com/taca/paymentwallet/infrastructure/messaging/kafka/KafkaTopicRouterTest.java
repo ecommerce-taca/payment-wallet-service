@@ -12,7 +12,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class KafkaTopicRouterTest {
 
     private final KafkaTopicRouter router = new KafkaTopicRouter(
-            new KafkaTopicProperties("payment.events.v1", "wallet.events.v1")
+            new KafkaTopicProperties(
+                    "payment.events.v1",
+                    "wallet.events.v1",
+                    "payment-wallet.outbox.dlq.v1"
+            )
     );
 
     @Test

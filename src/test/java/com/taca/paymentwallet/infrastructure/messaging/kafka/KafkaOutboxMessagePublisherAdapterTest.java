@@ -19,7 +19,11 @@ class KafkaOutboxMessagePublisherAdapterTest {
             mock(KafkaTemplate.class);
 
     private final KafkaTopicRouter router = new KafkaTopicRouter(
-            new KafkaTopicProperties("payment.events.v1", "wallet.events.v1")
+            new KafkaTopicProperties(
+                    "payment.events.v1",
+                    "wallet.events.v1",
+                    "payment-wallet.outbox.dlq.v1"
+            )
     );
 
     private final KafkaOutboxMessagePublisherAdapter adapter =

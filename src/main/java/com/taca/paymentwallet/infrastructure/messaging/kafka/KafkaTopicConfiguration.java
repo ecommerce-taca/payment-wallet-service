@@ -23,4 +23,12 @@ public class KafkaTopicConfiguration {
                 .replicas(1)
                 .build();
     }
+
+    @Bean
+    NewTopic outboxDlqTopic(KafkaTopicProperties properties) {
+        return TopicBuilder.name(properties.outboxDlq())
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
 }
