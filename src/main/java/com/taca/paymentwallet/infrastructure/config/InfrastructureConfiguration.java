@@ -7,7 +7,10 @@ import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256PaymentUrlHashAdapter;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256RequestHashAdapter;
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaOutboxMessagePublisherAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaTopicProperties;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaTopicRouter;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxPublisherProperties;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
 import com.taca.paymentwallet.infrastructure.persistence.repository.*;
@@ -21,6 +24,7 @@ import com.taca.paymentwallet.infrastructure.vnpay.*;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import tools.jackson.databind.ObjectMapper;
 
@@ -29,7 +33,8 @@ import java.time.Duration;
 @Configuration
 @EnableConfigurationProperties({
         VnpayProperties.class,
-        KafkaTopicProperties.class
+        KafkaTopicProperties.class,
+        OutboxPublisherProperties.class
 })
 public class InfrastructureConfiguration {
 
@@ -351,6 +356,19 @@ public class InfrastructureConfiguration {
     @Bean
     OutboxPublishingPort outboxPublishingPort(OutboxEventJpaRepository repository) {
         return new OutboxPublishingPersistenceAdapter(repository);
+    }
+
+    @Bean
+    KafkaTopicRouter kafkaTopicRouter(KafkaTopicProperties properties) {
+        return new KafkaTopicRouter(properties);
+    }
+
+    @Bean
+    OutboxMessagePublisherPort outboxMessagePublisherPort(
+            KafkaTemplate<String, String> kafkaTemplate,
+            KafkaTopicRouter topicRouter
+    ) {
+        return new KafkaOutboxMessagePublisherAdapter(kafkaTemplate, topicRouter);
     }
 
     @Bean

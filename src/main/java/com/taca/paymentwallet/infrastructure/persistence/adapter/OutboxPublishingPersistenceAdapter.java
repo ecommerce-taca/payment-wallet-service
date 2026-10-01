@@ -9,6 +9,7 @@ import com.taca.paymentwallet.infrastructure.persistence.repository.OutboxEventJ
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 public class OutboxPublishingPersistenceAdapter implements OutboxPublishingPort {
@@ -22,7 +23,12 @@ public class OutboxPublishingPersistenceAdapter implements OutboxPublishingPort 
     }
 
     @Override
-    public List<OutboxMessage> lockNextBatch(int batchSize, int maxRetries) {
+    public List<OutboxMessage> lockNextBatch(
+            int batchSize,
+            int maxRetries,
+            Instant now,
+            Set<String> eventTypes
+    ) {
         if (batchSize <= 0) {
             throw new IllegalArgumentException("batchSize must be positive");
         }
@@ -31,10 +37,19 @@ public class OutboxPublishingPersistenceAdapter implements OutboxPublishingPort 
             throw new IllegalArgumentException("maxRetries must be positive");
         }
 
-        return repository.lockNextBatch(batchSize, maxRetries)
-                .stream()
-                .map(this::toMessage)
-                .toList();
+        Objects.requireNonNull(now, "now must not be null");
+        Objects.requireNonNull(eventTypes, "eventTypes must not be null");
+
+        if (eventTypes.isEmpty()) {
+            return List.of();
+        }
+
+        return repository.lockNextBatch(
+                batchSize,
+                maxRetries,
+                PersistenceTimeMapper.toLocalDateTime(now),
+                eventTypes
+        ).stream().map(this::toMessage).toList();
     }
 
     @Override
@@ -49,14 +64,23 @@ public class OutboxPublishingPersistenceAdapter implements OutboxPublishingPort 
     }
 
     @Override
-    public void recordFailure(UUID eventId, String error) {
+    public void recordFailure(
+            UUID eventId,
+            String error,
+            Instant nextAttemptAt
+    ) {
         Objects.requireNonNull(eventId, "eventId must not be null");
+        Objects.requireNonNull(nextAttemptAt, "nextAttemptAt must not be null");
 
         if (error == null || error.isBlank()) {
             throw new IllegalArgumentException("error must not be blank");
         }
 
-        repository.incrementFailure(eventId, truncate(error));
+        repository.incrementFailure(
+                eventId,
+                truncate(error),
+                PersistenceTimeMapper.toLocalDateTime(nextAttemptAt)
+        );
     }
 
     private OutboxMessage toMessage(OutboxEventJpaEntity entity) {

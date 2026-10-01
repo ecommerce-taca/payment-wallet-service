@@ -93,6 +93,11 @@ class VnpayWebhookHttpE2ETest {
             DynamicPropertyRegistry registry
     ) {
         registry.add(
+                "app.outbox.publisher.enabled",
+                () -> false
+        );
+
+        registry.add(
                 "vnpay.tmn-code",
                 () -> "TESTCODE"
         );

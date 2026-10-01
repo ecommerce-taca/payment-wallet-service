@@ -6,6 +6,7 @@ import com.taca.paymentwallet.application.service.*;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.finance.RefundAllocationCalculator;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxPublisherProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -224,6 +225,25 @@ public class ApplicationConfiguration {
                 inboxEventPort,
                 clockPort,
                 transactionPort
+        );
+    }
+
+    @Bean
+    PublishOutboxUseCase publishOutboxUseCase(
+            OutboxPublishingPort outboxPublishingPort,
+            OutboxMessagePublisherPort publisherPort,
+            TransactionPort transactionPort,
+            ClockPort clockPort,
+            OutboxPublisherProperties properties
+    ) {
+        return new PublishOutboxService(
+                outboxPublishingPort,
+                publisherPort,
+                transactionPort,
+                clockPort,
+                properties.batchSize(),
+                properties.maxRetries(),
+                properties.retryBackoff()
         );
     }
 }
