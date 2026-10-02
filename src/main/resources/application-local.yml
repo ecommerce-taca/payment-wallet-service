@@ -29,6 +29,16 @@ spring:
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
 
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:payment-wallet-service}
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+
+      listener:
+        ack-mode: record
+
 app:
   kafka:
     topics:
