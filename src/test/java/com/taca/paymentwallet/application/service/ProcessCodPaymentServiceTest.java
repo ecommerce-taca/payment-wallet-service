@@ -261,6 +261,79 @@ class ProcessCodPaymentServiceTest {
         ))).isInstanceOf(UnsupportedPaymentMethodException.class);
     }
 
+    @Test
+    void shouldProcessCodAtWholeCheckoutGroupScope() {
+        ShopId firstShopId =
+                new ShopId(UUID.randomUUID());
+
+        ShopId secondShopId =
+                new ShopId(UUID.randomUUID());
+
+        Payment payment =
+                Payment.create(
+                        new PaymentId(UUID.randomUUID()),
+                        new CheckoutGroupId(UUID.randomUUID()),
+                        new BuyerUserId(UUID.randomUUID()),
+                        PaymentMethod.COD,
+                        Money.vnd(300_000),
+                        List.of(
+                                new PaymentOrder(
+                                        new OrderId(UUID.randomUUID()),
+                                        firstShopId,
+                                        Money.vnd(100_000)
+                                ),
+                                new PaymentOrder(
+                                        new OrderId(UUID.randomUUID()),
+                                        secondShopId,
+                                        Money.vnd(200_000)
+                                )
+                        )
+                );
+
+        payment.clearDomainEvents();
+
+        Wallet firstWallet =
+                Wallet.create(
+                        new WalletId(UUID.randomUUID()),
+                        firstShopId
+                );
+
+        Wallet secondWallet =
+                Wallet.create(
+                        new WalletId(UUID.randomUUID()),
+                        secondShopId
+                );
+
+        paymentRepository.add(payment);
+        walletRepository.add(firstWallet);
+        walletRepository.add(secondWallet);
+
+        ProcessCodPaymentResult result =
+                service.execute(
+                        new ProcessCodPaymentCommand(
+                                payment.checkoutGroupId().value(),
+                                CodPaymentResultStatus.DELIVERED,
+                                300_000,
+                                "VND",
+                                Instant.parse(
+                                        "2026-10-02T01:00:00Z"
+                                ),
+                                null
+                        )
+                );
+
+        assertThat(result.paymentStatus())
+                .isEqualTo("SUCCESS");
+
+        assertThat(
+                paymentAllocationRepository.allocations
+        ).hasSize(2);
+
+        assertThat(
+                ledgerPostingRepository.postings
+        ).hasSize(1);
+    }
+
     private Payment codPayment(
             ShopId shopId,
             Money amount
