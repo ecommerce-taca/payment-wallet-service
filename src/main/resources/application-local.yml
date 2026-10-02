@@ -36,8 +36,8 @@ spring:
       enable-auto-commit: false
       auto-offset-reset: earliest
 
-      listener:
-        ack-mode: record
+    listener:
+      ack-mode: record
 
 app:
   kafka:
