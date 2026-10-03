@@ -24,21 +24,10 @@ import com.taca.paymentwallet.application.port.out.VnpayGatewayPort;
 import com.taca.paymentwallet.application.result.CreatePaymentResult;
 import com.taca.paymentwallet.domain.event.DomainEvent;
 import com.taca.paymentwallet.domain.payment.Payment;
-import com.taca.paymentwallet.domain.valueobject.CheckoutGroupId;
-import com.taca.paymentwallet.domain.valueobject.LedgerAccountId;
-import com.taca.paymentwallet.domain.valueobject.LedgerPostingId;
-import com.taca.paymentwallet.domain.valueobject.PaymentAllocationId;
-import com.taca.paymentwallet.domain.valueobject.PaymentId;
-import com.taca.paymentwallet.domain.valueobject.PayoutId;
-import com.taca.paymentwallet.domain.valueobject.RefundId;
-import com.taca.paymentwallet.domain.valueobject.SettlementBatchId;
-import com.taca.paymentwallet.domain.valueobject.SettlementBatchItemId;
-import com.taca.paymentwallet.domain.valueobject.SettlementLineId;
-import com.taca.paymentwallet.domain.valueobject.WalletId;
+import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.application.port.out.PaymentAttemptRepositoryPort;
 import com.taca.paymentwallet.application.port.out.PaymentUrlHashPort;
 import com.taca.paymentwallet.domain.payment.PaymentAttempt;
-import com.taca.paymentwallet.domain.valueobject.PaymentAttemptId;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -445,6 +434,11 @@ class CreatePaymentServiceTest {
         public Payment save(Payment payment) {
             savedPayments.add(payment);
             return payment;
+        }
+
+        @Override
+        public Optional<Payment> findByOrderId(OrderId orderId) {
+            return Optional.empty();
         }
     }
 

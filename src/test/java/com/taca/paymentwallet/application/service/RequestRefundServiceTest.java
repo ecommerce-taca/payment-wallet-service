@@ -283,6 +283,11 @@ class RequestRefundServiceTest {
         }
 
         @Override
+        public Optional<Payment> findByOrderId(OrderId orderId) {
+            return Optional.empty();
+        }
+
+        @Override
         public Payment save(Payment payment) {
             this.payment = payment;
             return payment;
