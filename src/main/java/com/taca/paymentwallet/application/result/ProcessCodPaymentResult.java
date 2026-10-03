@@ -7,7 +7,9 @@ import java.util.UUID;
 public record ProcessCodPaymentResult(
         UUID paymentId,
         UUID checkoutGroupId,
+        UUID orderId,
         String paymentStatus,
+        String orderCodStatus,
         CodPaymentProcessingAction action
 ) {
 
@@ -20,8 +22,16 @@ public record ProcessCodPaymentResult(
             throw new IllegalArgumentException("checkoutGroupId must not be null");
         }
 
+        if (orderId == null) {
+            throw new IllegalArgumentException("orderId must not be null");
+        }
+
         if (paymentStatus == null || paymentStatus.isBlank()) {
             throw new IllegalArgumentException("paymentStatus must not be blank");
+        }
+
+        if (orderCodStatus == null || orderCodStatus.isBlank()) {
+            throw new IllegalArgumentException("orderCodStatus must not be blank");
         }
 
         if (action == null) {
@@ -29,5 +39,6 @@ public record ProcessCodPaymentResult(
         }
 
         paymentStatus = paymentStatus.trim().toUpperCase();
+        orderCodStatus = orderCodStatus.trim().toUpperCase();
     }
 }

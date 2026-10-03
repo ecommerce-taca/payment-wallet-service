@@ -1,9 +1,6 @@
 package com.taca.paymentwallet.infrastructure.persistence.mapper;
 
-import com.taca.paymentwallet.domain.payment.Payment;
-import com.taca.paymentwallet.domain.payment.PaymentMethod;
-import com.taca.paymentwallet.domain.payment.PaymentOrder;
-import com.taca.paymentwallet.domain.payment.PaymentStatus;
+import com.taca.paymentwallet.domain.payment.*;
 import com.taca.paymentwallet.domain.valueobject.BuyerUserId;
 import com.taca.paymentwallet.domain.valueobject.CheckoutGroupId;
 import com.taca.paymentwallet.domain.valueobject.Money;
@@ -156,7 +153,10 @@ public class PaymentPersistenceMapper {
                 new Money(
                         entity.getShippingFee(),
                         entity.getCurrency()
-                )
+                ),
+                PaymentOrderCodStatus.valueOf(entity.getCodStatus()),
+                PersistenceTimeMapper.toInstant(entity.getCodProcessedAt()),
+                entity.getCodFailureCode()
         );
     }
 
@@ -197,9 +197,25 @@ public class PaymentPersistenceMapper {
         entity.setMerchandiseAmount(order.merchandiseAmount().amount());
         entity.setShippingFee(order.shippingFee().amount());
         entity.setCurrency(order.totalAmount().currency());
+        entity.setCodStatus(order.codStatus().name());
+        entity.setCodProcessedAt(PersistenceTimeMapper.toLocalDateTime(order.codProcessedAt()));
+        entity.setCodFailureCode(order.codFailureCode());
         entity.setCreatedAt(createdAt);
 
         return entity;
+    }
+
+    public void updateOrderProcessingState(PaymentOrder order, PaymentOrderJpaEntity entity) {
+        Objects.requireNonNull(order, "order must not be null");
+        Objects.requireNonNull(entity, "entity must not be null");
+
+        if (!order.orderId().value().equals(entity.getOrderId())) {
+            throw new IllegalArgumentException("payment order id does not match entity order id");
+        }
+
+        entity.setCodStatus(order.codStatus().name());
+        entity.setCodProcessedAt(PersistenceTimeMapper.toLocalDateTime(order.codProcessedAt()));
+        entity.setCodFailureCode(order.codFailureCode());
     }
 
     private void copyDomainState(

@@ -1,10 +1,7 @@
 package com.taca.paymentwallet.application.service;
 
 import com.taca.paymentwallet.application.command.ProcessCodPaymentCommand;
-import com.taca.paymentwallet.application.exception.PaymentAmountMismatchException;
-import com.taca.paymentwallet.application.exception.PaymentNotFoundByCheckoutGroupException;
-import com.taca.paymentwallet.application.exception.UnsupportedPaymentMethodException;
-import com.taca.paymentwallet.application.exception.WalletNotFoundException;
+import com.taca.paymentwallet.application.exception.*;
 import com.taca.paymentwallet.application.fee.PaymentFeePolicy;
 import com.taca.paymentwallet.application.payment.CodPaymentProcessingAction;
 import com.taca.paymentwallet.application.payment.CodPaymentResultStatus;
@@ -24,15 +21,12 @@ import com.taca.paymentwallet.domain.payment.Payment;
 import com.taca.paymentwallet.domain.payment.PaymentAllocation;
 import com.taca.paymentwallet.domain.payment.PaymentMethod;
 import com.taca.paymentwallet.domain.payment.PaymentOrder;
-import com.taca.paymentwallet.domain.payment.PaymentStatus;
 import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.domain.wallet.Wallet;
 import com.taca.paymentwallet.domain.wallet.WalletAllocatedEvent;
 
-import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -85,207 +79,109 @@ public class ProcessCodPaymentService implements ProcessCodPaymentUseCase {
     }
 
     private ProcessCodPaymentResult process(ProcessCodPaymentCommand command) {
-        CheckoutGroupId checkoutGroupId =
-                new CheckoutGroupId(command.checkoutGroupId());
+        OrderId orderId = new OrderId(command.orderId());
 
         Payment payment = paymentRepository
-                .findByCheckoutGroupIdForUpdate(checkoutGroupId)
-                .orElseThrow(() -> new PaymentNotFoundByCheckoutGroupException(checkoutGroupId));
+                .findByOrderIdForUpdate(orderId)
+                .orElseThrow(() -> new PaymentNotFoundByOrderException(orderId));
 
         ensureCodPayment(payment);
 
-        if (isTerminal(payment)) {
-            return toResult(payment, CodPaymentProcessingAction.DUPLICATE);
-        }
+        PaymentOrder order = payment.order(orderId);
 
-        ensureAmountMatches(payment, new Money(command.amount(), command.currency()));
+        if (!order.isCodPending()) {
+            return toResult(payment, order, CodPaymentProcessingAction.DUPLICATE);
+        }
 
         if (command.status() == CodPaymentResultStatus.DELIVERED) {
-            applyDeliveredCodPayment(payment, command);
-        } else {
-            payment.markFailed(command.failureCode());
-            paymentRepository.save(payment);
-            outboxPort.saveAll(payment.domainEvents());
-            payment.clearDomainEvents();
+            return applyDeliveredCodOrder(payment, order, command);
         }
 
-        return toResult(payment, CodPaymentProcessingAction.APPLIED);
+        return applyFailedCodOrder(payment, order, command);
     }
 
-    private void applyDeliveredCodPayment(
+    private ProcessCodPaymentResult applyDeliveredCodOrder(
             Payment payment,
+            PaymentOrder order,
             ProcessCodPaymentCommand command
     ) {
-        Map<ShopId, Wallet> walletsByShop =
-                loadWalletsForUpdate(payment.orders());
+        Wallet wallet = walletRepository
+                .findByShopIdAndCurrencyForUpdate(
+                        order.shopId(),
+                        order.totalAmount().currency()
+                )
+                .orElseThrow(() ->
+                        new WalletNotFoundException(
+                                order.shopId(),
+                                order.totalAmount().currency()
+                        ));
 
-        PaymentFeePolicy feePolicy =
-                feePolicyPort.currentPaymentFeePolicy();
+        PaymentFeePolicy feePolicy = feePolicyPort.currentPaymentFeePolicy();
 
-        payment.markSucceeded(command.occurredAt());
+        PaymentOrder capturedOrder =
+                payment.captureCodOrder(order.orderId(), command.occurredAt());
 
-        List<PaymentAllocation> allocations =
-                allocationCalculator.allocate(
-                        payment.id(),
-                        payment.orders(),
-                        allocationIdsByOrder(payment.orders()),
-                        walletIdsByShop(walletsByShop),
-                        feePolicy.feeConfigId(),
-                        feePolicy.taxConfigId(),
-                        feePolicy.commissionRate(),
-                        feePolicy.taxRate()
-                );
+        PaymentAllocation allocation = allocationCalculator.allocate(
+                payment.id(),
+                List.of(capturedOrder),
+                Map.of(
+                        capturedOrder.orderId(),
+                        idGeneratorPort.nextPaymentAllocationId()
+                ),
+                Map.of(capturedOrder.shopId(), wallet.id()),
+                feePolicy.feeConfigId(),
+                feePolicy.taxConfigId(),
+                feePolicy.commissionRate(),
+                feePolicy.taxRate()
+        ).getFirst();
 
         LedgerPosting posting =
-                ledgerPostingFactory.createPaymentCapturePosting(
+                ledgerPostingFactory.createCodOrderCapturePosting(
                         idGeneratorPort.nextLedgerPostingId(),
                         payment.id(),
+                        capturedOrder.orderId(),
                         ledgerAccountLookupPort.codClearingAccount(),
                         ledgerAccountLookupPort.platformCommissionAccount(),
                         ledgerAccountLookupPort.taxPayableAccount(),
                         ledgerAccountLookupPort.shipmentPayableAccount(),
                         ledgerAccountLookupPort.sellerPendingAccountsFor(
-                                distinctShopIds(payment.orders())
+                                List.of(capturedOrder.shopId())
                         ),
-                        allocations,
-                        totalShippingFee(payment.orders())
+                        allocation,
+                        capturedOrder.shippingFee()
                 );
 
-        creditSellerPendingWallets(
-                allocations,
-                walletsByShop
-        );
+        wallet.creditPending(allocation.sellerNetAmount());
 
         paymentRepository.save(payment);
-        paymentAllocationRepository.saveAll(allocations);
+        paymentAllocationRepository.saveAll(List.of(allocation));
         ledgerPostingRepository.save(posting);
+        walletRepository.save(wallet);
 
         outboxPort.saveAll(payment.domainEvents());
-
-        saveWalletAllocatedEvents(
-                allocations,
-                command.occurredAt()
-        );
-
+        outboxPort.save(WalletAllocatedEvent.from(allocation, command.occurredAt()));
         payment.clearDomainEvents();
+
+        return toResult(payment, capturedOrder, CodPaymentProcessingAction.APPLIED);
     }
 
-    private Money totalShippingFee(List<PaymentOrder> orders) {
-        return orders.stream()
-                .map(PaymentOrder::shippingFee)
-                .reduce(
-                        Money.vnd(0),
-                        Money::add
+    private ProcessCodPaymentResult applyFailedCodOrder(
+            Payment payment,
+            PaymentOrder order,
+            ProcessCodPaymentCommand command
+    ) {
+        PaymentOrder failedOrder =
+                payment.failCodOrder(
+                        order.orderId(),
+                        command.occurredAt(),
+                        command.failureCode()
                 );
-    }
 
-    private void saveWalletAllocatedEvents(
-            List<PaymentAllocation> allocations,
-            Instant occurredAt
-    ) {
-        for (PaymentAllocation allocation : allocations) {
-            outboxPort.save(
-                    WalletAllocatedEvent.from(
-                            allocation,
-                            occurredAt
-                    )
-            );
-        }
-    }
+        paymentRepository.save(payment);
+        outboxPort.saveAll(payment.domainEvents());
+        payment.clearDomainEvents();
 
-    private Map<ShopId, Wallet> loadWalletsForUpdate(
-            List<PaymentOrder> orders
-    ) {
-        Map<ShopId, Wallet> result = new LinkedHashMap<>();
-
-        for (PaymentOrder order : orders) {
-            ShopId shopId = order.shopId();
-
-            if (result.containsKey(shopId)) {
-                continue;
-            }
-
-            String currency = order.amount().currency();
-
-            Wallet wallet = walletRepository
-                    .findByShopIdAndCurrencyForUpdate(
-                            shopId,
-                            currency
-                    )
-                    .orElseThrow(() -> new WalletNotFoundException(
-                            shopId,
-                            currency
-                    ));
-
-            result.put(shopId, wallet);
-        }
-
-        return result;
-    }
-
-    private Map<ShopId, WalletId> walletIdsByShop(
-            Map<ShopId, Wallet> walletsByShop
-    ) {
-        Map<ShopId, WalletId> result = new LinkedHashMap<>();
-
-        walletsByShop.forEach(
-                (shopId, wallet) ->
-                        result.put(shopId, wallet.id())
-        );
-
-        return result;
-    }
-
-    private void creditSellerPendingWallets(
-            List<PaymentAllocation> allocations,
-            Map<ShopId, Wallet> walletsByShop
-    ) {
-        Map<ShopId, Money> sellerNetAmountByShop =
-                new LinkedHashMap<>();
-
-        for (PaymentAllocation allocation : allocations) {
-            sellerNetAmountByShop.merge(
-                    allocation.shopId(),
-                    allocation.sellerNetAmount(),
-                    Money::add
-            );
-        }
-
-        for (Map.Entry<ShopId, Money> entry
-                : sellerNetAmountByShop.entrySet()) {
-
-            ShopId shopId = entry.getKey();
-            Money sellerNetAmount = entry.getValue();
-
-            Wallet wallet = walletsByShop.get(shopId);
-
-            if (wallet == null) {
-                throw new IllegalStateException(
-                        "Wallet not loaded for shop "
-                                + shopId.value()
-                );
-            }
-
-            wallet.creditPending(sellerNetAmount);
-            walletRepository.save(wallet);
-        }
-    }
-
-    private Map<OrderId, PaymentAllocationId> allocationIdsByOrder(List<PaymentOrder> orders) {
-        Map<OrderId, PaymentAllocationId> result = new LinkedHashMap<>();
-
-        for (PaymentOrder order : orders) {
-            result.put(order.orderId(), idGeneratorPort.nextPaymentAllocationId());
-        }
-
-        return result;
-    }
-
-    private List<ShopId> distinctShopIds(List<PaymentOrder> orders) {
-        return orders.stream()
-                .map(PaymentOrder::shopId)
-                .distinct()
-                .toList();
+        return toResult(payment, failedOrder, CodPaymentProcessingAction.APPLIED);
     }
 
     private void ensureCodPayment(Payment payment) {
@@ -294,32 +190,17 @@ public class ProcessCodPaymentService implements ProcessCodPaymentUseCase {
         }
     }
 
-    private boolean isTerminal(Payment payment) {
-        return payment.status() == PaymentStatus.SUCCESS
-                || payment.status() == PaymentStatus.FAILED
-                || payment.status() == PaymentStatus.EXPIRED
-                || payment.status() == PaymentStatus.PARTIALLY_REFUNDED
-                || payment.status() == PaymentStatus.REFUNDED;
-    }
-
-    private void ensureAmountMatches(Payment payment, Money actualAmount) {
-        if (!payment.amount().equals(actualAmount)) {
-            throw new PaymentAmountMismatchException(
-                    payment.id(),
-                    payment.amount(),
-                    actualAmount
-            );
-        }
-    }
-
     private ProcessCodPaymentResult toResult(
             Payment payment,
+            PaymentOrder order,
             CodPaymentProcessingAction action
     ) {
         return new ProcessCodPaymentResult(
                 payment.id().value(),
                 payment.checkoutGroupId().value(),
+                order.orderId().value(),
                 payment.status().name(),
+                order.codStatus().name(),
                 action
         );
     }

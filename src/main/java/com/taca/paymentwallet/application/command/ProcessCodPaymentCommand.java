@@ -6,29 +6,19 @@ import java.time.Instant;
 import java.util.UUID;
 
 public record ProcessCodPaymentCommand(
-        UUID checkoutGroupId,
+        UUID orderId,
         CodPaymentResultStatus status,
-        long amount,
-        String currency,
         Instant occurredAt,
         String failureCode
 ) {
 
     public ProcessCodPaymentCommand {
-        if (checkoutGroupId == null) {
-            throw new IllegalArgumentException("checkoutGroupId must not be null");
+        if (orderId == null) {
+            throw new IllegalArgumentException("orderId must not be null");
         }
 
         if (status == null) {
             throw new IllegalArgumentException("status must not be null");
-        }
-
-        if (amount <= 0) {
-            throw new IllegalArgumentException("amount must be positive");
-        }
-
-        if (currency == null || currency.isBlank()) {
-            throw new IllegalArgumentException("currency must not be blank");
         }
 
         if (occurredAt == null) {
@@ -38,10 +28,13 @@ public record ProcessCodPaymentCommand(
         if ((status == CodPaymentResultStatus.FAILED
                 || status == CodPaymentResultStatus.CANCELLED)
                 && (failureCode == null || failureCode.isBlank())) {
-            throw new IllegalArgumentException("failureCode must not be blank when COD payment failed");
+            throw new IllegalArgumentException(
+                    "failureCode must not be blank when COD payment failed"
+            );
         }
 
-        currency = currency.trim().toUpperCase();
-        failureCode = failureCode == null ? null : failureCode.trim().toUpperCase();
+        failureCode = failureCode == null
+                ? null
+                : failureCode.trim().toUpperCase();
     }
 }

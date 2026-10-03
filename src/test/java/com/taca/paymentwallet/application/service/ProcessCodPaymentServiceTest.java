@@ -1,8 +1,7 @@
 package com.taca.paymentwallet.application.service;
 
 import com.taca.paymentwallet.application.command.ProcessCodPaymentCommand;
-import com.taca.paymentwallet.application.exception.PaymentAmountMismatchException;
-import com.taca.paymentwallet.application.exception.PaymentNotFoundByCheckoutGroupException;
+import com.taca.paymentwallet.application.exception.PaymentNotFoundByOrderException;
 import com.taca.paymentwallet.application.exception.UnsupportedPaymentMethodException;
 import com.taca.paymentwallet.application.fee.PaymentFeePolicy;
 import com.taca.paymentwallet.application.payment.CodPaymentProcessingAction;
@@ -23,374 +22,592 @@ import java.time.Instant;
 import java.util.*;
 import java.util.function.Supplier;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ProcessCodPaymentServiceTest {
 
+    private static final Instant OCCURRED_AT = Instant.parse("2026-10-02T10:00:00Z");
+
     private final FakePaymentRepositoryPort paymentRepository = new FakePaymentRepositoryPort();
-    private final FakePaymentAllocationRepositoryPort paymentAllocationRepository = new FakePaymentAllocationRepositoryPort();
+    private final FakePaymentAllocationRepositoryPort allocationRepository = new FakePaymentAllocationRepositoryPort();
     private final FakeWalletRepositoryPort walletRepository = new FakeWalletRepositoryPort();
-    private final FakeLedgerPostingRepositoryPort ledgerPostingRepository = new FakeLedgerPostingRepositoryPort();
-    private final FakeLedgerAccountLookupPort ledgerAccountLookupPort = new FakeLedgerAccountLookupPort();
-    private final FakeFeePolicyPort feePolicyPort = new FakeFeePolicyPort();
-    private final FakeIdGeneratorPort idGeneratorPort = new FakeIdGeneratorPort();
-    private final FakeOutboxPort outboxPort = new FakeOutboxPort();
+    private final FakeLedgerPostingRepositoryPort ledgerRepository = new FakeLedgerPostingRepositoryPort();
+    private final FakeLedgerAccountLookupPort ledgerAccountLookup = new FakeLedgerAccountLookupPort();
+    private final FakeFeePolicyPort feePolicy = new FakeFeePolicyPort();
+    private final FakeIdGeneratorPort idGenerator = new FakeIdGeneratorPort();
+    private final FakeOutboxPort outbox = new FakeOutboxPort();
     private final FakeTransactionPort transactionPort = new FakeTransactionPort();
 
     private final ProcessCodPaymentService service = new ProcessCodPaymentService(
             paymentRepository,
-            paymentAllocationRepository,
+            allocationRepository,
             walletRepository,
-            ledgerPostingRepository,
-            ledgerAccountLookupPort,
-            feePolicyPort,
-            idGeneratorPort,
-            outboxPort,
+            ledgerRepository,
+            ledgerAccountLookup,
+            feePolicy,
+            idGenerator,
+            outbox,
             transactionPort,
             new AllocationCalculator(),
             new LedgerPostingFactory()
     );
 
     @Test
-    void shouldApplyDeliveredCodPayment() {
+    void shouldApplyDeliveredSingleOrderCodPayment() {
         ShopId shopId = new ShopId(UUID.randomUUID());
-        Wallet wallet = Wallet.create(new WalletId(UUID.randomUUID()), shopId);
         Payment payment = codPayment(shopId, Money.vnd(100_000));
+        Wallet wallet = Wallet.create(new WalletId(UUID.randomUUID()), shopId);
 
         paymentRepository.add(payment);
         walletRepository.add(wallet);
 
+        UUID orderId = payment.orders().getFirst().orderId().value();
+
         ProcessCodPaymentResult result = service.execute(new ProcessCodPaymentCommand(
-                payment.checkoutGroupId().value(),
+                orderId,
                 CodPaymentResultStatus.DELIVERED,
-                100_000,
-                "VND",
-                Instant.parse("2026-09-12T01:00:00Z"),
+                OCCURRED_AT,
                 null
         ));
 
         assertThat(result.action()).isEqualTo(CodPaymentProcessingAction.APPLIED);
+        assertThat(result.paymentId()).isEqualTo(payment.id().value());
+        assertThat(result.checkoutGroupId()).isEqualTo(payment.checkoutGroupId().value());
+        assertThat(result.orderId()).isEqualTo(orderId);
         assertThat(result.paymentStatus()).isEqualTo("SUCCESS");
+        assertThat(result.orderCodStatus()).isEqualTo("CAPTURED");
 
         assertThat(payment.status()).isEqualTo(PaymentStatus.SUCCESS);
         assertThat(payment.capturedAmount()).isEqualTo(Money.vnd(100_000));
+        assertThat(payment.order(new OrderId(orderId)).codStatus())
+                .isEqualTo(PaymentOrderCodStatus.CAPTURED);
 
-        assertThat(paymentAllocationRepository.allocations).hasSize(1);
-        assertThat(paymentAllocationRepository.allocations.getFirst().sellerNetAmount())
-                .isEqualTo(Money.vnd(92_000));
+        assertThat(allocationRepository.allocations).hasSize(1);
 
+        PaymentAllocation allocation = allocationRepository.allocations.getFirst();
+
+        assertThat(allocation.orderId()).isEqualTo(new OrderId(orderId));
+        assertThat(allocation.sellerNetAmount()).isEqualTo(Money.vnd(92_000));
         assertThat(wallet.pendingBalance()).isEqualTo(Money.vnd(92_000));
         assertThat(wallet.availableBalance()).isEqualTo(Money.vnd(0));
 
-        assertThat(ledgerPostingRepository.postings).hasSize(1);
-        assertThat(outboxPort.events).hasSize(2);
+        assertThat(ledgerRepository.postings).hasSize(1);
 
-        assertThat(outboxPort.events)
-                .anyMatch(event -> event instanceof PaymentSucceededEvent);
+        LedgerPosting posting = ledgerRepository.postings.getFirst();
 
-        assertThat(outboxPort.events)
-                .anyMatch(event -> event instanceof WalletAllocatedEvent);
+        assertThat(posting.postingType()).isEqualTo("COD_CAPTURE");
+        assertThat(posting.businessKey())
+                .isEqualTo("COD_CAPTURE:" + payment.id().value() + ":" + orderId);
 
-        PaymentAllocation allocation = paymentAllocationRepository.allocations.getFirst();
+        assertThat(outbox.events).hasSize(2);
+        assertThat(outbox.events).anyMatch(PaymentSucceededEvent.class::isInstance);
+        assertThat(outbox.events).anyMatch(WalletAllocatedEvent.class::isInstance);
 
-        WalletAllocatedEvent allocatedEvent =
-                outboxPort.events
-                        .stream()
-                        .filter(WalletAllocatedEvent.class::isInstance)
-                        .map(WalletAllocatedEvent.class::cast)
-                        .findFirst()
-                        .orElseThrow();
+        WalletAllocatedEvent allocatedEvent = outbox.events.stream()
+                .filter(WalletAllocatedEvent.class::isInstance)
+                .map(WalletAllocatedEvent.class::cast)
+                .findFirst()
+                .orElseThrow();
 
         assertThat(allocatedEvent.walletId()).isEqualTo(allocation.walletId());
-
         assertThat(allocatedEvent.orderId()).isEqualTo(allocation.orderId());
-
         assertThat(allocatedEvent.shopId()).isEqualTo(allocation.shopId());
-
         assertThat(allocatedEvent.grossAmount()).isEqualTo(allocation.grossAmount());
-
         assertThat(allocatedEvent.commissionAmount()).isEqualTo(allocation.commissionAmount());
-
         assertThat(allocatedEvent.taxAmount()).isEqualTo(allocation.taxAmount());
-
         assertThat(allocatedEvent.sellerNetAmount()).isEqualTo(allocation.sellerNetAmount());
-
-        assertThat(allocatedEvent.occurredAt()).isEqualTo(Instant.parse("2026-09-12T01:00:00Z"));
-
-        assertThat(allocation.paymentId()).isEqualTo(payment.id());
-        assertThat(allocation.walletId()).isEqualTo(wallet.id());
-        assertThat(allocation.feeConfigId()).isNotNull();
-        assertThat(allocation.taxConfigId()).isNotNull();
+        assertThat(allocatedEvent.occurredAt()).isEqualTo(OCCURRED_AT);
     }
 
     @Test
-    void shouldApplyFailedCodPayment() {
+    void shouldApplyFailedSingleOrderCodPayment() {
         ShopId shopId = new ShopId(UUID.randomUUID());
         Payment payment = codPayment(shopId, Money.vnd(100_000));
+
         paymentRepository.add(payment);
 
+        UUID orderId = payment.orders().getFirst().orderId().value();
+
         ProcessCodPaymentResult result = service.execute(new ProcessCodPaymentCommand(
-                payment.checkoutGroupId().value(),
+                orderId,
                 CodPaymentResultStatus.FAILED,
-                100_000,
-                "VND",
-                Instant.parse("2026-09-12T01:00:00Z"),
+                OCCURRED_AT,
                 "SHIPMENT_FAILED"
         ));
 
         assertThat(result.action()).isEqualTo(CodPaymentProcessingAction.APPLIED);
         assertThat(result.paymentStatus()).isEqualTo("FAILED");
+        assertThat(result.orderCodStatus()).isEqualTo("FAILED");
+
+        PaymentOrder order = payment.order(new OrderId(orderId));
+
+        assertThat(order.codStatus()).isEqualTo(PaymentOrderCodStatus.FAILED);
+        assertThat(order.codProcessedAt()).isEqualTo(OCCURRED_AT);
+        assertThat(order.codFailureCode()).isEqualTo("SHIPMENT_FAILED");
 
         assertThat(payment.status()).isEqualTo(PaymentStatus.FAILED);
         assertThat(payment.failureCode()).isEqualTo("SHIPMENT_FAILED");
+        assertThat(payment.capturedAmount()).isEqualTo(Money.vnd(0));
 
-        assertThat(paymentAllocationRepository.allocations).isEmpty();
-        assertThat(ledgerPostingRepository.postings).isEmpty();
-        assertThat(outboxPort.events).hasSize(1);
+        assertThat(allocationRepository.allocations).isEmpty();
+        assertThat(ledgerRepository.postings).isEmpty();
 
-        assertThat(outboxPort.events)
-                .singleElement()
-                .isInstanceOf(
-                        PaymentFailedEvent.class
-                );
+        assertThat(outbox.events)
+                .filteredOn(PaymentFailedEvent.class::isInstance)
+                .hasSize(1);
 
-        assertThat(outboxPort.events)
-                .noneMatch(event ->
-                        event instanceof WalletAllocatedEvent
-                );
+        assertThat(outbox.events)
+                .noneMatch(WalletAllocatedEvent.class::isInstance);
     }
 
     @Test
-    void shouldApplyCancelledCodPayment() {
+    void shouldApplyCancelledSingleOrderCodPayment() {
         ShopId shopId = new ShopId(UUID.randomUUID());
         Payment payment = codPayment(shopId, Money.vnd(100_000));
+
         paymentRepository.add(payment);
 
+        UUID orderId = payment.orders().getFirst().orderId().value();
+
         ProcessCodPaymentResult result = service.execute(new ProcessCodPaymentCommand(
-                payment.checkoutGroupId().value(),
+                orderId,
                 CodPaymentResultStatus.CANCELLED,
-                100_000,
-                "VND",
-                Instant.parse("2026-09-12T01:00:00Z"),
+                OCCURRED_AT,
                 "ORDER_CANCELLED"
         ));
 
         assertThat(result.action()).isEqualTo(CodPaymentProcessingAction.APPLIED);
         assertThat(result.paymentStatus()).isEqualTo("FAILED");
+        assertThat(result.orderCodStatus()).isEqualTo("FAILED");
         assertThat(payment.failureCode()).isEqualTo("ORDER_CANCELLED");
-        assertThat(outboxPort.events).hasSize(1);
+        assertThat(payment.order(new OrderId(orderId)).codFailureCode()).isEqualTo("ORDER_CANCELLED");
 
-        assertThat(outboxPort.events)
-                .singleElement()
-                .isInstanceOf(
-                        PaymentFailedEvent.class
-                );
+        assertThat(allocationRepository.allocations).isEmpty();
+        assertThat(ledgerRepository.postings).isEmpty();
 
-        assertThat(outboxPort.events)
-                .noneMatch(event ->
-                        event instanceof WalletAllocatedEvent
-                );
+        assertThat(outbox.events)
+                .filteredOn(PaymentFailedEvent.class::isInstance)
+                .hasSize(1);
     }
 
     @Test
-    void shouldIgnoreDuplicateTerminalCodPayment() {
-        ShopId shopId = new ShopId(UUID.randomUUID());
-        Payment payment = codPayment(shopId, Money.vnd(100_000));
-        payment.markSucceeded(Instant.parse("2026-09-12T01:00:00Z"));
-        payment.clearDomainEvents();
-
-        paymentRepository.add(payment);
-
-        ProcessCodPaymentResult result = service.execute(new ProcessCodPaymentCommand(
-                payment.checkoutGroupId().value(),
-                CodPaymentResultStatus.DELIVERED,
-                100_000,
-                "VND",
-                Instant.parse("2026-09-12T01:00:00Z"),
-                null
-        ));
-
-        assertThat(result.action()).isEqualTo(CodPaymentProcessingAction.DUPLICATE);
-        assertThat(result.paymentStatus()).isEqualTo("SUCCESS");
-        assertThat(paymentAllocationRepository.allocations).isEmpty();
-        assertThat(ledgerPostingRepository.postings).isEmpty();
-        assertThat(outboxPort.events).isEmpty();
-    }
-
-    @Test
-    void shouldRejectUnknownCheckoutGroup() {
+    void shouldRejectUnknownOrder() {
         assertThatThrownBy(() -> service.execute(new ProcessCodPaymentCommand(
                 UUID.randomUUID(),
                 CodPaymentResultStatus.DELIVERED,
-                100_000,
-                "VND",
-                Instant.parse("2026-09-12T01:00:00Z"),
+                OCCURRED_AT,
                 null
-        ))).isInstanceOf(PaymentNotFoundByCheckoutGroupException.class);
-    }
-
-    @Test
-    void shouldRejectAmountMismatch() {
-        ShopId shopId = new ShopId(UUID.randomUUID());
-        Payment payment = codPayment(shopId, Money.vnd(100_000));
-        paymentRepository.add(payment);
-
-        assertThatThrownBy(() -> service.execute(new ProcessCodPaymentCommand(
-                payment.checkoutGroupId().value(),
-                CodPaymentResultStatus.DELIVERED,
-                90_000,
-                "VND",
-                Instant.parse("2026-09-12T01:00:00Z"),
-                null
-        ))).isInstanceOf(PaymentAmountMismatchException.class);
+        ))).isInstanceOf(PaymentNotFoundByOrderException.class);
     }
 
     @Test
     void shouldRejectNonCodPayment() {
         ShopId shopId = new ShopId(UUID.randomUUID());
         Payment payment = vnpayPayment(shopId, Money.vnd(100_000));
+
         paymentRepository.add(payment);
 
+        UUID orderId = payment.orders().getFirst().orderId().value();
+
         assertThatThrownBy(() -> service.execute(new ProcessCodPaymentCommand(
-                payment.checkoutGroupId().value(),
+                orderId,
                 CodPaymentResultStatus.DELIVERED,
-                100_000,
-                "VND",
-                Instant.parse("2026-09-12T01:00:00Z"),
+                OCCURRED_AT,
                 null
         ))).isInstanceOf(UnsupportedPaymentMethodException.class);
     }
 
     @Test
-    void shouldProcessCodAtWholeCheckoutGroupScope() {
-        ShopId firstShopId =
-                new ShopId(UUID.randomUUID());
+    void shouldCaptureOnlyDeliveredChildOrder() {
+        ShopId firstShopId = new ShopId(UUID.randomUUID());
+        ShopId secondShopId = new ShopId(UUID.randomUUID());
 
-        ShopId secondShopId =
-                new ShopId(UUID.randomUUID());
+        PaymentOrder firstOrder = new PaymentOrder(
+                new OrderId(UUID.randomUUID()),
+                firstShopId,
+                Money.vnd(90_000),
+                Money.vnd(10_000)
+        );
 
-        Payment payment =
-                Payment.create(
-                        new PaymentId(UUID.randomUUID()),
-                        new CheckoutGroupId(UUID.randomUUID()),
-                        new BuyerUserId(UUID.randomUUID()),
-                        PaymentMethod.COD,
-                        Money.vnd(300_000),
-                        List.of(
-                                new PaymentOrder(
-                                        new OrderId(UUID.randomUUID()),
-                                        firstShopId,
-                                        Money.vnd(100_000)
-                                ),
-                                new PaymentOrder(
-                                        new OrderId(UUID.randomUUID()),
-                                        secondShopId,
-                                        Money.vnd(200_000)
-                                )
-                        )
-                );
+        PaymentOrder secondOrder = new PaymentOrder(
+                new OrderId(UUID.randomUUID()),
+                secondShopId,
+                Money.vnd(180_000),
+                Money.vnd(20_000)
+        );
+
+        Payment payment = Payment.create(
+                new PaymentId(UUID.randomUUID()),
+                new CheckoutGroupId(UUID.randomUUID()),
+                new BuyerUserId(UUID.randomUUID()),
+                PaymentMethod.COD,
+                Money.vnd(300_000),
+                List.of(firstOrder, secondOrder)
+        );
 
         payment.clearDomainEvents();
 
-        Wallet firstWallet =
-                Wallet.create(
-                        new WalletId(UUID.randomUUID()),
-                        firstShopId
-                );
-
-        Wallet secondWallet =
-                Wallet.create(
-                        new WalletId(UUID.randomUUID()),
-                        secondShopId
-                );
+        Wallet firstWallet = Wallet.create(new WalletId(UUID.randomUUID()), firstShopId);
+        Wallet secondWallet = Wallet.create(new WalletId(UUID.randomUUID()), secondShopId);
 
         paymentRepository.add(payment);
         walletRepository.add(firstWallet);
         walletRepository.add(secondWallet);
 
-        ProcessCodPaymentResult result =
-                service.execute(
-                        new ProcessCodPaymentCommand(
-                                payment.checkoutGroupId().value(),
-                                CodPaymentResultStatus.DELIVERED,
-                                300_000,
-                                "VND",
-                                Instant.parse(
-                                        "2026-10-02T01:00:00Z"
-                                ),
-                                null
-                        )
-                );
+        ProcessCodPaymentResult result = service.execute(new ProcessCodPaymentCommand(
+                firstOrder.orderId().value(),
+                CodPaymentResultStatus.DELIVERED,
+                OCCURRED_AT,
+                null
+        ));
 
-        assertThat(result.paymentStatus())
-                .isEqualTo("SUCCESS");
+        assertThat(result.action()).isEqualTo(CodPaymentProcessingAction.APPLIED);
+        assertThat(result.paymentStatus()).isEqualTo("PENDING_COD");
+        assertThat(result.orderCodStatus()).isEqualTo("CAPTURED");
 
-        assertThat(
-                paymentAllocationRepository.allocations
-        ).hasSize(2);
+        assertThat(payment.status()).isEqualTo(PaymentStatus.PENDING_COD);
+        assertThat(payment.capturedAmount()).isEqualTo(Money.vnd(100_000));
 
-        assertThat(
-                ledgerPostingRepository.postings
-        ).hasSize(1);
+        assertThat(payment.order(firstOrder.orderId()).codStatus())
+                .isEqualTo(PaymentOrderCodStatus.CAPTURED);
+
+        assertThat(payment.order(secondOrder.orderId()).codStatus())
+                .isEqualTo(PaymentOrderCodStatus.PENDING);
+
+        assertThat(allocationRepository.allocations).hasSize(1);
+        assertThat(allocationRepository.allocations.getFirst().orderId())
+                .isEqualTo(firstOrder.orderId());
+
+        assertThat(firstWallet.pendingBalance()).isEqualTo(Money.vnd(82_800));
+        assertThat(secondWallet.pendingBalance()).isEqualTo(Money.vnd(0));
+
+        assertThat(ledgerRepository.postings).hasSize(1);
+        assertThat(ledgerRepository.postings.getFirst().postingType()).isEqualTo("COD_CAPTURE");
+
+        assertThat(outbox.events).anyMatch(WalletAllocatedEvent.class::isInstance);
+        assertThat(outbox.events).noneMatch(PaymentSucceededEvent.class::isInstance);
     }
 
-    private Payment codPayment(
-            ShopId shopId,
-            Money amount
-    ) {
+    @Test
+    void shouldMarkPaymentSucceededOnlyAfterAllChildOrdersAreCaptured() {
+        ShopId firstShopId = new ShopId(UUID.randomUUID());
+        ShopId secondShopId = new ShopId(UUID.randomUUID());
+
+        PaymentOrder firstOrder = new PaymentOrder(
+                new OrderId(UUID.randomUUID()),
+                firstShopId,
+                Money.vnd(100_000)
+        );
+
+        PaymentOrder secondOrder = new PaymentOrder(
+                new OrderId(UUID.randomUUID()),
+                secondShopId,
+                Money.vnd(200_000)
+        );
+
+        Payment payment = Payment.create(
+                new PaymentId(UUID.randomUUID()),
+                new CheckoutGroupId(UUID.randomUUID()),
+                new BuyerUserId(UUID.randomUUID()),
+                PaymentMethod.COD,
+                Money.vnd(300_000),
+                List.of(firstOrder, secondOrder)
+        );
+
+        payment.clearDomainEvents();
+
+        walletRepository.add(Wallet.create(new WalletId(UUID.randomUUID()), firstShopId));
+        walletRepository.add(Wallet.create(new WalletId(UUID.randomUUID()), secondShopId));
+        paymentRepository.add(payment);
+
+        service.execute(new ProcessCodPaymentCommand(
+                firstOrder.orderId().value(),
+                CodPaymentResultStatus.DELIVERED,
+                OCCURRED_AT,
+                null
+        ));
+
+        assertThat(payment.status()).isEqualTo(PaymentStatus.PENDING_COD);
+        assertThat(payment.capturedAmount()).isEqualTo(Money.vnd(100_000));
+        assertThat(outbox.events).noneMatch(PaymentSucceededEvent.class::isInstance);
+
+        service.execute(new ProcessCodPaymentCommand(
+                secondOrder.orderId().value(),
+                CodPaymentResultStatus.DELIVERED,
+                OCCURRED_AT.plusSeconds(3600),
+                null
+        ));
+
+        assertThat(payment.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(payment.capturedAmount()).isEqualTo(Money.vnd(300_000));
+
+        assertThat(payment.order(firstOrder.orderId()).codStatus())
+                .isEqualTo(PaymentOrderCodStatus.CAPTURED);
+
+        assertThat(payment.order(secondOrder.orderId()).codStatus())
+                .isEqualTo(PaymentOrderCodStatus.CAPTURED);
+
+        assertThat(allocationRepository.allocations).hasSize(2);
+        assertThat(ledgerRepository.postings).hasSize(2);
+
+        assertThat(ledgerRepository.postings)
+                .extracting(LedgerPosting::businessKey)
+                .containsExactlyInAnyOrder(
+                        "COD_CAPTURE:" + payment.id().value() + ":" + firstOrder.orderId().value(),
+                        "COD_CAPTURE:" + payment.id().value() + ":" + secondOrder.orderId().value()
+                );
+
+        assertThat(outbox.events)
+                .filteredOn(PaymentSucceededEvent.class::isInstance)
+                .hasSize(1);
+
+        assertThat(outbox.events)
+                .filteredOn(WalletAllocatedEvent.class::isInstance)
+                .hasSize(2);
+    }
+
+    @Test
+    void shouldIgnoreDuplicateDeliveredChildOrder() {
+        ShopId shopId = new ShopId(UUID.randomUUID());
+        Payment payment = codPayment(shopId, Money.vnd(100_000));
+        Wallet wallet = Wallet.create(new WalletId(UUID.randomUUID()), shopId);
+
+        paymentRepository.add(payment);
+        walletRepository.add(wallet);
+
+        UUID orderId = payment.orders().getFirst().orderId().value();
+
+        ProcessCodPaymentCommand command = new ProcessCodPaymentCommand(
+                orderId,
+                CodPaymentResultStatus.DELIVERED,
+                OCCURRED_AT,
+                null
+        );
+
+        ProcessCodPaymentResult first = service.execute(command);
+        ProcessCodPaymentResult duplicate = service.execute(command);
+
+        assertThat(first.action()).isEqualTo(CodPaymentProcessingAction.APPLIED);
+        assertThat(duplicate.action()).isEqualTo(CodPaymentProcessingAction.DUPLICATE);
+        assertThat(duplicate.paymentStatus()).isEqualTo("SUCCESS");
+        assertThat(duplicate.orderCodStatus()).isEqualTo("CAPTURED");
+
+        assertThat(allocationRepository.allocations).hasSize(1);
+        assertThat(ledgerRepository.postings).hasSize(1);
+        assertThat(wallet.pendingBalance()).isEqualTo(Money.vnd(92_000));
+
+        assertThat(outbox.events)
+                .filteredOn(PaymentSucceededEvent.class::isInstance)
+                .hasSize(1);
+
+        assertThat(outbox.events)
+                .filteredOn(WalletAllocatedEvent.class::isInstance)
+                .hasSize(1);
+    }
+
+    @Test
+    void shouldIgnoreDuplicateFailedChildOrder() {
+        ShopId shopId = new ShopId(UUID.randomUUID());
+        Payment payment = codPayment(shopId, Money.vnd(100_000));
+
+        paymentRepository.add(payment);
+
+        UUID orderId = payment.orders().getFirst().orderId().value();
+
+        ProcessCodPaymentCommand command = new ProcessCodPaymentCommand(
+                orderId,
+                CodPaymentResultStatus.FAILED,
+                OCCURRED_AT,
+                "SHIPMENT_FAILED"
+        );
+
+        ProcessCodPaymentResult first = service.execute(command);
+        ProcessCodPaymentResult duplicate = service.execute(command);
+
+        assertThat(first.action()).isEqualTo(CodPaymentProcessingAction.APPLIED);
+        assertThat(duplicate.action()).isEqualTo(CodPaymentProcessingAction.DUPLICATE);
+        assertThat(duplicate.paymentStatus()).isEqualTo("FAILED");
+        assertThat(duplicate.orderCodStatus()).isEqualTo("FAILED");
+
+        assertThat(allocationRepository.allocations).isEmpty();
+        assertThat(ledgerRepository.postings).isEmpty();
+
+        assertThat(outbox.events)
+                .filteredOn(PaymentFailedEvent.class::isInstance)
+                .hasSize(1);
+    }
+
+    @Test
+    void shouldKeepPaymentPendingWhenChildOutcomesAreMixed() {
+        ShopId firstShopId = new ShopId(UUID.randomUUID());
+        ShopId secondShopId = new ShopId(UUID.randomUUID());
+
+        PaymentOrder firstOrder = new PaymentOrder(
+                new OrderId(UUID.randomUUID()),
+                firstShopId,
+                Money.vnd(100_000)
+        );
+
+        PaymentOrder secondOrder = new PaymentOrder(
+                new OrderId(UUID.randomUUID()),
+                secondShopId,
+                Money.vnd(200_000)
+        );
+
+        Payment payment = Payment.create(
+                new PaymentId(UUID.randomUUID()),
+                new CheckoutGroupId(UUID.randomUUID()),
+                new BuyerUserId(UUID.randomUUID()),
+                PaymentMethod.COD,
+                Money.vnd(300_000),
+                List.of(firstOrder, secondOrder)
+        );
+
+        payment.clearDomainEvents();
+
+        walletRepository.add(Wallet.create(new WalletId(UUID.randomUUID()), firstShopId));
+        paymentRepository.add(payment);
+
+        service.execute(new ProcessCodPaymentCommand(
+                firstOrder.orderId().value(),
+                CodPaymentResultStatus.DELIVERED,
+                OCCURRED_AT,
+                null
+        ));
+
+        service.execute(new ProcessCodPaymentCommand(
+                secondOrder.orderId().value(),
+                CodPaymentResultStatus.FAILED,
+                OCCURRED_AT.plusSeconds(3600),
+                "SHIPMENT_FAILED"
+        ));
+
+        assertThat(payment.order(firstOrder.orderId()).codStatus())
+                .isEqualTo(PaymentOrderCodStatus.CAPTURED);
+
+        assertThat(payment.order(secondOrder.orderId()).codStatus())
+                .isEqualTo(PaymentOrderCodStatus.FAILED);
+
+        assertThat(payment.status()).isEqualTo(PaymentStatus.PENDING_COD);
+        assertThat(payment.capturedAmount()).isEqualTo(Money.vnd(100_000));
+
+        assertThat(allocationRepository.allocations).hasSize(1);
+        assertThat(ledgerRepository.postings).hasSize(1);
+
+        assertThat(outbox.events)
+                .noneMatch(PaymentSucceededEvent.class::isInstance);
+
+        assertThat(outbox.events)
+                .noneMatch(PaymentFailedEvent.class::isInstance);
+    }
+
+    @Test
+    void shouldMarkPaymentFailedWhenAllChildOrdersFail() {
+        ShopId firstShopId = new ShopId(UUID.randomUUID());
+        ShopId secondShopId = new ShopId(UUID.randomUUID());
+
+        PaymentOrder firstOrder = new PaymentOrder(
+                new OrderId(UUID.randomUUID()),
+                firstShopId,
+                Money.vnd(100_000)
+        );
+
+        PaymentOrder secondOrder = new PaymentOrder(
+                new OrderId(UUID.randomUUID()),
+                secondShopId,
+                Money.vnd(200_000)
+        );
+
+        Payment payment = Payment.create(
+                new PaymentId(UUID.randomUUID()),
+                new CheckoutGroupId(UUID.randomUUID()),
+                new BuyerUserId(UUID.randomUUID()),
+                PaymentMethod.COD,
+                Money.vnd(300_000),
+                List.of(firstOrder, secondOrder)
+        );
+
+        payment.clearDomainEvents();
+        paymentRepository.add(payment);
+
+        service.execute(new ProcessCodPaymentCommand(
+                firstOrder.orderId().value(),
+                CodPaymentResultStatus.FAILED,
+                OCCURRED_AT,
+                "SHIPMENT_FAILED"
+        ));
+
+        assertThat(payment.status()).isEqualTo(PaymentStatus.PENDING_COD);
+
+        service.execute(new ProcessCodPaymentCommand(
+                secondOrder.orderId().value(),
+                CodPaymentResultStatus.FAILED,
+                OCCURRED_AT.plusSeconds(3600),
+                "SHIPMENT_FAILED"
+        ));
+
+        assertThat(payment.status()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(payment.capturedAmount()).isEqualTo(Money.vnd(0));
+
+        assertThat(payment.order(firstOrder.orderId()).codStatus())
+                .isEqualTo(PaymentOrderCodStatus.FAILED);
+
+        assertThat(payment.order(secondOrder.orderId()).codStatus())
+                .isEqualTo(PaymentOrderCodStatus.FAILED);
+
+        assertThat(outbox.events)
+                .filteredOn(PaymentFailedEvent.class::isInstance)
+                .hasSize(1);
+    }
+
+    private Payment codPayment(ShopId shopId, Money amount) {
         Payment payment = Payment.create(
                 new PaymentId(UUID.randomUUID()),
                 new CheckoutGroupId(UUID.randomUUID()),
                 new BuyerUserId(UUID.randomUUID()),
                 PaymentMethod.COD,
                 amount,
-                List.of(
-                        new PaymentOrder(
-                                new OrderId(UUID.randomUUID()),
-                                shopId,
-                                amount
-                        )
-                )
+                List.of(new PaymentOrder(
+                        new OrderId(UUID.randomUUID()),
+                        shopId,
+                        amount
+                ))
         );
 
         payment.clearDomainEvents();
-
         return payment;
     }
 
-    private Payment vnpayPayment(
-            ShopId shopId,
-            Money amount
-    ) {
+    private Payment vnpayPayment(ShopId shopId, Money amount) {
         Payment payment = Payment.create(
                 new PaymentId(UUID.randomUUID()),
                 new CheckoutGroupId(UUID.randomUUID()),
                 new BuyerUserId(UUID.randomUUID()),
                 PaymentMethod.VNPAY,
                 amount,
-                List.of(
-                        new PaymentOrder(
-                                new OrderId(UUID.randomUUID()),
-                                shopId,
-                                amount
-                        )
-                ),
-                Instant.parse("2026-09-12T01:15:00Z")
+                List.of(new PaymentOrder(
+                        new OrderId(UUID.randomUUID()),
+                        shopId,
+                        amount
+                )),
+                OCCURRED_AT.plusSeconds(900)
         );
 
         payment.clearDomainEvents();
-
         return payment;
     }
 
-    private static class FakePaymentRepositoryPort implements PaymentRepositoryPort {
+    private static final class FakePaymentRepositoryPort implements PaymentRepositoryPort {
 
         private final Map<PaymentId, Payment> paymentsById = new HashMap<>();
         private final Map<CheckoutGroupId, Payment> paymentsByCheckoutGroupId = new HashMap<>();
+        private final Map<OrderId, Payment> paymentsByOrderId = new HashMap<>();
 
         void add(Payment payment) {
             paymentsById.put(payment.id(), payment);
             paymentsByCheckoutGroupId.put(payment.checkoutGroupId(), payment);
+            payment.orders().forEach(order -> paymentsByOrderId.put(order.orderId(), payment));
         }
 
         @Override
@@ -404,8 +621,13 @@ class ProcessCodPaymentServiceTest {
         }
 
         @Override
-        public Optional<Payment> findByCheckoutGroupIdForUpdate(CheckoutGroupId checkoutGroupId) {
-            return findByCheckoutGroupId(checkoutGroupId);
+        public Optional<Payment> findByOrderId(OrderId orderId) {
+            return Optional.ofNullable(paymentsByOrderId.get(orderId));
+        }
+
+        @Override
+        public Optional<Payment> findByOrderIdForUpdate(OrderId orderId) {
+            return findByOrderId(orderId);
         }
 
         @Override
@@ -415,7 +637,8 @@ class ProcessCodPaymentServiceTest {
         }
     }
 
-    private static class FakePaymentAllocationRepositoryPort implements PaymentAllocationRepositoryPort {
+    private static final class FakePaymentAllocationRepositoryPort
+            implements PaymentAllocationRepositoryPort {
 
         private final List<PaymentAllocation> allocations = new ArrayList<>();
 
@@ -426,11 +649,13 @@ class ProcessCodPaymentServiceTest {
 
         @Override
         public List<PaymentAllocation> findByPaymentId(PaymentId paymentId) {
-            return allocations;
+            return allocations.stream()
+                    .filter(allocation -> allocation.paymentId().equals(paymentId))
+                    .toList();
         }
     }
 
-    private static class FakeWalletRepositoryPort implements WalletRepositoryPort {
+    private static final class FakeWalletRepositoryPort implements WalletRepositoryPort {
 
         private final Map<WalletId, Wallet> walletsById = new HashMap<>();
 
@@ -445,14 +670,11 @@ class ProcessCodPaymentServiceTest {
 
         @Override
         public Optional<Wallet> findByIdForUpdate(WalletId walletId) {
-            return Optional.ofNullable(walletsById.get(walletId));
+            return findById(walletId);
         }
 
         @Override
-        public Optional<Wallet> findByShopIdAndCurrencyForUpdate(
-                ShopId shopId,
-                String currency
-        ) {
+        public Optional<Wallet> findByShopIdAndCurrencyForUpdate(ShopId shopId, String currency) {
             return walletsById.values().stream()
                     .filter(wallet -> wallet.shopId().equals(shopId))
                     .filter(wallet -> wallet.currency().equals(currency))
@@ -466,7 +688,8 @@ class ProcessCodPaymentServiceTest {
         }
     }
 
-    private static class FakeLedgerPostingRepositoryPort implements LedgerPostingRepositoryPort {
+    private static final class FakeLedgerPostingRepositoryPort
+            implements LedgerPostingRepositoryPort {
 
         private final List<LedgerPosting> postings = new ArrayList<>();
 
@@ -476,15 +699,10 @@ class ProcessCodPaymentServiceTest {
         }
     }
 
-    private static class FakeLedgerAccountLookupPort implements LedgerAccountLookupPort {
+    private static final class FakeLedgerAccountLookupPort implements LedgerAccountLookupPort {
 
         @Override
         public LedgerAccountId vnpayClearingAccount() {
-            return new LedgerAccountId(UUID.randomUUID());
-        }
-
-        @Override
-        public LedgerAccountId codClearingAccount() {
             return new LedgerAccountId(UUID.randomUUID());
         }
 
@@ -506,11 +724,7 @@ class ProcessCodPaymentServiceTest {
         @Override
         public Map<ShopId, LedgerAccountId> sellerPendingAccountsFor(List<ShopId> shopIds) {
             Map<ShopId, LedgerAccountId> result = new HashMap<>();
-
-            for (ShopId shopId : shopIds) {
-                result.put(shopId, new LedgerAccountId(UUID.randomUUID()));
-            }
-
+            shopIds.forEach(shopId -> result.put(shopId, new LedgerAccountId(UUID.randomUUID())));
             return result;
         }
 
@@ -535,30 +749,27 @@ class ProcessCodPaymentServiceTest {
         public LedgerAccountId payoutClearingAccount() {
             return new LedgerAccountId(UUID.randomUUID());
         }
+
+        @Override
+        public LedgerAccountId codClearingAccount() {
+            return new LedgerAccountId(UUID.randomUUID());
+        }
     }
 
-    private static class FakeFeePolicyPort implements FeePolicyPort {
+    private static final class FakeFeePolicyPort implements FeePolicyPort {
 
         @Override
         public PaymentFeePolicy currentPaymentFeePolicy() {
             return new PaymentFeePolicy(
-                    new FeeConfigId(
-                            UUID.fromString(
-                                    "11111111-1111-1111-1111-111111111111"
-                            )
-                    ),
-                    new TaxConfigId(
-                            UUID.fromString(
-                                    "22222222-2222-2222-2222-222222222222"
-                            )
-                    ),
+                    new FeeConfigId(UUID.fromString("11111111-1111-1111-1111-111111111111")),
+                    new TaxConfigId(UUID.fromString("22222222-2222-2222-2222-222222222222")),
                     RateBps.of(700),
                     RateBps.of(100)
             );
         }
     }
 
-    private static class FakeOutboxPort implements OutboxPort {
+    private static final class FakeOutboxPort implements OutboxPort {
 
         private final List<DomainEvent> events = new ArrayList<>();
 
@@ -568,7 +779,7 @@ class ProcessCodPaymentServiceTest {
         }
     }
 
-    private static class FakeTransactionPort implements TransactionPort {
+    private static final class FakeTransactionPort implements TransactionPort {
 
         @Override
         public <T> T execute(Supplier<T> action) {
@@ -576,7 +787,7 @@ class ProcessCodPaymentServiceTest {
         }
     }
 
-    private static class FakeIdGeneratorPort implements IdGeneratorPort {
+    private static final class FakeIdGeneratorPort implements IdGeneratorPort {
 
         @Override
         public PaymentId nextPaymentId() {
@@ -630,9 +841,7 @@ class ProcessCodPaymentServiceTest {
 
         @Override
         public PaymentAttemptId nextPaymentAttemptId() {
-            return new PaymentAttemptId(
-                    UUID.randomUUID()
-            );
+            return new PaymentAttemptId(UUID.randomUUID());
         }
     }
 }

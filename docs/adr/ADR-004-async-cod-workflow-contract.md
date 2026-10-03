@@ -1,6 +1,6 @@
 # ADR-004 — Async COD Workflow Contract
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-02
 - Service: payment-wallet-service
 
@@ -43,33 +43,36 @@ The following are already authoritative:
 - Payment is scoped to checkout_group.
 - checkout_group may contain multiple child orders.
 
-## 3. Open decision — multi-order COD capture
+## 3. Decision
 
-The authoritative behavior for a multi-order checkout_group is not currently
-defined.
+Payment-Wallet uses per-order COD capture.
 
-The system must choose one of the following before production listener wiring:
+Each PaymentOrder owns its COD processing state:
 
-### Option A — checkout-group atomic capture
+- PENDING
+- CAPTURED
+- FAILED
 
-Payment becomes SUCCESS only after all child orders are successfully delivered.
+A delivered child order may be financially captured independently.
 
-No seller allocation is released before the final required delivery.
+The parent Payment remains PENDING_COD until all child orders are CAPTURED.
+When all child orders are CAPTURED, Payment becomes SUCCESS.
 
-This keeps one Payment transition and one capture posting.
+When all child orders are FAILED and no amount has been captured, Payment becomes FAILED.
 
-### Option B — per-order capture
+For mixed multi-order outcomes such as CAPTURED + FAILED, the existing PaymentStatus
+model has no authoritative aggregate status. Until that contract is extended:
 
-Each child order may be financially captured independently when its shipment
-is delivered.
+- child PaymentOrder state is authoritative;
+- captured financial postings remain valid;
+- failed child orders are not allocated;
+- Payment remains PENDING_COD;
+- no checkout-level payment.succeeded/payment.failed event is emitted.
 
-This requires additional domain/persistence state because current Payment
-status does not represent partial capture.
+Shipment/order events provide order_id for correlation.
 
-Potential additions would include per-PaymentOrder capture state and possibly
-a partially captured Payment status.
-
-This option must not be implemented implicitly.
+Payment-Wallet does not use amount/currency from shipment events as monetary authority.
+Financial values are read from payment_orders.
 
 ## 4. Event identity contract
 

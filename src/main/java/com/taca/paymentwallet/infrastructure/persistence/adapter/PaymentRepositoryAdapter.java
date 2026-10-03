@@ -5,6 +5,7 @@ import com.taca.paymentwallet.application.port.out.PaymentRepositoryPort;
 import com.taca.paymentwallet.domain.payment.Payment;
 import com.taca.paymentwallet.domain.payment.PaymentOrder;
 import com.taca.paymentwallet.domain.valueobject.CheckoutGroupId;
+import com.taca.paymentwallet.domain.valueobject.OrderId;
 import com.taca.paymentwallet.domain.valueobject.PaymentId;
 import com.taca.paymentwallet.infrastructure.persistence.entity.PaymentJpaEntity;
 import com.taca.paymentwallet.infrastructure.persistence.entity.PaymentOrderJpaEntity;
@@ -137,6 +138,26 @@ public class PaymentRepositoryAdapter
         return insertNew(payment);
     }
 
+    @Override
+    public Optional<Payment> findByOrderId(OrderId orderId) {
+        Objects.requireNonNull(orderId, "orderId must not be null");
+
+        return paymentOrderJpaRepository
+                .findPaymentIdByOrderId(orderId.value())
+                .flatMap(paymentJpaRepository::findById)
+                .map(this::toDomain);
+    }
+
+    @Override
+    public Optional<Payment> findByOrderIdForUpdate(OrderId orderId) {
+        Objects.requireNonNull(orderId, "orderId must not be null");
+
+        return paymentOrderJpaRepository
+                .findPaymentIdByOrderId(orderId.value())
+                .flatMap(paymentJpaRepository::findByIdForUpdate)
+                .map(this::toDomain);
+    }
+
     private Payment insertNew(
             Payment payment
     ) {
@@ -173,7 +194,7 @@ public class PaymentRepositoryAdapter
         );
 
         paymentJpaRepository.save(entity);
-
+        updateExistingOrders(payment);
         return payment;
     }
 
@@ -231,5 +252,25 @@ public class PaymentRepositoryAdapter
                 .toLocalDateTime(
                         clockPort.now()
                 );
+    }
+
+    private void updateExistingOrders(Payment payment) {
+        List<PaymentOrderJpaEntity> entities =
+                paymentOrderJpaRepository.findByPaymentId(payment.id().value());
+
+        for (PaymentOrderJpaEntity entity : entities) {
+            PaymentOrder order = payment.orders().stream()
+                    .filter(candidate -> candidate.orderId().value().equals(entity.getOrderId()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Persisted payment order is missing from aggregate: " + entity.getOrderId()
+                    ));
+
+            mapper.updateOrderProcessingState(order, entity);
+        }
+
+        if (!entities.isEmpty()) {
+            paymentOrderJpaRepository.saveAll(entities);
+        }
     }
 }
