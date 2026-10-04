@@ -6,10 +6,6 @@ spring:
     active: local
 
 management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
   endpoint:
     health:
       probes:
@@ -20,6 +16,7 @@ management:
           include:
             - readinessState
             - db
+            - kafkaReadiness
             - outboxBacklog
 
 app:
@@ -33,6 +30,10 @@ app:
     provisioning:
       enabled: ${KAFKA_TOPIC_PROVISIONING_GUARD_ENABLED:false}
       timeout: 10s
+
+    health:
+      enabled: true
+      timeout: 5s
 
   outbox:
     publisher:

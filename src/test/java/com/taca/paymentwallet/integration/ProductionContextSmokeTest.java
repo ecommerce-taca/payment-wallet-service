@@ -2,6 +2,7 @@ package com.taca.paymentwallet.integration;
 
 import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
+import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaInboxProcessor;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaProducerSafetyGuard;
@@ -121,6 +122,9 @@ class ProductionContextSmokeTest {
     @Autowired
     private KafkaProducerSafetyGuard kafkaProducerSafetyGuard;
 
+    @Autowired
+    private KafkaReadinessHealthIndicator kafkaReadinessHealthIndicator;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -146,5 +150,7 @@ class ProductionContextSmokeTest {
         assertThat(cleanupOutboxUseCase).isNotNull();
 
         assertThat(kafkaProducerSafetyGuard).isNotNull();
+
+        assertThat(kafkaReadinessHealthIndicator).isNotNull();
     }
 }

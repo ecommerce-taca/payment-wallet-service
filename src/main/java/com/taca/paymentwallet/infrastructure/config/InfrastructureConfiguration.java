@@ -6,6 +6,7 @@ import com.taca.paymentwallet.domain.finance.RefundAllocationCalculator;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256PaymentUrlHashAdapter;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256RequestHashAdapter;
+import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
@@ -40,7 +41,8 @@ import java.time.Duration;
         OutboxPublisherProperties.class,
         OutboxHealthProperties.class,
         OutboxCleanupProperties.class,
-        KafkaTopicProvisioningProperties.class
+        KafkaTopicProvisioningProperties.class,
+        KafkaHealthProperties.class
 })
 public class InfrastructureConfiguration {
 
@@ -582,6 +584,19 @@ public class InfrastructureConfiguration {
                 topicProperties,
                 properties,
                 topicNamesClient
+        );
+    }
+
+    @Bean
+    KafkaReadinessHealthIndicator kafkaReadinessHealthIndicator(
+            KafkaTopicNamesClient topicNamesClient,
+            KafkaTopicProperties topicProperties,
+            KafkaHealthProperties properties
+    ) {
+        return new KafkaReadinessHealthIndicator(
+                topicNamesClient,
+                topicProperties,
+                properties
         );
     }
 }
