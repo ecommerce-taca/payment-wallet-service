@@ -35,7 +35,8 @@ import java.time.Duration;
         VnpayProperties.class,
         KafkaTopicProperties.class,
         OutboxPublisherProperties.class,
-        OutboxHealthProperties.class
+        OutboxHealthProperties.class,
+        OutboxCleanupProperties.class
 })
 public class InfrastructureConfiguration {
 
@@ -515,6 +516,15 @@ public class InfrastructureConfiguration {
                 publisherPort,
                 clockPort,
                 properties
+        );
+    }
+
+    @Bean
+    OutboxCleanupPort outboxCleanupPort(
+            OutboxEventJpaRepository repository
+    ) {
+        return new OutboxCleanupPersistenceAdapter(
+                repository
         );
     }
 }

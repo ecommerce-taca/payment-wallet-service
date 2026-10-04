@@ -130,4 +130,30 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventJpaEn
     Optional<LocalDateTime> findOldestPendingOccurredAt(
             @Param("eventTypes") Set<String> eventTypes
     );
+
+    @Modifying
+    @Query(value = """
+        DELETE FROM outbox_events
+        WHERE id IN (
+            SELECT id
+            FROM (
+                SELECT id
+                FROM outbox_events
+                WHERE (
+                    published_at IS NOT NULL
+                    AND published_at < :cutoff
+                )
+                OR (
+                    dead_lettered_at IS NOT NULL
+                    AND dead_lettered_at < :cutoff
+                )
+                ORDER BY occurred_at ASC, id ASC
+                LIMIT :batchSize
+            ) AS cleanup_candidates
+        )
+        """, nativeQuery = true)
+    int deleteCompletedBefore(
+            @Param("cutoff") LocalDateTime cutoff,
+            @Param("batchSize") int batchSize
+    );
 }
