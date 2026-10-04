@@ -20,6 +20,7 @@ app:
     topics:
       payment-events: payment.events.v1
       wallet-events: wallet.events.v1
+      shipment-events: shipment.events.v1
       outbox-dlq: payment-wallet.outbox.dlq.v1
 
   outbox:

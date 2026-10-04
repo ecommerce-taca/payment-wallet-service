@@ -67,6 +67,53 @@ class KafkaInboundMetadataExtractorTest {
         );
     }
 
+    @Test
+    void shouldUseFallbackEventIdWhenHeaderIsMissing() {
+        ConsumerRecord<String, String> record =
+                new ConsumerRecord<>(
+                        "shipment.events.v1",
+                        0,
+                        0L,
+                        "order-key",
+                        "{}"
+                );
+
+        KafkaInboundMetadata metadata =
+                extractor.extract(
+                        record,
+                        "shipment-event-001"
+                );
+
+        assertThat(metadata.eventId())
+                .isEqualTo("shipment-event-001");
+    }
+
+    @Test
+    void shouldPreferHeaderEventIdOverFallbackEventId() {
+        ConsumerRecord<String, String> record =
+                new ConsumerRecord<>(
+                        "shipment.events.v1",
+                        0,
+                        0L,
+                        "order-key",
+                        "{}"
+                );
+
+        record.headers().add(
+                KafkaHeaderNames.EVENT_ID,
+                "header-event-001".getBytes(StandardCharsets.UTF_8)
+        );
+
+        KafkaInboundMetadata metadata =
+                extractor.extract(
+                        record,
+                        "payload-event-001"
+                );
+
+        assertThat(metadata.eventId())
+                .isEqualTo("header-event-001");
+    }
+
     private ConsumerRecord<String, String> record() {
         return new ConsumerRecord<>(
                 "shipment-topic",

@@ -31,6 +31,7 @@ class KafkaDeadLetterPublisherAdapterTest {
             new KafkaTopicProperties(
                     "payment.events.v1",
                     "wallet.events.v1",
+                    "shipment.events.v1",
                     "payment-wallet.outbox.dlq.v1"
             );
 

@@ -12,6 +12,7 @@ class KafkaTopicPropertiesTest {
         KafkaTopicProperties properties = new KafkaTopicProperties(
             "payment.events.v1",
             "wallet.events.v1",
+            "shipment.events.v1",
             "payment-wallet.outbox.dlq.v1"
         );
 
@@ -24,8 +25,9 @@ class KafkaTopicPropertiesTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new KafkaTopicProperties(
-                        " ",
+                        "",
                         "wallet.events.v1",
+                        "shipment.events.v1",
                         "payment-wallet.outbox.dlq.v1"
                 )
         );
@@ -37,7 +39,8 @@ class KafkaTopicPropertiesTest {
                 IllegalArgumentException.class,
                 () -> new KafkaTopicProperties(
                         "payment.events.v1",
-                        " ",
+                        "",
+                        "shipment.events.v1",
                         "payment-wallet.outbox.dlq.v1"
                 )
         );
@@ -50,7 +53,8 @@ class KafkaTopicPropertiesTest {
                 () -> new KafkaTopicProperties(
                         "payment.events.v1",
                         "wallet.events.v1",
-                        " "
+                        "",
+                        "payment-wallet.outbox.dlq.v1"
                 )
         );
     }
@@ -61,6 +65,7 @@ class KafkaTopicPropertiesTest {
                 new KafkaTopicProperties(
                         "payment.events.v1",
                         "wallet.events.v1",
+                        "shipment.events.v1",
                         "payment-wallet.outbox.dlq.v1"
                 );
 
