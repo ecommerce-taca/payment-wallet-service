@@ -1,6 +1,8 @@
 package com.taca.paymentwallet.infrastructure.messaging.kafka;
 
 import com.taca.paymentwallet.application.outbox.OutboxDeadLetter;
+import com.taca.paymentwallet.application.outbox.OutboxMessage;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -27,6 +29,14 @@ class KafkaDeadLetterPublisherAdapterTest {
     private final ObjectMapper objectMapper =
             new ObjectMapper();
 
+    private final SimpleMeterRegistry meterRegistry =
+            new SimpleMeterRegistry();
+
+    private final OutboxPublisherObservation observation =
+            new OutboxPublisherObservation(
+                    meterRegistry
+            );
+
     private final KafkaTopicProperties properties =
             new KafkaTopicProperties(
                     "payment.events.v1",
@@ -45,7 +55,8 @@ class KafkaDeadLetterPublisherAdapterTest {
                     kafkaTemplate,
                     properties,
                     objectMapper,
-                    headerMapper
+                    headerMapper,
+                    observation
             );
 
     @Test
@@ -246,6 +257,86 @@ class KafkaDeadLetterPublisherAdapterTest {
                 KafkaOutboxPublishException.class,
                 () -> adapter.publish(deadLetter)
         );
+    }
+
+    @Test
+    void shouldRecordSuccessfulDlqPublishMetric()
+            throws Exception {
+
+        OutboxDeadLetter deadLetter =
+                deadLetter(null);
+
+        when(
+                kafkaTemplate.send(
+                        any(ProducerRecord.class)
+                )
+        ).thenReturn(
+                CompletableFuture.completedFuture(null)
+        );
+
+        adapter.publish(deadLetter);
+
+        double count = meterRegistry
+                .get(
+                        OutboxPublisherObservation
+                                .DLQ_TOTAL
+                )
+                .tag(
+                        "event_type",
+                        "payment.created"
+                )
+                .tag(
+                        "topic",
+                        "payment-wallet.outbox.dlq.v1"
+                )
+                .tag(
+                        "result",
+                        "success"
+                )
+                .counter()
+                .count();
+
+        assertThat(count)
+                .isEqualTo(1.0);
+    }
+
+    @Test
+    void shouldRecordDlqPublishLatency()
+            throws Exception {
+
+        OutboxDeadLetter deadLetter =
+                deadLetter(null);
+
+        when(
+                kafkaTemplate.send(
+                        any(ProducerRecord.class)
+                )
+        ).thenReturn(
+                CompletableFuture.completedFuture(null)
+        );
+
+        adapter.publish(deadLetter);
+
+        var timer = meterRegistry
+                .get(
+                        OutboxPublisherObservation.PUBLISH_LATENCY
+                )
+                .tag(
+                        "event_type",
+                        "payment.created"
+                )
+                .tag(
+                        "topic",
+                        "payment-wallet.outbox.dlq.v1"
+                )
+                .tag(
+                        "result",
+                        "success"
+                )
+                .timer();
+
+        assertThat(timer.count())
+                .isEqualTo(1);
     }
 
     private OutboxDeadLetter deadLetter(

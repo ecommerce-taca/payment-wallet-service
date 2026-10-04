@@ -19,6 +19,7 @@ import com.taca.paymentwallet.infrastructure.serialization.JacksonRequestRefundR
 import com.taca.paymentwallet.infrastructure.time.SystemClockAdapter;
 import com.taca.paymentwallet.infrastructure.transaction.SpringTransactionAdapter;
 import com.taca.paymentwallet.infrastructure.vnpay.*;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -372,12 +373,14 @@ public class InfrastructureConfiguration {
     OutboxMessagePublisherPort outboxMessagePublisherPort(
             KafkaTemplate<String, String> kafkaTemplate,
             KafkaTopicRouter topicRouter,
-            KafkaHeaderMapper headerMapper
+            KafkaHeaderMapper headerMapper,
+            OutboxPublisherObservation observation
     ) {
         return new KafkaOutboxMessagePublisherAdapter(
                 kafkaTemplate,
                 topicRouter,
-                headerMapper
+                headerMapper,
+                observation
         );
     }
 
@@ -470,13 +473,15 @@ public class InfrastructureConfiguration {
             KafkaTemplate<String, String> kafkaTemplate,
             KafkaTopicProperties properties,
             ObjectMapper objectMapper,
-            KafkaDeadLetterHeaderMapper headerMapper
+            KafkaDeadLetterHeaderMapper headerMapper,
+            OutboxPublisherObservation observation
     ) {
         return new KafkaDeadLetterPublisherAdapter(
                 kafkaTemplate,
                 properties,
                 objectMapper,
-                headerMapper
+                headerMapper,
+                observation
         );
     }
 
@@ -485,5 +490,14 @@ public class InfrastructureConfiguration {
             ObjectMapper objectMapper
     ) {
         return new ShipmentEventParser(objectMapper);
+    }
+
+    @Bean
+    OutboxPublisherObservation outboxPublisherObservation(
+            MeterRegistry meterRegistry
+    ) {
+        return new OutboxPublisherObservation(
+                meterRegistry
+        );
     }
 }

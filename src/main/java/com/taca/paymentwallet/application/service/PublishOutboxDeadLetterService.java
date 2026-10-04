@@ -3,6 +3,8 @@ package com.taca.paymentwallet.application.service;
 import com.taca.paymentwallet.application.outbox.OutboxDeadLetter;
 import com.taca.paymentwallet.application.port.in.PublishOutboxDeadLetterUseCase;
 import com.taca.paymentwallet.application.port.out.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
@@ -17,6 +19,8 @@ public class PublishOutboxDeadLetterService
     private final ClockPort clockPort;
     private final int batchSize;
     private final int maxRetries;
+
+    private static final Logger log = LoggerFactory.getLogger(PublishOutboxDeadLetterService.class);
 
     public PublishOutboxDeadLetterService(
             OutboxDeadLetterPort deadLetterPort,
@@ -63,9 +67,19 @@ public class PublishOutboxDeadLetterService
         for (OutboxDeadLetter deadLetter : deadLetters) {
             publisherPort.publish(deadLetter);
 
+            var deadLetteredAt = clockPort.now();
+
             deadLetterPort.markDeadLettered(
                     deadLetter.eventId(),
-                    clockPort.now()
+                    deadLetteredAt
+            );
+
+            log.warn(
+                    "event=outbox_mark_dead_lettered event_id={} event_type={} retry_count={} dead_lettered_at={}",
+                    deadLetter.eventId(),
+                    deadLetter.eventType(),
+                    deadLetter.retryCount(),
+                    deadLetteredAt
             );
 
             published++;
