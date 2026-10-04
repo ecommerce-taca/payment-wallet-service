@@ -41,3 +41,9 @@ app:
     health:
       enabled: true
       max-lag: 5m
+
+    cleanup:
+      enabled: false
+      retention: 7d
+      batch-size: 500
+      interval-ms: 3600000

@@ -114,6 +114,9 @@ class ProductionContextSmokeTest {
     @Autowired
     private OutboxBacklogHealthIndicator outboxBacklogHealthIndicator;
 
+    @Autowired
+    private CleanupOutboxUseCase cleanupOutboxUseCase;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -135,5 +138,7 @@ class ProductionContextSmokeTest {
         assertThat(kafkaInboxProcessor).isNotNull();
 
         assertThat(outboxBacklogHealthIndicator).isNotNull();
+
+        assertThat(cleanupOutboxUseCase).isNotNull();
     }
 }
