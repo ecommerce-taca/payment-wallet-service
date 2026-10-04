@@ -10,6 +10,7 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 public class KafkaDeadLetterPublisherAdapter implements DeadLetterPublisherPort {
 
@@ -18,6 +19,7 @@ public class KafkaDeadLetterPublisherAdapter implements DeadLetterPublisherPort 
     private final ObjectMapper objectMapper;
     private final KafkaDeadLetterHeaderMapper headerMapper;
     private final OutboxPublisherObservation observation;
+    private final long sendTimeoutMs;
 
     private static final Logger log = LoggerFactory.getLogger(KafkaDeadLetterPublisherAdapter.class);
 
@@ -26,13 +28,22 @@ public class KafkaDeadLetterPublisherAdapter implements DeadLetterPublisherPort 
             KafkaTopicProperties properties,
             ObjectMapper objectMapper,
             KafkaDeadLetterHeaderMapper headerMapper,
-            OutboxPublisherObservation observation
+            OutboxPublisherObservation observation,
+            long sendTimeoutMs
     ) {
         this.kafkaTemplate = Objects.requireNonNull(kafkaTemplate);
         this.properties = Objects.requireNonNull(properties);
         this.objectMapper = Objects.requireNonNull(objectMapper);
         this.headerMapper = Objects.requireNonNull(headerMapper);
         this.observation = Objects.requireNonNull(observation);
+
+        if (sendTimeoutMs <= 0) {
+            throw new IllegalArgumentException(
+                    "sendTimeoutMs must be positive"
+            );
+        }
+
+        this.sendTimeoutMs = sendTimeoutMs;
     }
 
     @Override
@@ -71,7 +82,10 @@ public class KafkaDeadLetterPublisherAdapter implements DeadLetterPublisherPort 
 
             headerMapper.apply(record, deadLetter);
 
-            kafkaTemplate.send(record).get();
+            kafkaTemplate.send(record).get(
+                    sendTimeoutMs,
+                    TimeUnit.MILLISECONDS
+            );
 
             Duration duration = elapsed(startedAt);
 

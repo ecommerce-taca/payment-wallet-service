@@ -22,6 +22,7 @@ import com.taca.paymentwallet.infrastructure.transaction.SpringTransactionAdapte
 import com.taca.paymentwallet.infrastructure.vnpay.*;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -377,13 +378,15 @@ public class InfrastructureConfiguration {
             KafkaTemplate<String, String> kafkaTemplate,
             KafkaTopicRouter topicRouter,
             KafkaHeaderMapper headerMapper,
-            OutboxPublisherObservation observation
+            OutboxPublisherObservation observation,
+            OutboxPublisherProperties properties
     ) {
         return new KafkaOutboxMessagePublisherAdapter(
                 kafkaTemplate,
                 topicRouter,
                 headerMapper,
-                observation
+                observation,
+                properties.sendTimeoutMs()
         );
     }
 
@@ -477,14 +480,16 @@ public class InfrastructureConfiguration {
             KafkaTopicProperties properties,
             ObjectMapper objectMapper,
             KafkaDeadLetterHeaderMapper headerMapper,
-            OutboxPublisherObservation observation
+            OutboxPublisherObservation observation,
+            OutboxPublisherProperties publisherProperties
     ) {
         return new KafkaDeadLetterPublisherAdapter(
                 kafkaTemplate,
                 properties,
                 objectMapper,
                 headerMapper,
-                observation
+                observation,
+                publisherProperties.sendTimeoutMs()
         );
     }
 
@@ -525,6 +530,19 @@ public class InfrastructureConfiguration {
     ) {
         return new OutboxCleanupPersistenceAdapter(
                 repository
+        );
+    }
+
+    @Bean
+    KafkaProducerSafetyGuard kafkaProducerSafetyGuard(
+            KafkaProperties kafkaProperties,
+            OutboxPublisherProperties outboxProperties
+    ) {
+        return new KafkaProducerSafetyGuard(
+                kafkaProperties
+                        .getProducer()
+                        .buildProperties(),
+                outboxProperties.sendTimeoutMs()
         );
     }
 }

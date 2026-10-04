@@ -17,7 +17,8 @@ class OutboxPublisherPropertiesTest {
                         50,
                         3,
                         Duration.ofSeconds(2),
-                        1000
+                        1000,
+                        35_000
                 );
 
         assertThat(properties.batchSize()).isEqualTo(50);
@@ -25,6 +26,7 @@ class OutboxPublisherPropertiesTest {
         assertThat(properties.retryBackoff())
                 .isEqualTo(Duration.ofSeconds(2));
         assertThat(properties.pollIntervalMs()).isEqualTo(1000);
+        assertThat(properties.sendTimeoutMs()).isEqualTo(35_000);
     }
 
     @Test
@@ -36,7 +38,8 @@ class OutboxPublisherPropertiesTest {
                         0,
                         3,
                         Duration.ofSeconds(2),
-                        1000
+                        1000,
+                        35_000
                 )
         );
     }
@@ -50,7 +53,23 @@ class OutboxPublisherPropertiesTest {
                         50,
                         3,
                         Duration.ZERO,
-                        1000
+                        1000,
+                        35_000
+                )
+        );
+    }
+
+    @Test
+    void shouldRejectInvalidSendTimeout() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new OutboxPublisherProperties(
+                        true,
+                        50,
+                        3,
+                        Duration.ofSeconds(2),
+                        1000,
+                        0
                 )
         );
     }

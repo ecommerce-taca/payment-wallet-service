@@ -37,6 +37,7 @@ app:
       max-retries: 3
       retry-backoff: 2s
       poll-interval-ms: 1000
+      send-timeout-ms: 35000
 
     health:
       enabled: true

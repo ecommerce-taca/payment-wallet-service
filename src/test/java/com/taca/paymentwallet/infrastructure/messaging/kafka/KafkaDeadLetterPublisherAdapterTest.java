@@ -56,7 +56,8 @@ class KafkaDeadLetterPublisherAdapterTest {
                     properties,
                     objectMapper,
                     headerMapper,
-                    observation
+                    observation,
+                    35_000
             );
 
     @Test

@@ -25,9 +25,12 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
       acks: all
+      retries: 10
       properties:
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
+        delivery.timeout.ms: 30000
+        request.timeout.ms: 10000
 
     consumer:
       group-id: ${KAFKA_CONSUMER_GROUP_ID:payment-wallet-service}
@@ -54,6 +57,7 @@ app:
       max-retries: 3
       retry-backoff: 2s
       poll-interval-ms: 1000
+      send-timeout-ms: 35000
 
     health:
       enabled: true
