@@ -10,7 +10,8 @@ public record OutboxPublisherProperties(
         int batchSize,
         int maxRetries,
         Duration retryBackoff,
-        long pollIntervalMs
+        long pollIntervalMs,
+        long sendTimeoutMs
 ) {
 
     public OutboxPublisherProperties {
@@ -22,12 +23,24 @@ public record OutboxPublisherProperties(
             throw new IllegalArgumentException("maxRetries must be positive");
         }
 
-        if (retryBackoff == null || retryBackoff.isZero() || retryBackoff.isNegative()) {
-            throw new IllegalArgumentException("retryBackoff must be positive");
+        if (retryBackoff == null
+                || retryBackoff.isZero()
+                || retryBackoff.isNegative()) {
+            throw new IllegalArgumentException(
+                    "retryBackoff must be positive"
+            );
         }
 
         if (pollIntervalMs <= 0) {
-            throw new IllegalArgumentException("pollIntervalMs must be positive");
+            throw new IllegalArgumentException(
+                    "pollIntervalMs must be positive"
+            );
+        }
+
+        if (sendTimeoutMs <= 0) {
+            throw new IllegalArgumentException(
+                    "sendTimeoutMs must be positive"
+            );
         }
     }
 }

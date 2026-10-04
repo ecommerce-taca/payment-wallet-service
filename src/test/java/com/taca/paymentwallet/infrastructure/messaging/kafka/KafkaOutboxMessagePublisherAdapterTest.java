@@ -49,7 +49,8 @@ class KafkaOutboxMessagePublisherAdapterTest {
                     kafkaTemplate,
                     topicRouter,
                     headerMapper,
-                    observation
+                    observation,
+                    35_000
             );
 
     @Test

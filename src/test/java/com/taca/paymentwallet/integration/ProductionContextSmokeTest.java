@@ -4,6 +4,7 @@ import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaInboxProcessor;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaProducerSafetyGuard;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -117,6 +118,9 @@ class ProductionContextSmokeTest {
     @Autowired
     private CleanupOutboxUseCase cleanupOutboxUseCase;
 
+    @Autowired
+    private KafkaProducerSafetyGuard kafkaProducerSafetyGuard;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -140,5 +144,7 @@ class ProductionContextSmokeTest {
         assertThat(outboxBacklogHealthIndicator).isNotNull();
 
         assertThat(cleanupOutboxUseCase).isNotNull();
+
+        assertThat(kafkaProducerSafetyGuard).isNotNull();
     }
 }

@@ -21,7 +21,10 @@ import com.taca.paymentwallet.infrastructure.time.SystemClockAdapter;
 import com.taca.paymentwallet.infrastructure.transaction.SpringTransactionAdapter;
 import com.taca.paymentwallet.infrastructure.vnpay.*;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -36,7 +39,8 @@ import java.time.Duration;
         KafkaTopicProperties.class,
         OutboxPublisherProperties.class,
         OutboxHealthProperties.class,
-        OutboxCleanupProperties.class
+        OutboxCleanupProperties.class,
+        KafkaTopicProvisioningProperties.class
 })
 public class InfrastructureConfiguration {
 
@@ -377,13 +381,15 @@ public class InfrastructureConfiguration {
             KafkaTemplate<String, String> kafkaTemplate,
             KafkaTopicRouter topicRouter,
             KafkaHeaderMapper headerMapper,
-            OutboxPublisherObservation observation
+            OutboxPublisherObservation observation,
+            OutboxPublisherProperties properties
     ) {
         return new KafkaOutboxMessagePublisherAdapter(
                 kafkaTemplate,
                 topicRouter,
                 headerMapper,
-                observation
+                observation,
+                properties.sendTimeoutMs()
         );
     }
 
@@ -477,14 +483,16 @@ public class InfrastructureConfiguration {
             KafkaTopicProperties properties,
             ObjectMapper objectMapper,
             KafkaDeadLetterHeaderMapper headerMapper,
-            OutboxPublisherObservation observation
+            OutboxPublisherObservation observation,
+            OutboxPublisherProperties publisherProperties
     ) {
         return new KafkaDeadLetterPublisherAdapter(
                 kafkaTemplate,
                 properties,
                 objectMapper,
                 headerMapper,
-                observation
+                observation,
+                publisherProperties.sendTimeoutMs()
         );
     }
 
@@ -525,6 +533,55 @@ public class InfrastructureConfiguration {
     ) {
         return new OutboxCleanupPersistenceAdapter(
                 repository
+        );
+    }
+
+    @Bean
+    KafkaProducerSafetyGuard kafkaProducerSafetyGuard(
+            KafkaProperties kafkaProperties,
+            OutboxPublisherProperties outboxProperties
+    ) {
+        return new KafkaProducerSafetyGuard(
+                kafkaProperties
+                        .getProducer()
+                        .buildProperties(),
+                outboxProperties.sendTimeoutMs()
+        );
+    }
+
+    @Bean(destroyMethod = "close")
+    AdminClient kafkaAdminClient(
+            KafkaProperties kafkaProperties
+    ) {
+        return AdminClient.create(
+                kafkaProperties.buildAdminProperties()
+        );
+    }
+
+    @Bean
+    KafkaTopicNamesClient kafkaTopicNamesClient(
+            AdminClient adminClient
+    ) {
+        return new AdminClientKafkaTopicNamesClient(
+                adminClient
+        );
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            prefix = "app.kafka.provisioning",
+            name = "enabled",
+            havingValue = "true"
+    )
+    KafkaTopicProvisioningGuard kafkaTopicProvisioningGuard(
+            KafkaTopicProperties topicProperties,
+            KafkaTopicProvisioningProperties properties,
+            KafkaTopicNamesClient topicNamesClient
+    ) {
+        return new KafkaTopicProvisioningGuard(
+                topicProperties,
+                properties,
+                topicNamesClient
         );
     }
 }
