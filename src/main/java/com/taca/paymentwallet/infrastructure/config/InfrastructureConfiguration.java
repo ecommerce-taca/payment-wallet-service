@@ -8,6 +8,7 @@ import com.taca.paymentwallet.infrastructure.crypto.Sha256PaymentUrlHashAdapter;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256RequestHashAdapter;
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
 import com.taca.paymentwallet.infrastructure.persistence.repository.*;
@@ -477,5 +478,12 @@ public class InfrastructureConfiguration {
                 objectMapper,
                 headerMapper
         );
+    }
+
+    @Bean
+    ShipmentEventParser shipmentEventParser(
+            ObjectMapper objectMapper
+    ) {
+        return new ShipmentEventParser(objectMapper);
     }
 }

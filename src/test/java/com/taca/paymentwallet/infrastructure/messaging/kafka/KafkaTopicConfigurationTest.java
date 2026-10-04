@@ -8,9 +8,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class KafkaTopicConfigurationTest {
 
     private final KafkaTopicProperties properties = new KafkaTopicProperties(
-        "payment.events.v1",
-        "wallet.events.v1",
-        "payment-wallet.outbox.dlq.v1"
+            "payment.events.v1",
+            "wallet.events.v1",
+            "shipment.events.v1",
+            "payment-wallet.outbox.dlq.v1"
     );
 
     private final KafkaTopicConfiguration configuration =

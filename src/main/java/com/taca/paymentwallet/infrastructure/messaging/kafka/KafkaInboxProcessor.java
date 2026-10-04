@@ -38,6 +38,24 @@ public class KafkaInboxProcessor {
             ConsumerRecord<String, String> record,
             Supplier<T> action
     ) {
+        return process(
+                consumerName,
+                source,
+                eventType,
+                record,
+                null,
+                action
+        );
+    }
+
+    public <T> InboxEventExecutionResult<T> process(
+            String consumerName,
+            String source,
+            String eventType,
+            ConsumerRecord<String, String> record,
+            String fallbackEventId,
+            Supplier<T> action
+    ) {
         requireText(consumerName, "consumerName");
         requireText(source, "source");
         requireText(eventType, "eventType");
@@ -49,7 +67,8 @@ public class KafkaInboxProcessor {
                 "Kafka record value must not be null"
         );
 
-        KafkaInboundMetadata metadata = metadataExtractor.extract(record);
+        KafkaInboundMetadata metadata =
+                metadataExtractor.extract(record, fallbackEventId);
 
         RequestMetadata requestMetadata =
                 new RequestMetadata(

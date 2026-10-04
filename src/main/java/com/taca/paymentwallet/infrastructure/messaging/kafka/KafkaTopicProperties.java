@@ -6,20 +6,20 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record KafkaTopicProperties(
         String paymentEvents,
         String walletEvents,
+        String shipmentEvents,
         String outboxDlq
 ) {
 
     public KafkaTopicProperties {
-        if (paymentEvents == null || paymentEvents.isBlank()) {
-            throw new IllegalArgumentException("paymentEvents must not be blank");
-        }
+        requireText(paymentEvents, "paymentEvents");
+        requireText(walletEvents, "walletEvents");
+        requireText(shipmentEvents, "shipmentEvents");
+        requireText(outboxDlq, "outboxDlq");
+    }
 
-        if (walletEvents == null || walletEvents.isBlank()) {
-            throw new IllegalArgumentException("walletEvents must not be blank");
-        }
-
-        if (outboxDlq == null || outboxDlq.isBlank()) {
-            throw new IllegalArgumentException("outboxDlq must not be blank");
+    private static void requireText(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
         }
     }
 }
