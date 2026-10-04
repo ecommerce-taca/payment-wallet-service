@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -106,5 +107,27 @@ public interface OutboxEventJpaRepository extends JpaRepository<OutboxEventJpaEn
     int markDeadLettered(
             @Param("eventId") UUID eventId,
             @Param("deadLetteredAt") LocalDateTime deadLetteredAt
+    );
+
+    @Query(value = """
+        SELECT COUNT(*)
+        FROM outbox_events
+        WHERE published_at IS NULL
+          AND dead_lettered_at IS NULL
+          AND event_type IN (:eventTypes)
+        """, nativeQuery = true)
+    long countPendingForHealth(
+            @Param("eventTypes") Set<String> eventTypes
+    );
+
+    @Query(value = """
+        SELECT MIN(occurred_at)
+        FROM outbox_events
+        WHERE published_at IS NULL
+          AND dead_lettered_at IS NULL
+          AND event_type IN (:eventTypes)
+        """, nativeQuery = true)
+    Optional<LocalDateTime> findOldestPendingOccurredAt(
+            @Param("eventTypes") Set<String> eventTypes
     );
 }

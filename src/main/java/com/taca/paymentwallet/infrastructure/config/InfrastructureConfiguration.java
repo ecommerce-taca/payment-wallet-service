@@ -6,6 +6,7 @@ import com.taca.paymentwallet.domain.finance.RefundAllocationCalculator;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256PaymentUrlHashAdapter;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256RequestHashAdapter;
+import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
@@ -33,7 +34,8 @@ import java.time.Duration;
 @EnableConfigurationProperties({
         VnpayProperties.class,
         KafkaTopicProperties.class,
-        OutboxPublisherProperties.class
+        OutboxPublisherProperties.class,
+        OutboxHealthProperties.class
 })
 public class InfrastructureConfiguration {
 
@@ -498,6 +500,21 @@ public class InfrastructureConfiguration {
     ) {
         return new OutboxPublisherObservation(
                 meterRegistry
+        );
+    }
+
+    @Bean
+    OutboxBacklogHealthIndicator outboxBacklogHealthIndicator(
+            OutboxEventJpaRepository repository,
+            OutboxMessagePublisherPort publisherPort,
+            ClockPort clockPort,
+            OutboxHealthProperties properties
+    ) {
+        return new OutboxBacklogHealthIndicator(
+                repository,
+                publisherPort,
+                clockPort,
+                properties
         );
     }
 }
