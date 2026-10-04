@@ -15,6 +15,13 @@ management:
       probes:
         enabled: true
 
+      group:
+        readiness:
+          include:
+            - readinessState
+            - db
+            - outboxBacklog
+
 app:
   kafka:
     topics:
@@ -30,3 +37,7 @@ app:
       max-retries: 3
       retry-backoff: 2s
       poll-interval-ms: 1000
+
+    health:
+      enabled: true
+      max-lag: 5m

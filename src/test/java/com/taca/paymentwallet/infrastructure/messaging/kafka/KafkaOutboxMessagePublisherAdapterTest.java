@@ -1,6 +1,7 @@
 package com.taca.paymentwallet.infrastructure.messaging.kafka;
 
 import com.taca.paymentwallet.application.outbox.OutboxMessage;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -24,6 +25,10 @@ class KafkaOutboxMessagePublisherAdapterTest {
     private final KafkaTemplate<String, String> kafkaTemplate =
             mock(KafkaTemplate.class);
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+
+    private final OutboxPublisherObservation observation = new OutboxPublisherObservation(meterRegistry);
+
     private final KafkaTopicRouter topicRouter =
             new KafkaTopicRouter(
                     new KafkaTopicProperties(
@@ -43,7 +48,8 @@ class KafkaOutboxMessagePublisherAdapterTest {
             new KafkaOutboxMessagePublisherAdapter(
                     kafkaTemplate,
                     topicRouter,
-                    headerMapper
+                    headerMapper,
+                    observation
             );
 
     @Test
@@ -343,6 +349,148 @@ class KafkaOutboxMessagePublisherAdapterTest {
                 KafkaOutboxPublishException.class,
                 () -> adapter.publish(message)
         );
+    }
+
+    @Test
+    void shouldRecordSuccessfulKafkaPublishMetric()
+            throws Exception {
+
+        OutboxMessage message =
+                message(
+                        "PAYMENT",
+                        "payment.created",
+                        null
+                );
+
+        when(
+                kafkaTemplate.send(
+                        any(ProducerRecord.class)
+                )
+        ).thenReturn(
+                CompletableFuture.completedFuture(null)
+        );
+
+        adapter.publish(message);
+
+        double count = meterRegistry
+                .get(
+                        OutboxPublisherObservation
+                                .PUBLISH_TOTAL
+                )
+                .tag(
+                        "event_type",
+                        "payment.created"
+                )
+                .tag(
+                        "topic",
+                        "payment.events.v1"
+                )
+                .tag(
+                        "result",
+                        "success"
+                )
+                .counter()
+                .count();
+
+        assertThat(count)
+                .isEqualTo(1.0);
+    }
+
+    @Test
+    void shouldRecordFailedKafkaPublishMetric() {
+        OutboxMessage message =
+                message(
+                        "PAYMENT",
+                        "payment.created",
+                        null
+                );
+
+        CompletableFuture<SendResult<String, String>> future =
+                new CompletableFuture<>();
+
+        future.completeExceptionally(
+                new RuntimeException(
+                        "Kafka unavailable"
+                )
+        );
+
+        when(
+                kafkaTemplate.send(
+                        any(ProducerRecord.class)
+                )
+        ).thenReturn(future);
+
+        assertThrows(
+                KafkaOutboxPublishException.class,
+                () -> adapter.publish(message)
+        );
+
+        double count = meterRegistry
+                .get(
+                        OutboxPublisherObservation
+                                .PUBLISH_TOTAL
+                )
+                .tag(
+                        "event_type",
+                        "payment.created"
+                )
+                .tag(
+                        "topic",
+                        "payment.events.v1"
+                )
+                .tag(
+                        "result",
+                        "failure"
+                )
+                .counter()
+                .count();
+
+        assertThat(count)
+                .isEqualTo(1.0);
+    }
+
+    @Test
+    void shouldRecordKafkaPublishLatency()
+            throws Exception {
+
+        OutboxMessage message =
+                message(
+                        "PAYMENT",
+                        "payment.created",
+                        null
+                );
+
+        when(
+                kafkaTemplate.send(
+                        any(ProducerRecord.class)
+                )
+        ).thenReturn(
+                CompletableFuture.completedFuture(null)
+        );
+
+        adapter.publish(message);
+
+        var timer = meterRegistry
+                .get(
+                        OutboxPublisherObservation
+                                .PUBLISH_LATENCY
+                )
+                .tag(
+                        "event_type",
+                        "payment.created"
+                )
+                .tag(
+                        "topic",
+                        "payment.events.v1"
+                )
+                .tag(
+                        "result",
+                        "success"
+                )
+                .timer();
+
+        assertThat(timer.count())
+                .isEqualTo(1);
     }
 
     private OutboxMessage message(

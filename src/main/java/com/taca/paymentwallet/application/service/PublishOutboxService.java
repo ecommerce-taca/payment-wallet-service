@@ -3,6 +3,8 @@ package com.taca.paymentwallet.application.service;
 import com.taca.paymentwallet.application.outbox.OutboxMessage;
 import com.taca.paymentwallet.application.port.in.PublishOutboxUseCase;
 import com.taca.paymentwallet.application.port.out.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -18,6 +20,7 @@ public class PublishOutboxService implements PublishOutboxUseCase {
     private final int batchSize;
     private final int maxRetries;
     private final Duration retryBackoff;
+    private static final Logger log = LoggerFactory.getLogger(PublishOutboxService.class);
 
     public PublishOutboxService(
             OutboxPublishingPort outboxPublishingPort,
@@ -79,15 +82,42 @@ public class PublishOutboxService implements PublishOutboxUseCase {
     private boolean publish(OutboxMessage message) {
         try {
             publisherPort.publish(message);
-            outboxPublishingPort.markPublished(message.eventId(), clockPort.now());
+
+            Instant publishedAt = clockPort.now();
+
+            outboxPublishingPort.markPublished(
+                    message.eventId(),
+                    publishedAt
+            );
+
+            log.debug(
+                    "event=outbox_mark_published event_id={} event_type={} published_at={}",
+                    message.eventId(),
+                    message.eventType(),
+                    publishedAt
+            );
+
             return true;
         } catch (RuntimeException exception) {
-            Instant nextAttemptAt = clockPort.now().plus(retryBackoff);
+            Instant nextAttemptAt =
+                    clockPort.now().plus(retryBackoff);
+
+            String error =
+                    errorMessage(exception);
 
             outboxPublishingPort.recordFailure(
                     message.eventId(),
-                    errorMessage(exception),
+                    error,
                     nextAttemptAt
+            );
+
+            log.warn(
+                    "event=outbox_retry_scheduled event_id={} event_type={} retry_count={} next_attempt_at={} error_type={}",
+                    message.eventId(),
+                    message.eventType(),
+                    message.retryCount() + 1,
+                    nextAttemptAt,
+                    exception.getClass().getSimpleName()
             );
 
             return false;

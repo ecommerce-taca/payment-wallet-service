@@ -6,6 +6,7 @@ import com.taca.paymentwallet.domain.finance.RefundAllocationCalculator;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256PaymentUrlHashAdapter;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256RequestHashAdapter;
+import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
@@ -19,6 +20,7 @@ import com.taca.paymentwallet.infrastructure.serialization.JacksonRequestRefundR
 import com.taca.paymentwallet.infrastructure.time.SystemClockAdapter;
 import com.taca.paymentwallet.infrastructure.transaction.SpringTransactionAdapter;
 import com.taca.paymentwallet.infrastructure.vnpay.*;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,7 +34,8 @@ import java.time.Duration;
 @EnableConfigurationProperties({
         VnpayProperties.class,
         KafkaTopicProperties.class,
-        OutboxPublisherProperties.class
+        OutboxPublisherProperties.class,
+        OutboxHealthProperties.class
 })
 public class InfrastructureConfiguration {
 
@@ -372,12 +375,14 @@ public class InfrastructureConfiguration {
     OutboxMessagePublisherPort outboxMessagePublisherPort(
             KafkaTemplate<String, String> kafkaTemplate,
             KafkaTopicRouter topicRouter,
-            KafkaHeaderMapper headerMapper
+            KafkaHeaderMapper headerMapper,
+            OutboxPublisherObservation observation
     ) {
         return new KafkaOutboxMessagePublisherAdapter(
                 kafkaTemplate,
                 topicRouter,
-                headerMapper
+                headerMapper,
+                observation
         );
     }
 
@@ -470,13 +475,15 @@ public class InfrastructureConfiguration {
             KafkaTemplate<String, String> kafkaTemplate,
             KafkaTopicProperties properties,
             ObjectMapper objectMapper,
-            KafkaDeadLetterHeaderMapper headerMapper
+            KafkaDeadLetterHeaderMapper headerMapper,
+            OutboxPublisherObservation observation
     ) {
         return new KafkaDeadLetterPublisherAdapter(
                 kafkaTemplate,
                 properties,
                 objectMapper,
-                headerMapper
+                headerMapper,
+                observation
         );
     }
 
@@ -485,5 +492,29 @@ public class InfrastructureConfiguration {
             ObjectMapper objectMapper
     ) {
         return new ShipmentEventParser(objectMapper);
+    }
+
+    @Bean
+    OutboxPublisherObservation outboxPublisherObservation(
+            MeterRegistry meterRegistry
+    ) {
+        return new OutboxPublisherObservation(
+                meterRegistry
+        );
+    }
+
+    @Bean
+    OutboxBacklogHealthIndicator outboxBacklogHealthIndicator(
+            OutboxEventJpaRepository repository,
+            OutboxMessagePublisherPort publisherPort,
+            ClockPort clockPort,
+            OutboxHealthProperties properties
+    ) {
+        return new OutboxBacklogHealthIndicator(
+                repository,
+                publisherPort,
+                clockPort,
+                properties
+        );
     }
 }
