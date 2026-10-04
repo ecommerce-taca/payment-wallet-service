@@ -561,6 +561,100 @@ class ProcessCodPaymentServiceTest {
                 .hasSize(1);
     }
 
+    @Test
+    void shouldIgnoreFailedEventAfterOrderWasAlreadyCaptured() {
+        ShopId shopId = new ShopId(UUID.randomUUID());
+        Payment payment = codPayment(shopId, Money.vnd(100_000));
+        Wallet wallet = Wallet.create(new WalletId(UUID.randomUUID()), shopId);
+
+        paymentRepository.add(payment);
+        walletRepository.add(wallet);
+
+        UUID orderId = payment.orders().getFirst().orderId().value();
+
+        ProcessCodPaymentResult delivered = service.execute(
+                new ProcessCodPaymentCommand(
+                        orderId,
+                        CodPaymentResultStatus.DELIVERED,
+                        OCCURRED_AT,
+                        null
+                )
+        );
+
+        ProcessCodPaymentResult lateFailed = service.execute(
+                new ProcessCodPaymentCommand(
+                        orderId,
+                        CodPaymentResultStatus.FAILED,
+                        OCCURRED_AT.plusSeconds(60),
+                        "SHIPMENT_FAILED"
+                )
+        );
+
+        assertThat(delivered.action())
+                .isEqualTo(CodPaymentProcessingAction.APPLIED);
+
+        assertThat(lateFailed.action())
+                .isEqualTo(CodPaymentProcessingAction.DUPLICATE);
+
+        assertThat(payment.order(new OrderId(orderId)).codStatus())
+                .isEqualTo(PaymentOrderCodStatus.CAPTURED);
+
+        assertThat(payment.status())
+                .isEqualTo(PaymentStatus.SUCCESS);
+
+        assertThat(allocationRepository.allocations)
+                .hasSize(1);
+
+        assertThat(ledgerRepository.postings)
+                .hasSize(1);
+    }
+
+    @Test
+    void shouldIgnoreDeliveredEventAfterOrderWasAlreadyFailed() {
+        ShopId shopId = new ShopId(UUID.randomUUID());
+        Payment payment = codPayment(shopId, Money.vnd(100_000));
+
+        paymentRepository.add(payment);
+
+        UUID orderId = payment.orders().getFirst().orderId().value();
+
+        ProcessCodPaymentResult failed = service.execute(
+                new ProcessCodPaymentCommand(
+                        orderId,
+                        CodPaymentResultStatus.FAILED,
+                        OCCURRED_AT,
+                        "SHIPMENT_FAILED"
+                )
+        );
+
+        ProcessCodPaymentResult lateDelivered = service.execute(
+                new ProcessCodPaymentCommand(
+                        orderId,
+                        CodPaymentResultStatus.DELIVERED,
+                        OCCURRED_AT.plusSeconds(60),
+                        null
+                )
+        );
+
+        assertThat(failed.action())
+                .isEqualTo(CodPaymentProcessingAction.APPLIED);
+
+        assertThat(lateDelivered.action())
+                .isEqualTo(CodPaymentProcessingAction.DUPLICATE);
+
+        assertThat(payment.order(new OrderId(orderId)).codStatus())
+                .isEqualTo(PaymentOrderCodStatus.FAILED);
+
+        assertThat(payment.status())
+                .isEqualTo(PaymentStatus.FAILED);
+
+        assertThat(allocationRepository.allocations)
+                .isEmpty();
+
+        assertThat(ledgerRepository.postings)
+                .isEmpty();
+    }
+
     private Payment codPayment(ShopId shopId, Money amount) {
         Payment payment = Payment.create(
                 new PaymentId(UUID.randomUUID()),
