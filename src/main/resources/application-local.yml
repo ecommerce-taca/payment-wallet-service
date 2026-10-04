@@ -50,6 +50,10 @@ app:
       shipment-events: shipment.events.v1
       outbox-dlq: payment-wallet.outbox.dlq.v1
 
+    provisioning:
+      enabled: ${KAFKA_TOPIC_PROVISIONING_GUARD_ENABLED:false}
+      timeout: 10s
+
   outbox:
     publisher:
       enabled: true

@@ -21,6 +21,8 @@ import com.taca.paymentwallet.infrastructure.time.SystemClockAdapter;
 import com.taca.paymentwallet.infrastructure.transaction.SpringTransactionAdapter;
 import com.taca.paymentwallet.infrastructure.vnpay.*;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.context.annotation.Bean;
@@ -37,7 +39,8 @@ import java.time.Duration;
         KafkaTopicProperties.class,
         OutboxPublisherProperties.class,
         OutboxHealthProperties.class,
-        OutboxCleanupProperties.class
+        OutboxCleanupProperties.class,
+        KafkaTopicProvisioningProperties.class
 })
 public class InfrastructureConfiguration {
 
@@ -543,6 +546,42 @@ public class InfrastructureConfiguration {
                         .getProducer()
                         .buildProperties(),
                 outboxProperties.sendTimeoutMs()
+        );
+    }
+
+    @Bean(destroyMethod = "close")
+    AdminClient kafkaAdminClient(
+            KafkaProperties kafkaProperties
+    ) {
+        return AdminClient.create(
+                kafkaProperties.buildAdminProperties()
+        );
+    }
+
+    @Bean
+    KafkaTopicNamesClient kafkaTopicNamesClient(
+            AdminClient adminClient
+    ) {
+        return new AdminClientKafkaTopicNamesClient(
+                adminClient
+        );
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            prefix = "app.kafka.provisioning",
+            name = "enabled",
+            havingValue = "true"
+    )
+    KafkaTopicProvisioningGuard kafkaTopicProvisioningGuard(
+            KafkaTopicProperties topicProperties,
+            KafkaTopicProvisioningProperties properties,
+            KafkaTopicNamesClient topicNamesClient
+    ) {
+        return new KafkaTopicProvisioningGuard(
+                topicProperties,
+                properties,
+                topicNamesClient
         );
     }
 }
