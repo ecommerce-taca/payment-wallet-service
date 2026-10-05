@@ -18,6 +18,7 @@ management:
             - db
             - kafkaReadiness
             - outboxBacklog
+            - vnpayReadiness
 
 app:
   kafka:

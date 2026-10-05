@@ -171,7 +171,8 @@ class VnpayWebhookVerifierAdapterTest {
 
         return new VnpayWebhookVerifierAdapter(
                 properties,
-                new VnpaySigner()
+                new VnpaySigner(),
+                new VnpayConfigurationValidator()
         );
     }
 

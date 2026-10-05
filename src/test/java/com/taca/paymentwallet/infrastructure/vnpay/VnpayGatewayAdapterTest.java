@@ -53,7 +53,8 @@ class VnpayGatewayAdapterTest {
                 new VnpayGatewayAdapter(
                         properties,
                         new VnpaySigner(),
-                        clockPort
+                        clockPort,
+                        new VnpayConfigurationValidator()
                 );
 
         CreateVnpayPaymentUrlRequest request =
@@ -210,8 +211,10 @@ class VnpayGatewayAdapterTest {
                 new VnpayGatewayAdapter(
                         properties,
                         new VnpaySigner(),
-                        () -> NOW
+                        () -> NOW,
+                        new VnpayConfigurationValidator()
                 );
+
 
         assertThatThrownBy(
                 () ->
@@ -238,7 +241,8 @@ class VnpayGatewayAdapterTest {
                         "http://localhost:3000/payment/vnpay-return"
                 ),
                 new VnpaySigner(),
-                () -> NOW
+                () -> NOW,
+                new VnpayConfigurationValidator()
         );
     }
 
