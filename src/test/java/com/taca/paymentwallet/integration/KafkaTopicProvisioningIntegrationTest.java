@@ -17,7 +17,10 @@ import org.testcontainers.utility.DockerImageName;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -76,6 +79,17 @@ class KafkaTopicProvisioningIntegrationTest {
                 .all()
                 .get();
 
+        await(() ->
+                topicNames().containsAll(
+                        Set.of(
+                                topics.paymentEvents(),
+                                topics.walletEvents(),
+                                topics.shipmentEvents(),
+                                topics.outboxDlq()
+                        )
+                )
+        );
+
         KafkaTopicProvisioningGuard guard =
                 guard(topics);
 
@@ -107,6 +121,16 @@ class KafkaTopicProvisioningIntegrationTest {
                 .all()
                 .get();
 
+        await(() ->
+                topicNames().containsAll(
+                        Set.of(
+                                topics.paymentEvents(),
+                                topics.walletEvents(),
+                                topics.outboxDlq()
+                        )
+                )
+        );
+        
         KafkaTopicProvisioningGuard guard =
                 guard(topics);
 
@@ -157,6 +181,38 @@ class KafkaTopicProvisioningIntegrationTest {
                 name,
                 1,
                 (short) 1
+        );
+    }
+
+    private Set<String> topicNames() {
+        try {
+            return adminClient
+                    .listTopics()
+                    .names()
+                    .get(5, TimeUnit.SECONDS);
+        } catch (Exception exception) {
+            return Set.of();
+        }
+    }
+
+    private void await(
+            BooleanSupplier condition
+    ) throws InterruptedException {
+        long deadline =
+                System.nanoTime()
+                        + Duration.ofSeconds(10)
+                        .toNanos();
+
+        while (System.nanoTime() < deadline) {
+            if (condition.getAsBoolean()) {
+                return;
+            }
+
+            Thread.sleep(100);
+        }
+
+        throw new AssertionError(
+                "Kafka topics were not visible within 10 seconds"
         );
     }
 }

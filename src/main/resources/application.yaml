@@ -6,13 +6,38 @@ spring:
     active: local
 
 management:
+  endpoints:
+    web:
+      base-path: /
+      exposure:
+        include: health,info
+      path-mapping:
+        health: health
+
   endpoint:
     health:
       probes:
         enabled: true
+      show-details: never
 
       group:
+        liveness:
+          include:
+            - livenessState
+
         readiness:
+          include:
+            - readinessState
+            - db
+            - kafkaReadiness
+            - outboxBacklog
+            - vnpayReadiness
+
+        live:
+          include:
+            - livenessState
+
+        ready:
           include:
             - readinessState
             - db
