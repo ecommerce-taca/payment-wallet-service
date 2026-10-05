@@ -39,25 +39,25 @@ public class VnpayGatewayAdapter
 
     private final ClockPort clockPort;
 
+    private final VnpayConfigurationValidator configurationValidator;
+
     public VnpayGatewayAdapter(
             VnpayProperties properties,
             VnpaySigner signer,
-            ClockPort clockPort
+            ClockPort clockPort,
+            VnpayConfigurationValidator configurationValidator
     ) {
         this.properties =
-                Objects.requireNonNull(
-                        properties
-                );
+                Objects.requireNonNull(properties);
 
         this.signer =
-                Objects.requireNonNull(
-                        signer
-                );
+                Objects.requireNonNull(signer);
 
         this.clockPort =
-                Objects.requireNonNull(
-                        clockPort
-                );
+                Objects.requireNonNull(clockPort);
+
+        this.configurationValidator =
+                Objects.requireNonNull(configurationValidator);
     }
 
     @Override

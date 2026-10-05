@@ -8,6 +8,7 @@ import com.taca.paymentwallet.infrastructure.crypto.Sha256PaymentUrlHashAdapter;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256RequestHashAdapter;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
+import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
@@ -129,23 +130,27 @@ public class InfrastructureConfiguration {
     VnpayGatewayPort vnpayGatewayPort(
             VnpayProperties properties,
             VnpaySigner signer,
-            ClockPort clockPort
+            ClockPort clockPort,
+            VnpayConfigurationValidator configurationValidator
     ) {
         return new VnpayGatewayAdapter(
                 properties,
                 signer,
-                clockPort
+                clockPort,
+                configurationValidator
         );
     }
 
     @Bean
     VnpayWebhookVerifierPort vnpayWebhookVerifierPort(
             VnpayProperties properties,
-            VnpaySigner signer
+            VnpaySigner signer,
+            VnpayConfigurationValidator configurationValidator
     ) {
         return new VnpayWebhookVerifierAdapter(
                 properties,
-                signer
+                signer,
+                configurationValidator
         );
     }
 
@@ -597,6 +602,22 @@ public class InfrastructureConfiguration {
                 topicNamesClient,
                 topicProperties,
                 properties
+        );
+    }
+
+    @Bean
+    VnpayConfigurationValidator vnpayConfigurationValidator() {
+        return new VnpayConfigurationValidator();
+    }
+
+    @Bean
+    VnpayReadinessHealthIndicator vnpayReadinessHealthIndicator(
+            VnpayProperties properties,
+            VnpayConfigurationValidator validator
+    ) {
+        return new VnpayReadinessHealthIndicator(
+                properties,
+                validator
         );
     }
 }

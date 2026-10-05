@@ -4,6 +4,7 @@ import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
+import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaInboxProcessor;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaProducerSafetyGuard;
 import org.junit.jupiter.api.Test;
@@ -125,6 +126,9 @@ class ProductionContextSmokeTest {
     @Autowired
     private KafkaReadinessHealthIndicator kafkaReadinessHealthIndicator;
 
+    @Autowired
+    private VnpayReadinessHealthIndicator vnpayReadinessHealthIndicator;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -152,5 +156,15 @@ class ProductionContextSmokeTest {
         assertThat(kafkaProducerSafetyGuard).isNotNull();
 
         assertThat(kafkaReadinessHealthIndicator).isNotNull();
+
+        assertThat(vnpayReadinessHealthIndicator)
+                .isNotNull();
+
+        assertThat(
+                vnpayReadinessHealthIndicator.health().getStatus()
+        )
+                .isEqualTo(
+                        org.springframework.boot.health.contributor.Status.UP
+                );
     }
 }

@@ -23,13 +23,21 @@ public class VnpayWebhookVerifierAdapter
 
     private final VnpaySigner signer;
 
+    private final VnpayConfigurationValidator configurationValidator;
+
     public VnpayWebhookVerifierAdapter(
             VnpayProperties properties,
-            VnpaySigner signer
+            VnpaySigner signer,
+            VnpayConfigurationValidator configurationValidator
     ) {
-        this.properties = Objects.requireNonNull(properties);
+        this.properties =
+                Objects.requireNonNull(properties);
 
-        this.signer = Objects.requireNonNull(signer);
+        this.signer =
+                Objects.requireNonNull(signer);
+
+        this.configurationValidator =
+                Objects.requireNonNull(configurationValidator);
     }
 
     @Override
@@ -41,7 +49,9 @@ public class VnpayWebhookVerifierAdapter
                 "command must not be null"
         );
 
-        validateConfiguration();
+        configurationValidator.validateForWebhook(
+                properties
+        );
 
         Map<String, String> payload =
                 command.signedPayload();
@@ -101,14 +111,5 @@ public class VnpayWebhookVerifierAdapter
                 expectedBytes,
                 actualBytes
         );
-    }
-
-    private void validateConfiguration() {
-        if (properties.hashSecret() == null
-                || properties.hashSecret().isBlank()) {
-            throw new IllegalStateException(
-                    "VNPAY hashSecret must be configured"
-            );
-        }
     }
 }
