@@ -54,6 +54,10 @@ app:
       enabled: ${KAFKA_TOPIC_PROVISIONING_GUARD_ENABLED:false}
       timeout: 10s
 
+    health:
+      enabled: true
+      timeout: 5s
+
   outbox:
     publisher:
       enabled: true
