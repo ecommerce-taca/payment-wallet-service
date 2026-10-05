@@ -2,6 +2,9 @@ package com.taca.paymentwallet.infrastructure.persistence.adapter;
 
 import com.taca.paymentwallet.application.port.out.OutboxPort;
 import com.taca.paymentwallet.domain.event.DomainEvent;
+import com.taca.paymentwallet.infrastructure.messaging.metadata.OutboxHeaders;
+import com.taca.paymentwallet.application.metadata.RequestMetadata;
+import com.taca.paymentwallet.application.metadata.RequestMetadataContext;
 import com.taca.paymentwallet.infrastructure.persistence.entity.OutboxEventJpaEntity;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.PersistenceTimeMapper;
 import com.taca.paymentwallet.infrastructure.persistence.repository.OutboxEventJpaRepository;
@@ -40,10 +43,6 @@ public class OutboxPersistenceAdapter
         OutboxEventJpaEntity entity =
                 new OutboxEventJpaEntity();
 
-        /*
-         * Domain event đã có identity riêng.
-         * Không sinh thêm persistence UUID.
-         */
         entity.setId(
                 event.eventId()
         );
@@ -64,11 +63,9 @@ public class OutboxPersistenceAdapter
                 serialize(event)
         );
 
-        /*
-         * Headers hiện Application/Domain chưa cung cấp.
-         * Không tự bịa traceId/correlationId.
-         */
-        entity.setHeaders(null);
+        entity.setHeaders(
+                serializeHeaders(event)
+        );
 
         entity.setOccurredAt(
                 PersistenceTimeMapper
@@ -82,6 +79,34 @@ public class OutboxPersistenceAdapter
         entity.setLastError(null);
 
         repository.save(entity);
+    }
+
+    private String serializeHeaders(DomainEvent event) {
+        RequestMetadata metadata =
+                RequestMetadataContext.current()
+                        .orElse(
+                                new RequestMetadata(
+                                        null,
+                                        null,
+                                        null
+                                )
+                        );
+
+        OutboxHeaders headers = new OutboxHeaders(
+                event.eventId(),
+                metadata.requestId(),
+                metadata.traceparent(),
+                metadata.tracestate()
+        );
+
+        try {
+            return objectMapper.writeValueAsString(headers);
+        } catch (Exception exception) {
+            throw new OutboxSerializationException(
+                    event.eventType(),
+                    exception
+            );
+        }
     }
 
     private String serialize(

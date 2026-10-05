@@ -962,6 +962,11 @@ class ProcessVnpayWebhookServiceTest {
         }
 
         @Override
+        public Optional<Payment> findByOrderId(OrderId orderId) {
+            return Optional.empty();
+        }
+
+        @Override
         public Payment save(Payment payment) {
             this.payment = payment;
             this.savedPayments.add(payment);

@@ -43,6 +43,15 @@ public class PaymentOrderJpaEntity extends UuidEntity {
     @Column(name = "currency", nullable = false, length = 3)
     private String currency;
 
+    @Column(name = "cod_status", nullable = false, length = 30)
+    private String codStatus;
+
+    @Column(name = "cod_processed_at")
+    private LocalDateTime codProcessedAt;
+
+    @Column(name = "cod_failure_code", length = 80)
+    private String codFailureCode;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 }

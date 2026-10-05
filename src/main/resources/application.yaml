@@ -8,9 +8,74 @@ spring:
 management:
   endpoints:
     web:
+      base-path: /
       exposure:
         include: health,info
+      path-mapping:
+        health: health
+
   endpoint:
     health:
       probes:
         enabled: true
+      show-details: never
+
+      group:
+        liveness:
+          include:
+            - livenessState
+
+        readiness:
+          include:
+            - readinessState
+            - db
+            - kafkaReadiness
+            - outboxBacklog
+            - vnpayReadiness
+
+        live:
+          include:
+            - livenessState
+
+        ready:
+          include:
+            - readinessState
+            - db
+            - kafkaReadiness
+            - outboxBacklog
+            - vnpayReadiness
+
+app:
+  kafka:
+    topics:
+      payment-events: payment.events.v1
+      wallet-events: wallet.events.v1
+      shipment-events: shipment.events.v1
+      outbox-dlq: payment-wallet.outbox.dlq.v1
+
+    provisioning:
+      enabled: ${KAFKA_TOPIC_PROVISIONING_GUARD_ENABLED:false}
+      timeout: 10s
+
+    health:
+      enabled: true
+      timeout: 5s
+
+  outbox:
+    publisher:
+      enabled: false
+      batch-size: 50
+      max-retries: 3
+      retry-backoff: 2s
+      poll-interval-ms: 1000
+      send-timeout-ms: 35000
+
+    health:
+      enabled: true
+      max-lag: 5m
+
+    cleanup:
+      enabled: false
+      retention: 7d
+      batch-size: 500
+      interval-ms: 3600000

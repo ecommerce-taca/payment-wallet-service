@@ -6,7 +6,12 @@ import com.taca.paymentwallet.domain.finance.RefundAllocationCalculator;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256PaymentUrlHashAdapter;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256RequestHashAdapter;
+import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
+import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
+import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
 import com.taca.paymentwallet.infrastructure.persistence.repository.*;
@@ -17,18 +22,29 @@ import com.taca.paymentwallet.infrastructure.serialization.JacksonRequestRefundR
 import com.taca.paymentwallet.infrastructure.time.SystemClockAdapter;
 import com.taca.paymentwallet.infrastructure.transaction.SpringTransactionAdapter;
 import com.taca.paymentwallet.infrastructure.vnpay.*;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.kafka.autoconfigure.KafkaProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 
 @Configuration
-@EnableConfigurationProperties(
-        VnpayProperties.class
-)
+@EnableConfigurationProperties({
+        VnpayProperties.class,
+        KafkaTopicProperties.class,
+        OutboxPublisherProperties.class,
+        OutboxHealthProperties.class,
+        OutboxCleanupProperties.class,
+        KafkaTopicProvisioningProperties.class,
+        KafkaHealthProperties.class
+})
 public class InfrastructureConfiguration {
 
     @Bean
@@ -114,23 +130,27 @@ public class InfrastructureConfiguration {
     VnpayGatewayPort vnpayGatewayPort(
             VnpayProperties properties,
             VnpaySigner signer,
-            ClockPort clockPort
+            ClockPort clockPort,
+            VnpayConfigurationValidator configurationValidator
     ) {
         return new VnpayGatewayAdapter(
                 properties,
                 signer,
-                clockPort
+                clockPort,
+                configurationValidator
         );
     }
 
     @Bean
     VnpayWebhookVerifierPort vnpayWebhookVerifierPort(
             VnpayProperties properties,
-            VnpaySigner signer
+            VnpaySigner signer,
+            VnpayConfigurationValidator configurationValidator
     ) {
         return new VnpayWebhookVerifierAdapter(
                 properties,
-                signer
+                signer,
+                configurationValidator
         );
     }
 
@@ -347,6 +367,47 @@ public class InfrastructureConfiguration {
     }
 
     @Bean
+    OutboxPublishingPort outboxPublishingPort(OutboxEventJpaRepository repository) {
+        return new OutboxPublishingPersistenceAdapter(repository);
+    }
+
+    @Bean
+    KafkaTopicRouter kafkaTopicRouter(KafkaTopicProperties properties) {
+        return new KafkaTopicRouter(properties);
+    }
+    
+    @Bean
+    KafkaDeadLetterHeaderMapper kafkaDeadLetterHeaderMapper(
+            ObjectMapper objectMapper
+    ) {
+        return new KafkaDeadLetterHeaderMapper(objectMapper);
+    }
+
+    @Bean
+    OutboxMessagePublisherPort outboxMessagePublisherPort(
+            KafkaTemplate<String, String> kafkaTemplate,
+            KafkaTopicRouter topicRouter,
+            KafkaHeaderMapper headerMapper,
+            OutboxPublisherObservation observation,
+            OutboxPublisherProperties properties
+    ) {
+        return new KafkaOutboxMessagePublisherAdapter(
+                kafkaTemplate,
+                topicRouter,
+                headerMapper,
+                observation,
+                properties.sendTimeoutMs()
+        );
+    }
+
+    @Bean
+    KafkaHeaderMapper kafkaHeaderMapper(
+            ObjectMapper objectMapper
+    ) {
+        return new KafkaHeaderMapper(objectMapper);
+    }
+
+    @Bean
     InboxEventPort inboxEventPort(
             InboxEventJpaRepository repository,
             PersistenceUuidGenerator uuidGenerator
@@ -413,6 +474,150 @@ public class InfrastructureConfiguration {
                 lineRepository,
                 mapper,
                 clockPort
+        );
+    }
+
+    @Bean
+    OutboxDeadLetterPort outboxDeadLetterPort(
+            OutboxEventJpaRepository repository
+    ) {
+        return new OutboxDeadLetterPersistenceAdapter(repository);
+    }
+
+    @Bean
+    DeadLetterPublisherPort deadLetterPublisherPort(
+            KafkaTemplate<String, String> kafkaTemplate,
+            KafkaTopicProperties properties,
+            ObjectMapper objectMapper,
+            KafkaDeadLetterHeaderMapper headerMapper,
+            OutboxPublisherObservation observation,
+            OutboxPublisherProperties publisherProperties
+    ) {
+        return new KafkaDeadLetterPublisherAdapter(
+                kafkaTemplate,
+                properties,
+                objectMapper,
+                headerMapper,
+                observation,
+                publisherProperties.sendTimeoutMs()
+        );
+    }
+
+    @Bean
+    ShipmentEventParser shipmentEventParser(
+            ObjectMapper objectMapper
+    ) {
+        return new ShipmentEventParser(objectMapper);
+    }
+
+    @Bean
+    OutboxPublisherObservation outboxPublisherObservation(
+            MeterRegistry meterRegistry
+    ) {
+        return new OutboxPublisherObservation(
+                meterRegistry
+        );
+    }
+
+    @Bean
+    OutboxBacklogHealthIndicator outboxBacklogHealthIndicator(
+            OutboxEventJpaRepository repository,
+            OutboxMessagePublisherPort publisherPort,
+            ClockPort clockPort,
+            OutboxHealthProperties properties
+    ) {
+        return new OutboxBacklogHealthIndicator(
+                repository,
+                publisherPort,
+                clockPort,
+                properties
+        );
+    }
+
+    @Bean
+    OutboxCleanupPort outboxCleanupPort(
+            OutboxEventJpaRepository repository
+    ) {
+        return new OutboxCleanupPersistenceAdapter(
+                repository
+        );
+    }
+
+    @Bean
+    KafkaProducerSafetyGuard kafkaProducerSafetyGuard(
+            KafkaProperties kafkaProperties,
+            OutboxPublisherProperties outboxProperties
+    ) {
+        return new KafkaProducerSafetyGuard(
+                kafkaProperties
+                        .getProducer()
+                        .buildProperties(),
+                outboxProperties.sendTimeoutMs()
+        );
+    }
+
+    @Bean(destroyMethod = "close")
+    AdminClient kafkaAdminClient(
+            KafkaProperties kafkaProperties
+    ) {
+        return AdminClient.create(
+                kafkaProperties.buildAdminProperties()
+        );
+    }
+
+    @Bean
+    KafkaTopicNamesClient kafkaTopicNamesClient(
+            AdminClient adminClient
+    ) {
+        return new AdminClientKafkaTopicNamesClient(
+                adminClient
+        );
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            prefix = "app.kafka.provisioning",
+            name = "enabled",
+            havingValue = "true"
+    )
+    KafkaTopicProvisioningGuard kafkaTopicProvisioningGuard(
+            KafkaTopicProperties topicProperties,
+            KafkaTopicProvisioningProperties properties,
+            KafkaTopicNamesClient topicNamesClient
+    ) {
+        return new KafkaTopicProvisioningGuard(
+                topicProperties,
+                properties,
+                topicNamesClient
+        );
+    }
+
+    @Bean
+    KafkaReadinessHealthIndicator kafkaReadinessHealthIndicator(
+            KafkaTopicNamesClient topicNamesClient,
+            KafkaTopicProperties topicProperties,
+            KafkaHealthProperties properties
+    ) {
+        return new KafkaReadinessHealthIndicator(
+                topicNamesClient,
+                topicProperties,
+                properties
+        );
+    }
+
+    @Bean
+    VnpayConfigurationValidator vnpayConfigurationValidator() {
+        return new VnpayConfigurationValidator();
+    }
+
+    @Bean
+    VnpayReadinessHealthIndicator vnpayReadinessHealthIndicator(
+            VnpayProperties properties,
+            VnpayConfigurationValidator validator
+    ) {
+        return new VnpayReadinessHealthIndicator(
+                properties,
+                validator
         );
     }
 }

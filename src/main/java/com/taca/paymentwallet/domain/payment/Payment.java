@@ -2,12 +2,10 @@ package com.taca.paymentwallet.domain.payment;
 
 import com.taca.paymentwallet.domain.AggregateRoot;
 import com.taca.paymentwallet.domain.refund.RefundLimitExceededException;
-import com.taca.paymentwallet.domain.valueobject.BuyerUserId;
-import com.taca.paymentwallet.domain.valueobject.CheckoutGroupId;
-import com.taca.paymentwallet.domain.valueobject.Money;
-import com.taca.paymentwallet.domain.valueobject.PaymentId;
+import com.taca.paymentwallet.domain.valueobject.*;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -87,7 +85,7 @@ public class Payment extends AggregateRoot {
         this.buyerUserId = buyerUserId;
         this.method = method;
         this.amount = amount;
-        this.orders = List.copyOf(orders);
+        this.orders = new ArrayList<>(orders);
         this.status = status;
         this.capturedAmount = capturedAmount;
         this.refundedAmount = refundedAmount;
@@ -96,6 +94,20 @@ public class Payment extends AggregateRoot {
         this.paidAt = paidAt;
 
         validateTotalOrderAmount();
+    }
+
+    public PaymentOrder order(OrderId orderId) {
+        if (orderId == null) {
+            throw new IllegalArgumentException("orderId must not be null");
+        }
+
+        return orders.stream()
+                .filter(order -> order.orderId().equals(orderId))
+                .findFirst()
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "order does not belong to payment: " + orderId.value()
+                        ));
     }
 
     public static Payment create(
@@ -254,6 +266,7 @@ public class Payment extends AggregateRoot {
         registerEvent(PaymentExpiredEvent.now(id));
     }
 
+
     private void validateTotalOrderAmount() {
         Money total = orders.stream()
                 .map(PaymentOrder::totalAmount)
@@ -266,6 +279,84 @@ public class Payment extends AggregateRoot {
             throw new IllegalArgumentException(
                     "total order amount must equal payment amount"
             );
+        }
+    }
+
+    public PaymentOrder captureCodOrder(
+            OrderId orderId,
+            Instant occurredAt
+    ) {
+        ensurePendingCod();
+
+        PaymentOrder current = order(orderId);
+
+        if (!current.isCodPending()) {
+            return current;
+        }
+
+        PaymentOrder captured = current.captureCod(occurredAt);
+        replaceOrder(captured);
+
+        capturedAmount = capturedAmount.add(captured.totalAmount());
+
+        if (capturedAmount.isGreaterThan(amount)) {
+            throw new IllegalStateException("captured amount exceeds payment amount");
+        }
+
+        if (allCodOrdersCaptured()) {
+            markSucceeded(occurredAt);
+        }
+
+        return captured;
+    }
+
+    public PaymentOrder failCodOrder(
+            OrderId orderId,
+            Instant occurredAt,
+            String failureCode
+    ) {
+        ensurePendingCod();
+
+        PaymentOrder current = order(orderId);
+
+        if (!current.isCodPending()) {
+            return current;
+        }
+
+        PaymentOrder failed = current.failCod(occurredAt, failureCode);
+        replaceOrder(failed);
+
+        if (allCodOrdersFailed() && !capturedAmount.isPositive()) {
+            markFailed(failed.codFailureCode());
+        }
+
+        return failed;
+    }
+
+    private void replaceOrder(PaymentOrder updatedOrder) {
+        for (int i = 0; i < orders.size(); i++) {
+            if (orders.get(i).orderId().equals(updatedOrder.orderId())) {
+                orders.set(i, updatedOrder);
+                return;
+            }
+        }
+
+        throw new IllegalArgumentException(
+                "order does not belong to payment: " + updatedOrder.orderId().value()
+        );
+    }
+
+    private boolean allCodOrdersCaptured() {
+        return orders.stream().allMatch(PaymentOrder::isCodCaptured);
+    }
+
+    private boolean allCodOrdersFailed() {
+        return orders.stream().allMatch(PaymentOrder::isCodFailed);
+    }
+
+    private void ensurePendingCod() {
+        if (method != PaymentMethod.COD || status != PaymentStatus.PENDING_COD) {
+            throw new InvalidPaymentStateException(status, "process COD order");
         }
     }
 
@@ -294,7 +385,7 @@ public class Payment extends AggregateRoot {
     }
 
     public List<PaymentOrder> orders() {
-        return orders;
+        return List.copyOf(orders);
     }
 
     public PaymentStatus status() {

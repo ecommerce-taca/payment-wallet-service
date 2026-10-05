@@ -93,6 +93,11 @@ class VnpayWebhookHttpE2ETest {
             DynamicPropertyRegistry registry
     ) {
         registry.add(
+                "app.outbox.publisher.enabled",
+                () -> false
+        );
+
+        registry.add(
                 "vnpay.tmn-code",
                 () -> "TESTCODE"
         );
@@ -203,19 +208,23 @@ class VnpayWebhookHttpE2ETest {
          * ===== First webhook =====
          */
         mockMvc.perform(
-                        post(
-                                "/api/v1/payments/webhook"
-                        )
+                        post("/api/v1/payments/webhook")
                                 .header(
                                         "X-Request-ID",
                                         "req-webhook-http-e2e-001"
                                 )
+                                .header(
+                                        "traceparent",
+                                        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+                                )
+                                .header(
+                                        "tracestate",
+                                        "vendor=value"
+                                )
                                 .contentType(
                                         MediaType.APPLICATION_JSON
                                 )
-                                .content(
-                                        body
-                                )
+                                .content(body)
                 )
                 .andExpect(
                         status().isOk()
@@ -769,6 +778,38 @@ class VnpayWebhookHttpE2ETest {
                         .getEventType()
         ).isEqualTo(
                 "payment.succeeded"
+        );
+
+        OutboxEventJpaEntity outboxEvent =
+                events.getFirst();
+
+        assertThat(
+                outboxEvent.getHeaders()
+        ).isNotNull();
+
+        assertThat(
+                outboxEvent.getHeaders()
+        ).contains(
+                outboxEvent.getId()
+                        .toString()
+        );
+
+        assertThat(
+                outboxEvent.getHeaders()
+        ).contains(
+                "req-webhook-http-e2e-001"
+        );
+
+        assertThat(
+                outboxEvent.getHeaders()
+        ).contains(
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+        );
+
+        assertThat(
+                outboxEvent.getHeaders()
+        ).contains(
+                "vendor=value"
         );
     }
 

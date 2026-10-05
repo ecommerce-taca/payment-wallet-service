@@ -6,6 +6,8 @@ import com.taca.paymentwallet.application.service.*;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.finance.RefundAllocationCalculator;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxCleanupProperties;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxPublisherProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -224,6 +226,61 @@ public class ApplicationConfiguration {
                 inboxEventPort,
                 clockPort,
                 transactionPort
+        );
+    }
+
+    @Bean
+    PublishOutboxUseCase publishOutboxUseCase(
+            OutboxPublishingPort outboxPublishingPort,
+            OutboxMessagePublisherPort publisherPort,
+            TransactionPort transactionPort,
+            ClockPort clockPort,
+            OutboxPublisherProperties properties
+    ) {
+        return new PublishOutboxService(
+                outboxPublishingPort,
+                publisherPort,
+                transactionPort,
+                clockPort,
+                properties.batchSize(),
+                properties.maxRetries(),
+                properties.retryBackoff()
+        );
+    }
+
+    @Bean
+    PublishOutboxDeadLetterUseCase publishOutboxDeadLetterUseCase(
+            OutboxDeadLetterPort deadLetterPort,
+            DeadLetterPublisherPort deadLetterPublisherPort,
+            OutboxMessagePublisherPort messagePublisherPort,
+            TransactionPort transactionPort,
+            ClockPort clockPort,
+            OutboxPublisherProperties properties
+    ) {
+        return new PublishOutboxDeadLetterService(
+                deadLetterPort,
+                deadLetterPublisherPort,
+                messagePublisherPort,
+                transactionPort,
+                clockPort,
+                properties.batchSize(),
+                properties.maxRetries()
+        );
+    }
+
+    @Bean
+    CleanupOutboxUseCase cleanupOutboxUseCase(
+            OutboxCleanupPort cleanupPort,
+            ClockPort clockPort,
+            TransactionPort transactionPort,
+            OutboxCleanupProperties properties
+    ) {
+        return new CleanupOutboxService(
+                cleanupPort,
+                clockPort,
+                transactionPort,
+                properties.retention(),
+                properties.batchSize()
         );
     }
 }

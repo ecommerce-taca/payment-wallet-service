@@ -285,6 +285,81 @@ public class LedgerPostingFactory {
         );
     }
 
+    public LedgerPosting createCodOrderCapturePosting(
+            LedgerPostingId postingId,
+            PaymentId paymentId,
+            OrderId orderId,
+            LedgerAccountId clearingAccountId,
+            LedgerAccountId platformCommissionAccountId,
+            LedgerAccountId taxPayableAccountId,
+            LedgerAccountId shipmentPayableAccountId,
+            Map<ShopId, LedgerAccountId> sellerPendingAccountIdsByShop,
+            PaymentAllocation allocation,
+            Money shippingFee
+    ) {
+        require(postingId, "postingId");
+        require(paymentId, "paymentId");
+        require(orderId, "orderId");
+        require(clearingAccountId, "clearingAccountId");
+        require(platformCommissionAccountId, "platformCommissionAccountId");
+        require(taxPayableAccountId, "taxPayableAccountId");
+        require(shipmentPayableAccountId, "shipmentPayableAccountId");
+        require(allocation, "allocation");
+
+        if (sellerPendingAccountIdsByShop == null || sellerPendingAccountIdsByShop.isEmpty()) {
+            throw new IllegalArgumentException("sellerPendingAccountIdsByShop must not be empty");
+        }
+
+        if (shippingFee == null) {
+            throw new IllegalArgumentException("shippingFee must not be null");
+        }
+
+        if (!allocation.grossAmount().currency().equals(shippingFee.currency())) {
+            throw new IllegalArgumentException("shippingFee must use the same currency as allocation");
+        }
+
+        Money capturedAmount = allocation.grossAmount().add(shippingFee);
+        Map<LedgerAccountId, Money> sellerNetByAccount =
+                groupSellerNetByAccount(List.of(allocation), sellerPendingAccountIdsByShop);
+
+        List<LedgerEntry> entries = new ArrayList<>();
+
+        entries.add(LedgerEntry.debit(clearingAccountId, capturedAmount));
+
+        if (allocation.commissionAmount().isPositive()) {
+            entries.add(LedgerEntry.credit(
+                    platformCommissionAccountId,
+                    allocation.commissionAmount()
+            ));
+        }
+
+        if (allocation.taxAmount().isPositive()) {
+            entries.add(LedgerEntry.credit(
+                    taxPayableAccountId,
+                    allocation.taxAmount()
+            ));
+        }
+
+        sellerNetByAccount.forEach((accountId, amount) -> {
+            if (amount.isPositive()) {
+                entries.add(LedgerEntry.credit(accountId, amount));
+            }
+        });
+
+        if (shippingFee.isPositive()) {
+            entries.add(LedgerEntry.credit(shipmentPayableAccountId, shippingFee));
+        }
+
+        return new LedgerPosting(
+                postingId,
+                "COD_CAPTURE",
+                "COD_CAPTURE:" + paymentId.value() + ":" + orderId.value(),
+                "PAYMENT",
+                paymentId.value().toString(),
+                entries
+        );
+    }
+
     private Map<LedgerAccountId, Money> groupSellerNetByAccount(
             List<PaymentAllocation> allocations,
             Map<ShopId, LedgerAccountId> sellerPendingAccountIdsByShop

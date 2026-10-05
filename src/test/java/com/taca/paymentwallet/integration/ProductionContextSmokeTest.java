@@ -2,6 +2,11 @@ package com.taca.paymentwallet.integration;
 
 import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
+import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
+import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
+import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaInboxProcessor;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaProducerSafetyGuard;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -75,6 +80,11 @@ class ProductionContextSmokeTest {
                 () ->
                         "http://localhost/payment-return"
         );
+
+        registry.add(
+                "app.outbox.publisher.enabled",
+                () -> "false"
+        );
     }
 
     @Autowired
@@ -90,10 +100,34 @@ class ProductionContextSmokeTest {
     private RequestPayoutUseCase requestPayoutUseCase;
 
     @Autowired
+    private PublishOutboxUseCase publishOutboxUseCase;
+
+    @Autowired
+    private PublishOutboxDeadLetterUseCase publishOutboxDeadLetterUseCase;
+
+    @Autowired
     private ObjectProvider<RunSettlementUseCase> runSettlementUseCaseProvider;
 
     @Autowired
     private ObjectProvider<SettlementCandidatePort> settlementCandidatePortProvider;
+
+    @Autowired
+    private KafkaInboxProcessor kafkaInboxProcessor;
+
+    @Autowired
+    private OutboxBacklogHealthIndicator outboxBacklogHealthIndicator;
+
+    @Autowired
+    private CleanupOutboxUseCase cleanupOutboxUseCase;
+
+    @Autowired
+    private KafkaProducerSafetyGuard kafkaProducerSafetyGuard;
+
+    @Autowired
+    private KafkaReadinessHealthIndicator kafkaReadinessHealthIndicator;
+
+    @Autowired
+    private VnpayReadinessHealthIndicator vnpayReadinessHealthIndicator;
 
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
@@ -105,8 +139,32 @@ class ProductionContextSmokeTest {
 
         assertThat(requestPayoutUseCase).isNotNull();
 
+        assertThat(publishOutboxUseCase).isNotNull();
+
         assertThat(runSettlementUseCaseProvider.getIfAvailable()).isNull();
 
         assertThat(settlementCandidatePortProvider.getIfAvailable()).isNull();
+
+        assertThat(publishOutboxDeadLetterUseCase).isNotNull();
+
+        assertThat(kafkaInboxProcessor).isNotNull();
+
+        assertThat(outboxBacklogHealthIndicator).isNotNull();
+
+        assertThat(cleanupOutboxUseCase).isNotNull();
+
+        assertThat(kafkaProducerSafetyGuard).isNotNull();
+
+        assertThat(kafkaReadinessHealthIndicator).isNotNull();
+
+        assertThat(vnpayReadinessHealthIndicator)
+                .isNotNull();
+
+        assertThat(
+                vnpayReadinessHealthIndicator.health().getStatus()
+        )
+                .isEqualTo(
+                        org.springframework.boot.health.contributor.Status.UP
+                );
     }
 }
