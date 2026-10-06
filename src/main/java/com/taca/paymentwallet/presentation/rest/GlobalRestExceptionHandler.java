@@ -206,6 +206,19 @@ public class GlobalRestExceptionHandler {
         );
     }
 
+    @ExceptionHandler(MfaRequiredException.class)
+    public ResponseEntity<ApiErrorResponse> handleMfaRequired(
+            MfaRequiredException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.UNAUTHORIZED,
+                "AUTH_MFA_REQUIRED",
+                exception.getMessage(),
+                request
+        );
+    }
+
     @ExceptionHandler(
             IllegalArgumentException.class
     )
