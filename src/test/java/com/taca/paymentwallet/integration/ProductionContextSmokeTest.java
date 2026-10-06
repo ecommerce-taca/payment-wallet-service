@@ -4,6 +4,7 @@ import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
 import com.taca.paymentwallet.application.security.AuthenticationGuard;
 import com.taca.paymentwallet.application.security.AuthorizationPolicy;
+import com.taca.paymentwallet.application.security.ShopScopePolicy;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
@@ -137,6 +138,9 @@ class ProductionContextSmokeTest {
     @Autowired
     private AuthorizationPolicy authorizationPolicy;
 
+    @Autowired
+    private ShopScopePolicy shopScopePolicy;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -178,5 +182,7 @@ class ProductionContextSmokeTest {
         assertThat(authenticationGuard).isNotNull();
 
         assertThat(authorizationPolicy).isNotNull();
+
+        assertThat(shopScopePolicy).isNotNull();
     }
 }
