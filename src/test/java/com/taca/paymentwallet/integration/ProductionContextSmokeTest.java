@@ -2,6 +2,10 @@ package com.taca.paymentwallet.integration;
 
 import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
+import com.taca.paymentwallet.application.security.AuthenticationGuard;
+import com.taca.paymentwallet.application.security.AuthorizationPolicy;
+import com.taca.paymentwallet.application.security.MfaStepUpPolicy;
+import com.taca.paymentwallet.application.security.ShopScopePolicy;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
@@ -129,6 +133,18 @@ class ProductionContextSmokeTest {
     @Autowired
     private VnpayReadinessHealthIndicator vnpayReadinessHealthIndicator;
 
+    @Autowired
+    private AuthenticationGuard authenticationGuard;
+
+    @Autowired
+    private AuthorizationPolicy authorizationPolicy;
+
+    @Autowired
+    private ShopScopePolicy shopScopePolicy;
+
+    @Autowired
+    private MfaStepUpPolicy mfaStepUpPolicy;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -166,5 +182,13 @@ class ProductionContextSmokeTest {
                 .isEqualTo(
                         org.springframework.boot.health.contributor.Status.UP
                 );
+
+        assertThat(authenticationGuard).isNotNull();
+
+        assertThat(authorizationPolicy).isNotNull();
+
+        assertThat(shopScopePolicy).isNotNull();
+
+        assertThat(mfaStepUpPolicy).isNotNull();
     }
 }
