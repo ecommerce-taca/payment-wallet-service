@@ -1,13 +1,6 @@
 package com.taca.paymentwallet.presentation.rest;
 
-import com.taca.paymentwallet.application.exception.IdempotencyKeyReuseException;
-import com.taca.paymentwallet.application.exception.InvalidVnpaySignatureException;
-import com.taca.paymentwallet.application.exception.PaymentAmountMismatchException;
-import com.taca.paymentwallet.application.exception.PaymentAttemptNotFoundException;
-import com.taca.paymentwallet.application.exception.PaymentNotFoundByCheckoutGroupException;
-import com.taca.paymentwallet.application.exception.PaymentNotFoundException;
-import com.taca.paymentwallet.application.exception.RequestAlreadyProcessingException;
-import com.taca.paymentwallet.application.exception.UnsupportedPaymentMethodException;
+import com.taca.paymentwallet.application.exception.*;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -183,6 +176,19 @@ public class GlobalRestExceptionHandler {
                 HttpStatus.BAD_REQUEST,
                 "MALFORMED_REQUEST_BODY",
                 "Malformed request body",
+                request
+        );
+    }
+
+    @ExceptionHandler(UnauthenticatedException.class)
+    public ResponseEntity<ApiErrorResponse> handleUnauthenticated(
+            UnauthenticatedException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.UNAUTHORIZED,
+                "PAYMENT_UNAUTHENTICATED",
+                exception.getMessage(),
                 request
         );
     }

@@ -2,6 +2,7 @@ package com.taca.paymentwallet.infrastructure.config;
 
 import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.*;
+import com.taca.paymentwallet.application.security.AuthenticationGuard;
 import com.taca.paymentwallet.application.service.*;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.finance.RefundAllocationCalculator;
@@ -14,6 +15,11 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class ApplicationConfiguration {
 
+    @Bean
+    AuthenticationGuard authenticationGuard() {
+        return new AuthenticationGuard();
+    }
+    
     @Bean
     CreatePaymentUseCase createPaymentUseCase(
             PaymentRepositoryPort paymentRepository,

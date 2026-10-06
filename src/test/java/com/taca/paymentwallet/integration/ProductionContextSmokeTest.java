@@ -2,6 +2,7 @@ package com.taca.paymentwallet.integration;
 
 import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
+import com.taca.paymentwallet.application.security.AuthenticationGuard;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
@@ -129,6 +130,9 @@ class ProductionContextSmokeTest {
     @Autowired
     private VnpayReadinessHealthIndicator vnpayReadinessHealthIndicator;
 
+    @Autowired
+    private AuthenticationGuard authenticationGuard;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -166,5 +170,7 @@ class ProductionContextSmokeTest {
                 .isEqualTo(
                         org.springframework.boot.health.contributor.Status.UP
                 );
+
+        assertThat(authenticationGuard).isNotNull();
     }
 }
