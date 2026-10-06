@@ -193,6 +193,19 @@ public class GlobalRestExceptionHandler {
         );
     }
 
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiErrorResponse> handleForbidden(
+            ForbiddenException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.FORBIDDEN,
+                "PAYMENT_FORBIDDEN",
+                exception.getMessage(),
+                request
+        );
+    }
+
     @ExceptionHandler(
             IllegalArgumentException.class
     )
