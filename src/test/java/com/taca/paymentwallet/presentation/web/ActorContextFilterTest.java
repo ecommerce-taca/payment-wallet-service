@@ -78,4 +78,23 @@ class ActorContextFilterTest {
 
         assertThat(ActorContextHolder.current()).isEmpty();
     }
+
+    @Test
+    void shouldAllowWebhookWithoutActorHeaders() throws Exception {
+        MockHttpServletRequest request =
+                new MockHttpServletRequest("POST", "/api/v1/payments/webhook");
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicReference<Boolean> invoked = new AtomicReference<>(false);
+
+        FilterChain chain = (req, res) -> {
+            invoked.set(true);
+            assertThat(ActorContextHolder.current()).isEmpty();
+        };
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(invoked.get()).isTrue();
+        assertThat(ActorContextHolder.current()).isEmpty();
+    }
 }

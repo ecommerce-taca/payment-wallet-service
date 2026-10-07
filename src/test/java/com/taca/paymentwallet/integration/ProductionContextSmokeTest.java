@@ -8,6 +8,7 @@ import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator
 import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaInboxProcessor;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaProducerSafetyGuard;
+import com.taca.paymentwallet.presentation.web.WebhookAuthenticationBypass;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -145,6 +146,9 @@ class ProductionContextSmokeTest {
     @Autowired
     private InternalCallerPolicy internalCallerPolicy;
 
+    @Autowired
+    private WebhookAuthenticationBypass webhookAuthenticationBypass;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -192,5 +196,7 @@ class ProductionContextSmokeTest {
         assertThat(mfaStepUpPolicy).isNotNull();
 
         assertThat(internalCallerPolicy).isNotNull();
+
+        assertThat(webhookAuthenticationBypass).isNotNull();
     }
 }
