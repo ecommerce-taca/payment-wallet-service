@@ -72,4 +72,23 @@ class MfaStepUpFilterTest {
 
         assertThat(MfaStepUpContextHolder.current()).isEmpty();
     }
+
+    @Test
+    void shouldAllowWebhookWithoutMfaHeader() throws Exception {
+        MockHttpServletRequest request =
+                new MockHttpServletRequest("POST", "/api/v1/payments/webhook");
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        AtomicReference<Boolean> invoked = new AtomicReference<>(false);
+
+        FilterChain chain = (req, res) -> {
+            invoked.set(true);
+            assertThat(MfaStepUpContextHolder.current()).isEmpty();
+        };
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(invoked.get()).isTrue();
+        assertThat(MfaStepUpContextHolder.current()).isEmpty();
+    }
 }
