@@ -1,9 +1,8 @@
-package com.taca.paymentwallet.security;
+package com.taca.paymentwallet.application.security;
 
 import com.taca.paymentwallet.application.exception.ForbiddenException;
 import com.taca.paymentwallet.application.exception.MfaRequiredException;
 import com.taca.paymentwallet.application.exception.UnauthenticatedException;
-import com.taca.paymentwallet.application.security.*;
 import com.taca.paymentwallet.presentation.web.WebhookAuthenticationBypass;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

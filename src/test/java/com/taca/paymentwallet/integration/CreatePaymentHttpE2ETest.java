@@ -122,27 +122,40 @@ class CreatePaymentHttpE2ETest {
     void shouldCreateVnpayPaymentThroughHttpAndPersistIt()
             throws Exception {
 
-        String body =
-                """
+        UUID checkoutGroupId =
+                UUID.fromString("31000000-0000-0000-0000-000000000001");
+
+        UUID buyerUserId =
+                UUID.fromString("31000000-0000-0000-0000-000000000002");
+
+        UUID orderId =
+                UUID.fromString("33000000-0000-0000-0000-000000000001");
+
+        UUID shopId =
+                UUID.fromString("34000000-0000-0000-0000-000000000001");
+
+        String body = """
                 {
-                  "checkout_group_id":
-                    "31000000-0000-0000-0000-000000000001",
-                  "buyer_user_id":
-                    "31000000-0000-0000-0000-000000000002",
+                  "checkout_group_id": "%s",
+                  "buyer_user_id": "%s",
                   "method": "VNPAY",
                   "amount": 100000,
                   "currency": "VND",
                   "orders": [
                     {
-                      "order_id":
-                        "31000000-0000-0000-0000-000000000003",
-                      "shop_id":
-                        "31000000-0000-0000-0000-000000000004",
-                      "amount": 100000
+                      "order_id": "%s",
+                      "shop_id": "%s",
+                      "amount": 100000,
+                      "shipping_fee": 0
                     }
                   ]
                 }
-                """;
+                """.formatted(
+                        checkoutGroupId,
+                        buyerUserId,
+                        orderId,
+                        shopId
+                );
 
         mockMvc.perform(
                         post(

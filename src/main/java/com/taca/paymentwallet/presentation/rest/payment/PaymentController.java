@@ -147,7 +147,8 @@ public class PaymentController {
                                         new CreatePaymentOrderCommand(
                                                 order.orderId(),
                                                 order.shopId(),
-                                                order.amount()
+                                                order.amount(),
+                                                order.shippingFee()
                                         )
                         )
                         .toList(),
