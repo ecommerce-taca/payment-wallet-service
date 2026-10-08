@@ -3,6 +3,7 @@ package com.taca.paymentwallet.presentation.rest.payment;
 import com.taca.paymentwallet.application.command.CreatePaymentCommand;
 import com.taca.paymentwallet.application.command.CreatePaymentOrderCommand;
 import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
+import com.taca.paymentwallet.application.exception.InvalidPaymentRequestException;
 import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
 import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
 import com.taca.paymentwallet.application.result.CreatePaymentResult;
@@ -45,6 +46,9 @@ public class PaymentController {
             @Valid @RequestBody CreatePaymentRequest request,
             HttpServletRequest httpServletRequest
     ) {
+        requireHeaderValue(idempotencyKey, "Idempotency-Key");
+        requireHeaderValue(requestId, "X-Request-ID");
+
         internalCallerPolicy.requireOrderCommerce();
 
         CreatePaymentCommand command = toCommand(
@@ -55,12 +59,12 @@ public class PaymentController {
 
         CreatePaymentResult result = createPaymentUseCase.execute(command);
 
-        ApiResponse<CreatePaymentData> response = new ApiResponse<>(
-                toData(result),
-                new ApiMeta(requestId)
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                new ApiResponse<>(
+                        toData(result),
+                        new ApiMeta(requestId.trim())
+                )
         );
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/webhook")
@@ -105,6 +109,12 @@ public class PaymentController {
         return ResponseEntity.ok(
                 response
         );
+    }
+
+    private void requireHeaderValue(String value, String headerName) {
+        if (value == null || value.isBlank()) {
+            throw new InvalidPaymentRequestException(headerName + " must not be blank");
+        }
     }
 
     private CreatePaymentCommand toCommand(

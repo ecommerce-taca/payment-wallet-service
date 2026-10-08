@@ -762,20 +762,11 @@ class PaymentControllerTest {
     void shouldReturnConflictWhenIdempotencyKeyIsReused()
             throws Exception {
 
-        when(
-                createPaymentUseCase.execute(
-                        any()
-                )
-        ).thenThrow(
-                new IdempotencyKeyReuseException(
-                        "idem-001"
-                )
-        );
+        when(createPaymentUseCase.execute(any()))
+                .thenThrow(new IdempotencyKeyReuseException("idem-001"));
 
         mockMvc.perform(
-                        post(
-                                "/api/v1/payments"
-                        )
+                        post("/api/v1/payments")
                                 .header(
                                         "Idempotency-Key",
                                         "idem-001"
@@ -784,29 +775,17 @@ class PaymentControllerTest {
                                         "X-Request-ID",
                                         "req-idempotency-conflict"
                                 )
-                                .contentType(
-                                        MediaType.APPLICATION_JSON
-                                )
-                                .content(
-                                        validBody()
-                                )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(validBody())
+                )
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.error.code")
+                                .value("PAYMENT_IDEMPOTENCY_CONFLICT")
                 )
                 .andExpect(
-                        status().isConflict()
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.error.code"
-                        ).value(
-                                "IDEMPOTENCY_KEY_REUSED"
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.meta.request_id"
-                        ).value(
-                                "req-idempotency-conflict"
-                        )
+                        jsonPath("$.meta.request_id")
+                                .value("req-idempotency-conflict")
                 );
     }
 
@@ -1032,6 +1011,137 @@ class PaymentControllerTest {
 
         verifyNoInteractions(internalCallerPolicy);
         verify(processVnpayWebhookUseCase).execute(any());
+    }
+
+    @Test
+    void shouldRejectUnsupportedPaymentMethodAtHttpBoundary() throws Exception {
+        String body = """
+            {
+              "checkout_group_id": "11111111-1111-1111-1111-111111111111",
+              "buyer_user_id": "22222222-2222-2222-2222-222222222222",
+              "method": "MOMO",
+              "amount": 100000,
+              "currency": "VND",
+              "orders": [
+                {
+                  "order_id": "33333333-3333-3333-3333-333333333333",
+                  "shop_id": "44444444-4444-4444-4444-444444444444",
+                  "amount": 100000,
+                  "shipping_fee": 0
+                }
+              ]
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments")
+                                .header("Idempotency-Key", "idem-invalid-method")
+                                .header("X-Request-ID", "req-invalid-method")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(createPaymentUseCase);
+        verifyNoInteractions(internalCallerPolicy);
+    }
+
+    @Test
+    void shouldRejectNonVndCurrencyAtHttpBoundary() throws Exception {
+        String body = """
+            {
+              "checkout_group_id": "11111111-1111-1111-1111-111111111111",
+              "buyer_user_id": "22222222-2222-2222-2222-222222222222",
+              "method": "VNPAY",
+              "amount": 100000,
+              "currency": "USD",
+              "orders": [
+                {
+                  "order_id": "33333333-3333-3333-3333-333333333333",
+                  "shop_id": "44444444-4444-4444-4444-444444444444",
+                  "amount": 100000,
+                  "shipping_fee": 0
+                }
+              ]
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments")
+                                .header("Idempotency-Key", "idem-invalid-currency")
+                                .header("X-Request-ID", "req-invalid-currency")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(createPaymentUseCase);
+        verifyNoInteractions(internalCallerPolicy);
+    }
+
+    @Test
+    void shouldRejectBlankIdempotencyKey() throws Exception {
+        mockMvc.perform(
+                        post("/api/v1/payments")
+                                .header("Idempotency-Key", "   ")
+                                .header("X-Request-ID", "req-blank-idempotency")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(validBody())
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_INVALID_INPUT"))
+                .andExpect(jsonPath("$.meta.request_id").value("req-blank-idempotency"));
+
+        verifyNoInteractions(createPaymentUseCase);
+        verifyNoInteractions(internalCallerPolicy);
+    }
+
+    @Test
+    void shouldRejectBlankRequestId() throws Exception {
+        mockMvc.perform(
+                        post("/api/v1/payments")
+                                .header("Idempotency-Key", "idem-blank-request")
+                                .header("X-Request-ID", "   ")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(validBody())
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_INVALID_INPUT"));
+
+        verifyNoInteractions(createPaymentUseCase);
+        verifyNoInteractions(internalCallerPolicy);
+    }
+
+    @Test
+    void shouldRejectShippingFeeEqualToOrderAmount() throws Exception {
+        String body = """
+            {
+              "checkout_group_id": "11111111-1111-1111-1111-111111111111",
+              "buyer_user_id": "22222222-2222-2222-2222-222222222222",
+              "method": "COD",
+              "amount": 100000,
+              "currency": "VND",
+              "orders": [
+                {
+                  "order_id": "33333333-3333-3333-3333-333333333333",
+                  "shop_id": "44444444-4444-4444-4444-444444444444",
+                  "amount": 100000,
+                  "shipping_fee": 100000
+                }
+              ]
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments")
+                                .header("Idempotency-Key", "idem-invalid-shipping")
+                                .header("X-Request-ID", "req-invalid-shipping")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(createPaymentUseCase);
     }
 
     private String validBody() {
