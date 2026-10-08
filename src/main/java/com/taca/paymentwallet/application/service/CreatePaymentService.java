@@ -271,7 +271,8 @@ public class CreatePaymentService implements CreatePaymentUseCase {
                 .map(order -> new PaymentOrder(
                         new OrderId(order.orderId()),
                         new ShopId(order.shopId()),
-                        Money.vnd(order.amount())
+                        Money.vnd(order.merchandiseAmount()),
+                        Money.vnd(order.shippingFee())
                 ))
                 .toList();
     }

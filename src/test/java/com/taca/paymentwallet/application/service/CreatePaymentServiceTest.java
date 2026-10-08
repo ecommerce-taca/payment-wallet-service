@@ -259,7 +259,8 @@ class CreatePaymentServiceTest {
         CreatePaymentOrderCommand order = new CreatePaymentOrderCommand(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                100_000
+                100_000,
+                0
         );
 
         CreatePaymentCommand command = new CreatePaymentCommand(
@@ -359,7 +360,8 @@ class CreatePaymentServiceTest {
                 new CreatePaymentOrderCommand(
                         UUID.randomUUID(),
                         UUID.randomUUID(),
-                        100_000
+                        100_000,
+                        0
                 );
 
         assertThrows(
@@ -378,11 +380,63 @@ class CreatePaymentServiceTest {
         );
     }
 
+    @Test
+    void shouldPreserveMerchandiseAndShippingFeeBreakdown() {
+        FakePaymentRepositoryPort paymentRepository = new FakePaymentRepositoryPort();
+
+        CreatePaymentService service = newService(
+                paymentRepository,
+                new FakePaymentAttemptRepositoryPort(),
+                new FakeIdempotencyPort(),
+                new FakeOutboxPort(),
+                new FixedIdGeneratorPort(UUID.randomUUID()),
+                new FakeVnpayGatewayPort()
+        );
+
+        CreatePaymentOrderCommand order = new CreatePaymentOrderCommand(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                120_000,
+                20_000
+        );
+
+        CreatePaymentCommand command = new CreatePaymentCommand(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "COD",
+                120_000,
+                "VND",
+                "idem-shipping-breakdown",
+                List.of(order),
+                null
+        );
+
+        service.execute(command);
+
+        Payment savedPayment = paymentRepository.savedPayments.get(0);
+
+        assertEquals(120_000L, savedPayment.amount().amount());
+        assertEquals(1, savedPayment.orders().size());
+        assertEquals(
+                100_000L,
+                savedPayment.orders().get(0).merchandiseAmount().amount()
+        );
+        assertEquals(
+                20_000L,
+                savedPayment.orders().get(0).shippingFee().amount()
+        );
+        assertEquals(
+                120_000L,
+                savedPayment.orders().get(0).totalAmount().amount()
+        );
+    }
+
     private CreatePaymentCommand vnpayCommand() {
         CreatePaymentOrderCommand order = new CreatePaymentOrderCommand(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                100_000
+                100_000,
+                0
         );
 
         return new CreatePaymentCommand(
@@ -401,7 +455,8 @@ class CreatePaymentServiceTest {
         CreatePaymentOrderCommand order = new CreatePaymentOrderCommand(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                100_000
+                100_000,
+                0
         );
 
         return new CreatePaymentCommand(

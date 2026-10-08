@@ -83,17 +83,14 @@ public class GlobalRestExceptionHandler {
         );
     }
 
-    @ExceptionHandler(
-            IdempotencyKeyReuseException.class
-    )
-    public ResponseEntity<ApiErrorResponse>
-    handleIdempotencyKeyReuse(
+    @ExceptionHandler(IdempotencyKeyReuseException.class)
+    public ResponseEntity<ApiErrorResponse> handleIdempotencyKeyReuse(
             IdempotencyKeyReuseException exception,
             HttpServletRequest request
     ) {
         return error(
                 HttpStatus.CONFLICT,
-                "IDEMPOTENCY_KEY_REUSED",
+                "PAYMENT_IDEMPOTENCY_CONFLICT",
                 exception.getMessage(),
                 request
         );
@@ -250,6 +247,19 @@ public class GlobalRestExceptionHandler {
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
                 "Internal server error",
+                request
+        );
+    }
+
+    @ExceptionHandler(InvalidPaymentRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidPaymentRequest(
+            InvalidPaymentRequestException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.BAD_REQUEST,
+                "PAYMENT_INVALID_INPUT",
+                exception.getMessage(),
                 request
         );
     }
