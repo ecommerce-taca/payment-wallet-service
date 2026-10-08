@@ -41,6 +41,13 @@ public class ApplicationConfiguration {
     }
 
     @Bean
+    GetPaymentUseCase getPaymentUseCase(
+            PaymentRepositoryPort paymentRepository
+    ) {
+        return new GetPaymentService(paymentRepository);
+    }
+
+    @Bean
     CreatePaymentUseCase createPaymentUseCase(
             PaymentRepositoryPort paymentRepository,
             PaymentAttemptRepositoryPort paymentAttemptRepository,

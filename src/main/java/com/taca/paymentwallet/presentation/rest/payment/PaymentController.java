@@ -5,8 +5,11 @@ import com.taca.paymentwallet.application.command.CreatePaymentOrderCommand;
 import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
 import com.taca.paymentwallet.application.exception.InvalidPaymentRequestException;
 import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
+import com.taca.paymentwallet.application.port.in.GetPaymentUseCase;
 import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
+import com.taca.paymentwallet.application.query.GetPaymentQuery;
 import com.taca.paymentwallet.application.result.CreatePaymentResult;
+import com.taca.paymentwallet.application.result.GetPaymentResult;
 import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
 import com.taca.paymentwallet.application.security.InternalCallerPolicy;
 import com.taca.paymentwallet.presentation.rest.ApiMeta;
@@ -18,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Objects;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/payments")
@@ -29,14 +33,18 @@ public class PaymentController {
 
     private final InternalCallerPolicy internalCallerPolicy;
 
+    private final GetPaymentUseCase getPaymentUseCase;
+
     public PaymentController(
             CreatePaymentUseCase createPaymentUseCase,
             ProcessVnpayWebhookUseCase processVnpayWebhookUseCase,
-            InternalCallerPolicy internalCallerPolicy
+            InternalCallerPolicy internalCallerPolicy,
+            GetPaymentUseCase getPaymentUseCase
     ) {
         this.createPaymentUseCase = Objects.requireNonNull(createPaymentUseCase);
         this.processVnpayWebhookUseCase = Objects.requireNonNull(processVnpayWebhookUseCase);
         this.internalCallerPolicy = Objects.requireNonNull(internalCallerPolicy);
+        this.getPaymentUseCase = Objects.requireNonNull(getPaymentUseCase);
     }
 
     @PostMapping
@@ -111,6 +119,32 @@ public class PaymentController {
         );
     }
 
+    @GetMapping("/{paymentId}")
+    public ResponseEntity<ApiResponse<GetPaymentData>> getPayment(
+            @PathVariable String paymentId,
+            @RequestHeader("X-Request-ID") String requestId
+    ) {
+        GetPaymentResult result =
+                getPaymentUseCase.execute(
+                        new GetPaymentQuery(parsePaymentId(paymentId))
+                );
+
+        return ResponseEntity.ok(
+                new ApiResponse<>(
+                        toData(result),
+                        new ApiMeta(requestId)
+                )
+        );
+    }
+
+    private UUID parsePaymentId(String value) {
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException exception) {
+            throw new InvalidPaymentRequestException("paymentId must be a valid UUID");
+        }
+    }
+
     private void requireHeaderValue(String value, String headerName) {
         if (value == null || value.isBlank()) {
             throw new InvalidPaymentRequestException(headerName + " must not be blank");
@@ -157,6 +191,33 @@ public class PaymentController {
                 result.currency(),
                 result.paymentUrl(),
                 result.expiresAt()
+        );
+    }
+
+    private GetPaymentData toData(GetPaymentResult result) {
+        return new GetPaymentData(
+                result.paymentId(),
+                result.checkoutGroupId(),
+                result.status(),
+                result.method(),
+                result.amount(),
+                result.currency(),
+                result.capturedAmount(),
+                result.refundedAmount(),
+                result.expiresAt(),
+                result.paidAt(),
+                result.orders()
+                        .stream()
+                        .map(order ->
+                                new GetPaymentOrderData(
+                                        order.orderId(),
+                                        order.shopId(),
+                                        order.merchandiseAmount(),
+                                        order.shippingFee(),
+                                        order.amount()
+                                )
+                        )
+                        .toList()
         );
     }
 }
