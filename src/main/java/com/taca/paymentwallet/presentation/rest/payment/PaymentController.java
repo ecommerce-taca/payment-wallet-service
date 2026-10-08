@@ -7,6 +7,7 @@ import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
 import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
 import com.taca.paymentwallet.application.result.CreatePaymentResult;
 import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
+import com.taca.paymentwallet.application.security.InternalCallerPolicy;
 import com.taca.paymentwallet.presentation.rest.ApiMeta;
 import com.taca.paymentwallet.presentation.rest.ApiResponse;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,63 +26,41 @@ public class PaymentController {
 
     private final ProcessVnpayWebhookUseCase processVnpayWebhookUseCase;
 
+    private final InternalCallerPolicy internalCallerPolicy;
+
     public PaymentController(
             CreatePaymentUseCase createPaymentUseCase,
-            ProcessVnpayWebhookUseCase processVnpayWebhookUseCase
+            ProcessVnpayWebhookUseCase processVnpayWebhookUseCase,
+            InternalCallerPolicy internalCallerPolicy
     ) {
-        this.createPaymentUseCase =
-                Objects.requireNonNull(
-                        createPaymentUseCase
-                );
-
-        this.processVnpayWebhookUseCase =
-                Objects.requireNonNull(
-                        processVnpayWebhookUseCase
-                );
+        this.createPaymentUseCase = Objects.requireNonNull(createPaymentUseCase);
+        this.processVnpayWebhookUseCase = Objects.requireNonNull(processVnpayWebhookUseCase);
+        this.internalCallerPolicy = Objects.requireNonNull(internalCallerPolicy);
     }
 
     @PostMapping
     public ResponseEntity<ApiResponse<CreatePaymentData>> createPayment(
-            @RequestHeader("Idempotency-Key")
-            String idempotencyKey,
-
-            @RequestHeader("X-Request-ID")
-            String requestId,
-
-            @Valid
-            @RequestBody
-            CreatePaymentRequest request,
-
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestHeader("X-Request-ID") String requestId,
+            @Valid @RequestBody CreatePaymentRequest request,
             HttpServletRequest httpServletRequest
     ) {
-        CreatePaymentCommand command =
-                toCommand(
-                        request,
-                        idempotencyKey,
-                        httpServletRequest
-                                .getRemoteAddr()
-                );
+        internalCallerPolicy.requireOrderCommerce();
 
-        CreatePaymentResult result =
-                createPaymentUseCase.execute(
-                        command
-                );
+        CreatePaymentCommand command = toCommand(
+                request,
+                idempotencyKey,
+                httpServletRequest.getRemoteAddr()
+        );
 
-        ApiResponse<CreatePaymentData> response =
-                new ApiResponse<>(
-                        toData(result),
-                        new ApiMeta(
-                                requestId
-                        )
-                );
+        CreatePaymentResult result = createPaymentUseCase.execute(command);
 
-        return ResponseEntity
-                .status(
-                        HttpStatus.CREATED
-                )
-                .body(
-                        response
-                );
+        ApiResponse<CreatePaymentData> response = new ApiResponse<>(
+                toData(result),
+                new ApiMeta(requestId)
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/webhook")

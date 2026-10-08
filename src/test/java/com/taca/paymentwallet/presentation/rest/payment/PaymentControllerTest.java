@@ -2,21 +2,20 @@ package com.taca.paymentwallet.presentation.rest.payment;
 
 import com.taca.paymentwallet.application.command.CreatePaymentCommand;
 import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
-import com.taca.paymentwallet.application.exception.IdempotencyKeyReuseException;
-import com.taca.paymentwallet.application.exception.InvalidVnpaySignatureException;
-import com.taca.paymentwallet.application.exception.PaymentAmountMismatchException;
-import com.taca.paymentwallet.application.exception.PaymentAttemptNotFoundException;
+import com.taca.paymentwallet.application.exception.*;
 import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
 import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
 import com.taca.paymentwallet.application.result.CreatePaymentResult;
 import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
 import com.taca.paymentwallet.application.result.WebhookProcessingAction;
+import com.taca.paymentwallet.application.security.InternalCallerPolicy;
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.domain.valueobject.PaymentId;
 import com.taca.paymentwallet.presentation.rest.GlobalRestExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -36,35 +35,80 @@ class PaymentControllerTest {
 
     private ProcessVnpayWebhookUseCase processVnpayWebhookUseCase;
 
+    private InternalCallerPolicy internalCallerPolicy;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
-        createPaymentUseCase =
-                mock(
-                        CreatePaymentUseCase.class
-                );
+        createPaymentUseCase = mock(CreatePaymentUseCase.class);
+        processVnpayWebhookUseCase = mock(ProcessVnpayWebhookUseCase.class);
+        internalCallerPolicy = mock(InternalCallerPolicy.class);
 
-        processVnpayWebhookUseCase =
-                mock(
-                        ProcessVnpayWebhookUseCase.class
-                );
+        PaymentController controller = new PaymentController(
+                createPaymentUseCase,
+                processVnpayWebhookUseCase,
+                internalCallerPolicy
+        );
 
-        PaymentController controller =
-                new PaymentController(
-                        createPaymentUseCase,
-                        processVnpayWebhookUseCase
-                );
+        mockMvc = MockMvcBuilders
+                .standaloneSetup(controller)
+                .setControllerAdvice(new GlobalRestExceptionHandler())
+                .build();
+    }
 
-        mockMvc =
-                MockMvcBuilders
-                        .standaloneSetup(
-                                controller
-                        )
-                        .setControllerAdvice(
-                                new GlobalRestExceptionHandler()
-                        )
-                        .build();
+    @Test
+    void shouldRequireOrderCommerceBeforeCreatingPayment() throws Exception {
+        UUID checkoutGroupId =
+                UUID.fromString("11111111-1111-1111-1111-111111111111");
+
+        when(createPaymentUseCase.execute(any())).thenReturn(
+                new CreatePaymentResult(
+                        UUID.randomUUID(),
+                        checkoutGroupId,
+                        "PENDING_COD",
+                        "COD",
+                        100_000,
+                        "VND",
+                        null,
+                        null
+                )
+        );
+
+        String body = """
+            {
+              "checkout_group_id": "11111111-1111-1111-1111-111111111111",
+              "buyer_user_id": "22222222-2222-2222-2222-222222222222",
+              "method": "COD",
+              "amount": 100000,
+              "currency": "VND",
+              "orders": [
+                {
+                  "order_id": "33333333-3333-3333-3333-333333333333",
+                  "shop_id": "44444444-4444-4444-4444-444444444444",
+                  "amount": 100000,
+                  "shipping_fee": 0
+                }
+              ]
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments")
+                                .header("Idempotency-Key", "idem-security-001")
+                                .header("X-Request-ID", "req-security-001")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isCreated());
+
+        InOrder inOrder = inOrder(
+                internalCallerPolicy,
+                createPaymentUseCase
+        );
+
+        inOrder.verify(internalCallerPolicy).requireOrderCommerce();
+        inOrder.verify(createPaymentUseCase).execute(any());
     }
 
     @Test
@@ -924,6 +968,70 @@ class PaymentControllerTest {
         assertEquals(80_000L, command.orders().get(1).amount());
         assertEquals(10_000L, command.orders().get(1).shippingFee());
         assertEquals(70_000L, command.orders().get(1).merchandiseAmount());
+    }
+
+    @Test
+    void shouldRejectCreatePaymentWhenCallerIsNotOrderCommerce() throws Exception {
+        doThrow(new ForbiddenException())
+                .when(internalCallerPolicy)
+                .requireOrderCommerce();
+
+        mockMvc.perform(
+                        post("/api/v1/payments")
+                                .header("Idempotency-Key", "idem-security-002")
+                                .header("X-Request-ID", "req-security-002")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(validBody())
+                )
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_FORBIDDEN"))
+                .andExpect(jsonPath("$.meta.request_id").value("req-security-002"));
+
+        verifyNoInteractions(createPaymentUseCase);
+    }
+
+    @Test
+    void shouldRejectAnonymousCreatePayment() throws Exception {
+        doThrow(new UnauthenticatedException())
+                .when(internalCallerPolicy)
+                .requireOrderCommerce();
+
+        mockMvc.perform(
+                        post("/api/v1/payments")
+                                .header("Idempotency-Key", "idem-security-003")
+                                .header("X-Request-ID", "req-security-003")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(validBody())
+                )
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_UNAUTHENTICATED"))
+                .andExpect(jsonPath("$.meta.request_id").value("req-security-003"));
+
+        verifyNoInteractions(createPaymentUseCase);
+    }
+
+    @Test
+    void shouldNotRequireInternalCallerForVnpayWebhook() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        when(processVnpayWebhookUseCase.execute(any())).thenReturn(
+                new ProcessVnpayWebhookResult(
+                        paymentId,
+                        "SUCCESS",
+                        WebhookProcessingAction.APPLIED
+                )
+        );
+
+        mockMvc.perform(
+                        post("/api/v1/payments/webhook")
+                                .header("X-Request-ID", "req-webhook-security")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(validWebhookBody())
+                )
+                .andExpect(status().isOk());
+
+        verifyNoInteractions(internalCallerPolicy);
+        verify(processVnpayWebhookUseCase).execute(any());
     }
 
     private String validBody() {
