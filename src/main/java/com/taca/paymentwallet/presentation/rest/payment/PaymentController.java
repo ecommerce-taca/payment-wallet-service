@@ -155,6 +155,8 @@ public class PaymentController {
         requireHeaderValue(idempotencyKey, "Idempotency-Key");
         requireHeaderValue(requestId, "X-Request-ID");
 
+        internalCallerPolicy.requireOrderCommerceOrFinanceOps();
+
         UUID parsedPaymentId = parsePaymentId(paymentId);
 
         RequestRefundCommand command = refundRestMapper.toCommand(

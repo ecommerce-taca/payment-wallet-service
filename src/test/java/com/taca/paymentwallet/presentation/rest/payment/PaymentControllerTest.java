@@ -1421,6 +1421,123 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$.meta.request_id").value("req-refund-missing-payment"));
     }
 
+    @Test
+    void shouldAuthorizeRefundBeforeExecutingUseCase() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+        UUID refundId = UUID.randomUUID();
+
+        when(requestRefundUseCase.execute(any())).thenReturn(
+                new RequestRefundResult(
+                        refundId,
+                        paymentId,
+                        50_000,
+                        "VND",
+                        "REQUESTED"
+                )
+        );
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-security-001")
+                                .header("X-Request-ID", "req-refund-security-001")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isAccepted());
+
+        InOrder inOrder = inOrder(
+                internalCallerPolicy,
+                requestRefundUseCase
+        );
+
+        inOrder.verify(internalCallerPolicy).requireOrderCommerceOrFinanceOps();
+
+        inOrder.verify(requestRefundUseCase).execute(any());
+    }
+
+    @Test
+    void shouldRejectUnauthorizedRefundCaller() throws Exception {
+        doThrow(new ForbiddenException())
+                .when(internalCallerPolicy)
+                .requireOrderCommerceOrFinanceOps();
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post(
+                                "/api/v1/payments/{paymentId}/refunds",
+                                UUID.randomUUID()
+                        )
+                                .header("Idempotency-Key", "refund-idem-security-002")
+                                .header("X-Request-ID", "req-refund-security-002")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isForbidden())
+                .andExpect(
+                        jsonPath("$.error.code")
+                                .value("PAYMENT_FORBIDDEN")
+                )
+                .andExpect(
+                        jsonPath("$.meta.request_id")
+                                .value("req-refund-security-002")
+                );
+
+        verifyNoInteractions(
+                requestRefundUseCase
+        );
+    }
+
+    @Test
+    void shouldRejectAnonymousRefundCaller() throws Exception {
+        doThrow(new UnauthenticatedException())
+                .when(internalCallerPolicy)
+                .requireOrderCommerceOrFinanceOps();
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post(
+                                "/api/v1/payments/{paymentId}/refunds",
+                                UUID.randomUUID()
+                        )
+                                .header("Idempotency-Key", "refund-idem-security-003")
+                                .header("X-Request-ID", "req-refund-security-003")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isUnauthorized())
+                .andExpect(
+                        jsonPath("$.error.code")
+                                .value("PAYMENT_UNAUTHENTICATED")
+                )
+                .andExpect(
+                        jsonPath("$.meta.request_id")
+                                .value("req-refund-security-003")
+                );
+
+        verifyNoInteractions(
+                requestRefundUseCase
+        );
+    }
+
     private String validWebhookBody() {
         return """
             {
