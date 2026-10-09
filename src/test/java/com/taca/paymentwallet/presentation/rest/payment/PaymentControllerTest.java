@@ -4,10 +4,10 @@ import com.taca.paymentwallet.application.command.CreatePaymentCommand;
 import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
 import com.taca.paymentwallet.application.exception.*;
 import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
+import com.taca.paymentwallet.application.port.in.GetPaymentUseCase;
 import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
-import com.taca.paymentwallet.application.result.CreatePaymentResult;
-import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
-import com.taca.paymentwallet.application.result.WebhookProcessingAction;
+import com.taca.paymentwallet.application.query.GetPaymentQuery;
+import com.taca.paymentwallet.application.result.*;
 import com.taca.paymentwallet.application.security.InternalCallerPolicy;
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.domain.valueobject.PaymentId;
@@ -21,11 +21,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -37,6 +39,8 @@ class PaymentControllerTest {
 
     private InternalCallerPolicy internalCallerPolicy;
 
+    private GetPaymentUseCase getPaymentUseCase;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -44,11 +48,13 @@ class PaymentControllerTest {
         createPaymentUseCase = mock(CreatePaymentUseCase.class);
         processVnpayWebhookUseCase = mock(ProcessVnpayWebhookUseCase.class);
         internalCallerPolicy = mock(InternalCallerPolicy.class);
+        getPaymentUseCase = mock(GetPaymentUseCase.class);
 
         PaymentController controller = new PaymentController(
                 createPaymentUseCase,
                 processVnpayWebhookUseCase,
-                internalCallerPolicy
+                internalCallerPolicy,
+                getPaymentUseCase
         );
 
         mockMvc = MockMvcBuilders
@@ -195,56 +201,30 @@ class PaymentControllerTest {
             throws Exception {
 
         mockMvc.perform(
-                        post(
-                                "/api/v1/payments"
-                        )
+                        post("/api/v1/payments")
                                 .header(
                                         "X-Request-ID",
                                         "req-001"
                                 )
-                                .contentType(
-                                        MediaType.APPLICATION_JSON
-                                )
-                                .content(
-                                        validBody()
-                                )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(validBody())
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(
+                        jsonPath("$.error.code")
+                                .value("MISSING_REQUIRED_HEADER")
                 )
                 .andExpect(
-                        status().isBadRequest()
+                        jsonPath("$.error.message")
+                                .value("Missing required request header: Idempotency-Key")
                 )
                 .andExpect(
-                        jsonPath(
-                                "$.error.code"
-                        ).value(
-                                "MISSING_REQUIRED_HEADER"
-                        )
+                        jsonPath("$.meta.request_id").value("req-001")
                 )
                 .andExpect(
-                        jsonPath(
-                                "$.error.message"
-                        ).value(
-                                "Missing required request header: Idempotency-Key"
-                        )
+                        jsonPath("$.error.code").value("MISSING_REQUIRED_HEADER")
                 )
-                .andExpect(
-                        jsonPath(
-                                "$.meta.request_id"
-                        ).value(
-                                "req-001"
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.error.code"
-                        ).value(
-                                "MISSING_REQUIRED_HEADER"
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.meta.request_id"
-                        ).isNotEmpty()
-                );
+                .andExpect(jsonPath("$.meta.request_id").isNotEmpty());
 
         verifyNoInteractions(
                 createPaymentUseCase
@@ -256,32 +236,21 @@ class PaymentControllerTest {
             throws Exception {
 
         mockMvc.perform(
-                        post(
-                                "/api/v1/payments"
-                        )
+                        post("/api/v1/payments")
                                 .header(
                                         "Idempotency-Key",
                                         "idem-001"
                                 )
-                                .contentType(
-                                        MediaType.APPLICATION_JSON
-                                )
-                                .content(
-                                        validBody()
-                                )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(validBody())
                 )
-                .andExpect(
-                        status().isBadRequest()
-                );
+                .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(
-                createPaymentUseCase
-        );
+        verifyNoInteractions(createPaymentUseCase);
     }
 
     @Test
-    void shouldRejectInvalidRequestBody()
-            throws Exception {
+    void shouldRejectInvalidRequestBody() throws Exception {
 
         String body =
                 """
@@ -294,9 +263,7 @@ class PaymentControllerTest {
                 """;
 
         mockMvc.perform(
-                        post(
-                                "/api/v1/payments"
-                        )
+                        post("/api/v1/payments")
                                 .header(
                                         "Idempotency-Key",
                                         "idem-001"
@@ -305,20 +272,12 @@ class PaymentControllerTest {
                                         "X-Request-ID",
                                         "req-001"
                                 )
-                                .contentType(
-                                        MediaType.APPLICATION_JSON
-                                )
-                                .content(
-                                        body
-                                )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
                 )
-                .andExpect(
-                        status().isBadRequest()
-                );
+                .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(
-                createPaymentUseCase
-        );
+        verifyNoInteractions(createPaymentUseCase);
     }
 
     @Test
@@ -372,22 +331,17 @@ class PaymentControllerTest {
     }
 
     @Test
-    void shouldProcessSuccessfulVnpayWebhook()
-            throws Exception {
+    void shouldProcessSuccessfulVnpayWebhook() throws Exception {
 
-        UUID paymentId =
-                UUID.randomUUID();
+        UUID paymentId = UUID.randomUUID();
 
-        when(
-                processVnpayWebhookUseCase.execute(
-                        any()
-                )
-        ).thenReturn(
-                new ProcessVnpayWebhookResult(
-                        paymentId,
-                        "SUCCESS",
-                        WebhookProcessingAction.APPLIED
-                )
+        when(processVnpayWebhookUseCase.execute(any()))
+                .thenReturn(
+                        new ProcessVnpayWebhookResult(
+                                paymentId,
+                                "SUCCESS",
+                                WebhookProcessingAction.APPLIED
+                        )
         );
 
         String body =
@@ -412,155 +366,73 @@ class PaymentControllerTest {
                 """;
 
         mockMvc.perform(
-                        post(
-                                "/api/v1/payments/webhook"
-                        )
+                        post("/api/v1/payments/webhook")
                                 .header(
                                         "X-Request-ID",
                                         "req-webhook-001"
                                 )
-                                .contentType(
-                                        MediaType.APPLICATION_JSON
-                                )
-                                .content(
-                                        body
-                                )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
                 )
-                .andExpect(
-                        status().isOk()
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.data.payment_id"
-                        ).value(
-                                paymentId.toString()
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.data.payment_status"
-                        ).value(
-                                "SUCCESS"
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.data.action"
-                        ).value(
-                                "APPLIED"
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.meta.request_id"
-                        ).value(
-                                "req-webhook-001"
-                        )
-                );
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payment_id").value(paymentId.toString()))
+                .andExpect(jsonPath("$.data.payment_status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.action").value("APPLIED"))
+                .andExpect(jsonPath("$.meta.request_id").value("req-webhook-001"));
 
-        ArgumentCaptor<ProcessVnpayWebhookCommand>
-                captor =
+        ArgumentCaptor<ProcessVnpayWebhookCommand> captor =
                 ArgumentCaptor.forClass(
                         ProcessVnpayWebhookCommand.class
                 );
 
-        verify(
-                processVnpayWebhookUseCase
-        ).execute(
-                captor.capture()
-        );
+        verify(processVnpayWebhookUseCase).execute(captor.capture());
 
-        ProcessVnpayWebhookCommand command =
-                captor.getValue();
+        ProcessVnpayWebhookCommand command = captor.getValue();
 
-        assertEquals(
-                "vnpay-event-001",
-                command.providerEventId()
-        );
+        assertEquals("vnpay-event-001", command.providerEventId());
 
-        assertEquals(
-                "vnpay-txn-001",
-                command.providerTransactionRef()
-        );
+        assertEquals("vnpay-txn-001", command.providerTransactionRef());
 
-        assertEquals(
-                "00",
-                command.responseCode()
-        );
+        assertEquals("00", command.responseCode());
 
-        assertEquals(
-                "00",
-                command.transactionStatus()
-        );
+        assertEquals("00", command.transactionStatus());
 
-        assertEquals(
-                100_000L,
-                command.amount()
-        );
+        assertEquals(100_000L, command.amount());
 
-        assertEquals(
-                "VND",
-                command.currency()
-        );
+        assertEquals("VND", command.currency());
 
-        assertEquals(
-                "signed-value",
-                command.signedPayload()
-                        .get(
-                                "vnp_SecureHash"
-                        )
-        );
+        assertEquals("signed-value", command.signedPayload().get("vnp_SecureHash"));
     }
 
     @Test
-    void shouldAcknowledgeDuplicateVnpayWebhook()
-            throws Exception {
+    void shouldAcknowledgeDuplicateVnpayWebhook() throws Exception {
 
-        UUID paymentId =
-                UUID.randomUUID();
+        UUID paymentId = UUID.randomUUID();
 
-        when(
-                processVnpayWebhookUseCase.execute(
-                        any()
-                )
-        ).thenReturn(
-                new ProcessVnpayWebhookResult(
-                        paymentId,
-                        "SUCCESS",
-                        WebhookProcessingAction.DUPLICATE
-                )
+        when(processVnpayWebhookUseCase.execute(any()))
+                .thenReturn(
+                    new ProcessVnpayWebhookResult(
+                            paymentId,
+                            "SUCCESS",
+                            WebhookProcessingAction.DUPLICATE
+                    )
         );
 
         mockMvc.perform(
-                        post(
-                                "/api/v1/payments/webhook"
-                        )
+                        post("/api/v1/payments/webhook")
                                 .header(
                                         "X-Request-ID",
                                         "req-webhook-002"
                                 )
-                                .contentType(
-                                        MediaType.APPLICATION_JSON
-                                )
-                                .content(
-                                        validWebhookBody()
-                                )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(validWebhookBody())
                 )
-                .andExpect(
-                        status().isOk()
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.data.action"
-                        ).value(
-                                "DUPLICATE"
-                        )
-                );
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.action").value("DUPLICATE"));
     }
 
     @Test
-    void shouldRejectInvalidVnpayWebhookBody()
-            throws Exception {
+    void shouldRejectInvalidVnpayWebhookBody() throws Exception {
 
         String body =
                 """
@@ -574,80 +446,39 @@ class PaymentControllerTest {
                 """;
 
         mockMvc.perform(
-                        post(
-                                "/api/v1/payments/webhook"
-                        )
+                        post("/api/v1/payments/webhook")
                                 .header(
                                         "X-Request-ID",
                                         "req-webhook-003"
                                 )
-                                .contentType(
-                                        MediaType.APPLICATION_JSON
-                                )
-                                .content(
-                                        body
-                                )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
                 )
-                .andExpect(
-                        status().isBadRequest()
-                );
+                .andExpect(status().isBadRequest());
 
-        verifyNoInteractions(
-                processVnpayWebhookUseCase
-        );
+        verifyNoInteractions(processVnpayWebhookUseCase);
     }
 
     @Test
-    void shouldReturnBadRequestWhenVnpaySignatureInvalid()
-            throws Exception {
+    void shouldReturnBadRequestWhenVnpaySignatureInvalid() throws Exception {
 
-        when(
-                processVnpayWebhookUseCase.execute(
-                        any()
-                )
-        ).thenThrow(
-                new InvalidVnpaySignatureException()
+        when(processVnpayWebhookUseCase.execute(any()))
+                .thenThrow(new InvalidVnpaySignatureException()
         );
 
         mockMvc.perform(
-                        post(
-                                "/api/v1/payments/webhook"
-                        )
+                        post("/api/v1/payments/webhook")
                                 .header(
                                         "X-Request-ID",
                                         "req-webhook-invalid-signature"
                                 )
-                                .contentType(
-                                        MediaType.APPLICATION_JSON
-                                )
-                                .content(
-                                        validWebhookBody()
-                                )
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(validWebhookBody())
                 )
-                .andExpect(
-                        status().isBadRequest()
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.error.code"
-                        ).value(
-                                "INVALID_VNPAY_SIGNATURE"
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.error.message"
-                        ).value(
-                                "Invalid VNPAY signature"
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.meta.request_id"
-                        ).value(
-                                "req-webhook-invalid-signature"
-                        )
-                );
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_VNPAY_SIGNATURE"))
+                .andExpect(jsonPath("$.error.message").value("Invalid VNPAY signature"))
+                .andExpect(jsonPath("$.meta.request_id").value("req-webhook-invalid-signature"));
     }
 
     @Test
@@ -663,15 +494,9 @@ class PaymentControllerTest {
                 )
         ).thenThrow(
                 new PaymentAmountMismatchException(
-                        new PaymentId(
-                                paymentId
-                        ),
-                        Money.vnd(
-                                100_000
-                        ),
-                        Money.vnd(
-                                90_000
-                        )
+                        new PaymentId(paymentId),
+                        Money.vnd(100_000),
+                        Money.vnd(90_000)
                 )
         );
 
@@ -1142,6 +967,159 @@ class PaymentControllerTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(createPaymentUseCase);
+    }
+
+    @Test
+    void shouldGetPaymentDetail() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+        UUID checkoutGroupId = UUID.randomUUID();
+        UUID buyerUserId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID shopId = UUID.randomUUID();
+
+        when(getPaymentUseCase.execute(any())).thenReturn(
+                new GetPaymentResult(
+                        paymentId,
+                        checkoutGroupId,
+                        buyerUserId,
+                        "SUCCESS",
+                        "VNPAY",
+                        120_000,
+                        "VND",
+                        120_000,
+                        0,
+                        Instant.parse("2026-10-08T15:15:00Z"),
+                        Instant.parse("2026-10-08T15:03:00Z"),
+                        List.of(
+                                new GetPaymentOrderResult(
+                                        orderId,
+                                        shopId,
+                                        100_000,
+                                        20_000,
+                                        120_000
+                                )
+                        )
+                )
+        );
+
+        mockMvc.perform(
+                        get("/api/v1/payments/{paymentId}", paymentId)
+                                .header("X-Request-ID", "req-payment-detail")
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.payment_id").value(paymentId.toString()))
+                .andExpect(jsonPath("$.data.checkout_group_id").value(checkoutGroupId.toString()))
+                .andExpect(jsonPath("$.data.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.data.method").value("VNPAY"))
+                .andExpect(jsonPath("$.data.amount").value(120_000))
+                .andExpect(jsonPath("$.data.currency").value("VND"))
+                .andExpect(jsonPath("$.data.captured_amount").value(120_000))
+                .andExpect(jsonPath("$.data.refunded_amount").value(0))
+                .andExpect(jsonPath("$.data.expires_at").value("2026-10-08T15:15:00Z"))
+                .andExpect(jsonPath("$.data.paid_at").value("2026-10-08T15:03:00Z"))
+                .andExpect(jsonPath("$.data.orders[0].order_id").value(orderId.toString()))
+                .andExpect(jsonPath("$.data.orders[0].shop_id").value(shopId.toString()))
+                .andExpect(jsonPath("$.data.orders[0].merchandise_amount").value(100_000))
+                .andExpect(jsonPath("$.data.orders[0].shipping_fee").value(20_000))
+                .andExpect(jsonPath("$.data.orders[0].amount").value(120_000))
+                .andExpect(jsonPath("$.data.buyer_user_id").doesNotExist())
+                .andExpect(jsonPath("$.data.provider_ref").doesNotExist())
+                .andExpect(jsonPath("$.data.provider_ref_masked").doesNotExist())
+                .andExpect(jsonPath("$.data.created_at").doesNotExist())
+                .andExpect(jsonPath("$.meta.request_id").value("req-payment-detail"));
+
+        ArgumentCaptor<GetPaymentQuery> captor =
+                ArgumentCaptor.forClass(GetPaymentQuery.class);
+
+        verify(getPaymentUseCase).execute(captor.capture());
+
+        assertEquals(paymentId, captor.getValue().paymentId());
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenGettingMissingPayment() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        when(getPaymentUseCase.execute(any()))
+                .thenThrow(
+                        new PaymentNotFoundException(
+                                new PaymentId(paymentId)
+                        )
+                );
+
+        mockMvc.perform(
+                        get("/api/v1/payments/{paymentId}", paymentId)
+                                .header("X-Request-ID", "req-payment-not-found")
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_NOT_FOUND"))
+                .andExpect(jsonPath("$.meta.request_id").value("req-payment-not-found"));
+    }
+
+    @Test
+    void shouldRejectMalformedPaymentId() throws Exception {
+        mockMvc.perform(
+                        get("/api/v1/payments/not-a-uuid")
+                                .header("X-Request-ID", "req-invalid-payment-id")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_INVALID_INPUT"))
+                .andExpect(jsonPath("$.meta.request_id").value("req-invalid-payment-id"));
+
+        verifyNoInteractions(getPaymentUseCase);
+    }
+
+    @Test
+    void shouldRejectPaymentDetailWithoutRequestId() throws Exception {
+        mockMvc.perform(
+                        get(
+                                "/api/v1/payments/{paymentId}",
+                                UUID.randomUUID()
+                        )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("MISSING_REQUIRED_HEADER"));
+
+        verifyNoInteractions(getPaymentUseCase);
+    }
+
+    @Test
+    void shouldHideNullPaymentDetailFields() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        when(getPaymentUseCase.execute(any())).thenReturn(
+                new GetPaymentResult(
+                        paymentId,
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        "PENDING_COD",
+                        "COD",
+                        100_000,
+                        "VND",
+                        0,
+                        0,
+                        null,
+                        null,
+                        List.of(
+                                new GetPaymentOrderResult(
+                                        UUID.randomUUID(),
+                                        UUID.randomUUID(),
+                                        90_000,
+                                        10_000,
+                                        100_000
+                                )
+                        )
+                )
+        );
+
+        mockMvc.perform(
+                        get("/api/v1/payments/{paymentId}", paymentId)
+                                .header("X-Request-ID", "req-cod-detail")
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.status").value("PENDING_COD"))
+                .andExpect(jsonPath("$.data.expires_at").doesNotExist())
+                .andExpect(jsonPath("$.data.paid_at").doesNotExist());
     }
 
     private String validBody() {
