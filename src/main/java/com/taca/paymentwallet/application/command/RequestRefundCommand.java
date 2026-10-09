@@ -31,6 +31,13 @@ public record RequestRefundCommand(
         }
 
         currency = currency.trim().toUpperCase();
+
+        if (!"VND".equals(currency)) {
+            throw new IllegalArgumentException(
+                    "currency must be VND"
+            );
+        }
+        
         reason = reason.trim();
         idempotencyKey = idempotencyKey.trim();
     }
