@@ -3,14 +3,17 @@ package com.taca.paymentwallet.presentation.rest.payment;
 import com.taca.paymentwallet.application.command.CreatePaymentCommand;
 import com.taca.paymentwallet.application.command.CreatePaymentOrderCommand;
 import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
+import com.taca.paymentwallet.application.command.RequestRefundCommand;
 import com.taca.paymentwallet.application.exception.InvalidPaymentRequestException;
 import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
 import com.taca.paymentwallet.application.port.in.GetPaymentUseCase;
 import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
+import com.taca.paymentwallet.application.port.in.RequestRefundUseCase;
 import com.taca.paymentwallet.application.query.GetPaymentQuery;
 import com.taca.paymentwallet.application.result.CreatePaymentResult;
 import com.taca.paymentwallet.application.result.GetPaymentResult;
 import com.taca.paymentwallet.application.result.ProcessVnpayWebhookResult;
+import com.taca.paymentwallet.application.result.RequestRefundResult;
 import com.taca.paymentwallet.application.security.InternalCallerPolicy;
 import com.taca.paymentwallet.presentation.rest.ApiMeta;
 import com.taca.paymentwallet.presentation.rest.ApiResponse;
@@ -35,16 +38,22 @@ public class PaymentController {
 
     private final GetPaymentUseCase getPaymentUseCase;
 
+    private final RequestRefundUseCase requestRefundUseCase;
+
+    private final RefundRestMapper refundRestMapper = new RefundRestMapper();
+
     public PaymentController(
             CreatePaymentUseCase createPaymentUseCase,
             ProcessVnpayWebhookUseCase processVnpayWebhookUseCase,
             InternalCallerPolicy internalCallerPolicy,
-            GetPaymentUseCase getPaymentUseCase
+            GetPaymentUseCase getPaymentUseCase,
+            RequestRefundUseCase requestRefundUseCase
     ) {
         this.createPaymentUseCase = Objects.requireNonNull(createPaymentUseCase);
         this.processVnpayWebhookUseCase = Objects.requireNonNull(processVnpayWebhookUseCase);
         this.internalCallerPolicy = Objects.requireNonNull(internalCallerPolicy);
         this.getPaymentUseCase = Objects.requireNonNull(getPaymentUseCase);
+        this.requestRefundUseCase = Objects.requireNonNull(requestRefundUseCase);
     }
 
     @PostMapping
@@ -76,8 +85,7 @@ public class PaymentController {
     }
 
     @PostMapping("/webhook")
-    public ResponseEntity<ApiResponse<VnpayWebhookData>>
-    processVnpayWebhook(
+    public ResponseEntity<ApiResponse<VnpayWebhookData>> processVnpayWebhook(
             @RequestHeader("X-Request-ID")
             String requestId,
 
@@ -133,6 +141,34 @@ public class PaymentController {
                 new ApiResponse<>(
                         toData(result),
                         new ApiMeta(requestId)
+                )
+        );
+    }
+
+    @PostMapping("/{paymentId}/refunds")
+    public ResponseEntity<ApiResponse<RequestRefundData>> requestRefund(
+            @PathVariable String paymentId,
+            @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestHeader("X-Request-ID") String requestId,
+            @Valid @RequestBody RequestRefundRequest request
+    ) {
+        requireHeaderValue(idempotencyKey, "Idempotency-Key");
+        requireHeaderValue(requestId, "X-Request-ID");
+
+        UUID parsedPaymentId = parsePaymentId(paymentId);
+
+        RequestRefundCommand command = refundRestMapper.toCommand(
+                parsedPaymentId,
+                request,
+                idempotencyKey
+        );
+
+        RequestRefundResult result = requestRefundUseCase.execute(command);
+
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(
+                new ApiResponse<>(
+                        refundRestMapper.toData(result),
+                        new ApiMeta(requestId.trim())
                 )
         );
     }

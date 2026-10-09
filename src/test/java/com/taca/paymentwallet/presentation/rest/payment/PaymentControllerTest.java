@@ -2,10 +2,12 @@ package com.taca.paymentwallet.presentation.rest.payment;
 
 import com.taca.paymentwallet.application.command.CreatePaymentCommand;
 import com.taca.paymentwallet.application.command.ProcessVnpayWebhookCommand;
+import com.taca.paymentwallet.application.command.RequestRefundCommand;
 import com.taca.paymentwallet.application.exception.*;
 import com.taca.paymentwallet.application.port.in.CreatePaymentUseCase;
 import com.taca.paymentwallet.application.port.in.GetPaymentUseCase;
 import com.taca.paymentwallet.application.port.in.ProcessVnpayWebhookUseCase;
+import com.taca.paymentwallet.application.port.in.RequestRefundUseCase;
 import com.taca.paymentwallet.application.query.GetPaymentQuery;
 import com.taca.paymentwallet.application.result.*;
 import com.taca.paymentwallet.application.security.InternalCallerPolicy;
@@ -41,6 +43,8 @@ class PaymentControllerTest {
 
     private GetPaymentUseCase getPaymentUseCase;
 
+    private RequestRefundUseCase requestRefundUseCase;
+
     private MockMvc mockMvc;
 
     @BeforeEach
@@ -49,12 +53,14 @@ class PaymentControllerTest {
         processVnpayWebhookUseCase = mock(ProcessVnpayWebhookUseCase.class);
         internalCallerPolicy = mock(InternalCallerPolicy.class);
         getPaymentUseCase = mock(GetPaymentUseCase.class);
+        requestRefundUseCase = mock(RequestRefundUseCase.class);
 
         PaymentController controller = new PaymentController(
                 createPaymentUseCase,
                 processVnpayWebhookUseCase,
                 internalCallerPolicy,
-                getPaymentUseCase
+                getPaymentUseCase,
+                requestRefundUseCase
         );
 
         mockMvc = MockMvcBuilders
@@ -1122,6 +1128,105 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$.data.paid_at").doesNotExist());
     }
 
+    @Test
+    void shouldRequestRefund() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+        UUID refundId = UUID.randomUUID();
+
+        when(requestRefundUseCase.execute(any())).thenReturn(
+                new RequestRefundResult(
+                        refundId,
+                        paymentId,
+                        50_000,
+                        "VND",
+                        "REQUESTED"
+                )
+        );
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-001")
+                                .header("X-Request-ID", "req-refund-001")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.refund_id").value(refundId.toString()))
+                .andExpect(jsonPath("$.data.payment_id").value(paymentId.toString()))
+                .andExpect(jsonPath("$.data.amount").value(50_000))
+                .andExpect(jsonPath("$.data.currency").value("VND"))
+                .andExpect(jsonPath("$.data.status").value("REQUESTED"))
+                .andExpect(jsonPath("$.data.payment_status_after").doesNotExist())
+                .andExpect(jsonPath("$.data.order_id").doesNotExist())
+                .andExpect(jsonPath("$.meta.request_id").value("req-refund-001"));
+
+        ArgumentCaptor<RequestRefundCommand> captor =
+                ArgumentCaptor.forClass(RequestRefundCommand.class);
+
+        verify(requestRefundUseCase).execute(captor.capture());
+
+        RequestRefundCommand command = captor.getValue();
+
+        assertEquals(paymentId, command.paymentId());
+        assertEquals(50_000L, command.amount());
+        assertEquals("VND", command.currency());
+        assertEquals("Buyer requested refund", command.reason());
+        assertEquals("refund-idem-001", command.idempotencyKey());
+    }
+
+    @Test
+    void shouldRejectMalformedRefundPaymentId() throws Exception {
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/not-a-uuid/refunds")
+                                .header("Idempotency-Key", "refund-idem-invalid-id")
+                                .header("X-Request-ID", "req-refund-invalid-id")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_INVALID_INPUT"))
+                .andExpect(jsonPath("$.meta.request_id").value("req-refund-invalid-id"));
+
+        verifyNoInteractions(requestRefundUseCase);
+    }
+
+    @Test
+    void shouldRejectRefundWithoutIdempotencyKey() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("X-Request-ID", "req-refund-no-idem")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("MISSING_REQUIRED_HEADER"));
+
+        verifyNoInteractions(requestRefundUseCase);
+    }
+
     private String validBody() {
         return """
             {
@@ -1140,6 +1245,180 @@ class PaymentControllerTest {
               ]
             }
             """;
+    }
+
+    @Test
+    void shouldRejectBlankRefundIdempotencyKey() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "   ")
+                                .header("X-Request-ID", "req-refund-blank-idem")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_INVALID_INPUT"))
+                .andExpect(jsonPath("$.meta.request_id").value("req-refund-blank-idem"));
+
+        verifyNoInteractions(requestRefundUseCase);
+    }
+
+    @Test
+    void shouldRejectRefundWithoutRequestId() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-no-request")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("MISSING_REQUIRED_HEADER"));
+
+        verifyNoInteractions(requestRefundUseCase);
+    }
+
+    @Test
+    void shouldRejectBlankRefundRequestId() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-blank-request")
+                                .header("X-Request-ID", "   ")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_INVALID_INPUT"));
+
+        verifyNoInteractions(requestRefundUseCase);
+    }
+
+    @Test
+    void shouldRejectNonPositiveRefundAmount() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        String body = """
+            {
+              "amount": 0,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-invalid-amount")
+                                .header("X-Request-ID", "req-refund-invalid-amount")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+
+        verifyNoInteractions(requestRefundUseCase);
+    }
+
+    @Test
+    void shouldRejectBlankRefundReason() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "   "
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-blank-reason")
+                                .header("X-Request-ID", "req-refund-blank-reason")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+
+        verifyNoInteractions(requestRefundUseCase);
+    }
+
+    @Test
+    void shouldRejectRefundReasonLongerThan500Characters() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "%s"
+            }
+            """.formatted("a".repeat(501));
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-long-reason")
+                                .header("X-Request-ID", "req-refund-long-reason")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+
+        verifyNoInteractions(requestRefundUseCase);
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenRequestingRefundForMissingPayment() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        when(requestRefundUseCase.execute(any()))
+                .thenThrow(
+                        new PaymentNotFoundException(
+                                new PaymentId(paymentId)
+                        )
+                );
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-missing-payment")
+                                .header("X-Request-ID", "req-refund-missing-payment")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_NOT_FOUND"))
+                .andExpect(jsonPath("$.meta.request_id").value("req-refund-missing-payment"));
     }
 
     private String validWebhookBody() {
