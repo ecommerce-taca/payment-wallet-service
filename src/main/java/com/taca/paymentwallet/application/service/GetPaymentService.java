@@ -6,6 +6,7 @@ import com.taca.paymentwallet.application.port.out.PaymentRepositoryPort;
 import com.taca.paymentwallet.application.query.GetPaymentQuery;
 import com.taca.paymentwallet.application.result.GetPaymentOrderResult;
 import com.taca.paymentwallet.application.result.GetPaymentResult;
+import com.taca.paymentwallet.application.security.PaymentVisibilityPolicy;
 import com.taca.paymentwallet.domain.payment.Payment;
 import com.taca.paymentwallet.domain.payment.PaymentOrder;
 import com.taca.paymentwallet.domain.valueobject.PaymentId;
@@ -16,8 +17,14 @@ public class GetPaymentService implements GetPaymentUseCase {
 
     private final PaymentRepositoryPort paymentRepository;
 
-    public GetPaymentService(PaymentRepositoryPort paymentRepository) {
+    private final PaymentVisibilityPolicy paymentVisibilityPolicy;
+
+    public GetPaymentService(
+            PaymentRepositoryPort paymentRepository,
+            PaymentVisibilityPolicy paymentVisibilityPolicy
+    ) {
         this.paymentRepository = Objects.requireNonNull(paymentRepository);
+        this.paymentVisibilityPolicy = Objects.requireNonNull(paymentVisibilityPolicy);
     }
 
     @Override
@@ -29,7 +36,11 @@ public class GetPaymentService implements GetPaymentUseCase {
         Payment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new PaymentNotFoundException(paymentId));
 
-        return toResult(payment);
+        GetPaymentResult result = toResult(payment);
+
+        paymentVisibilityPolicy.requireCanView(result);
+
+        return result;
     }
 
     private GetPaymentResult toResult(Payment payment) {

@@ -42,9 +42,22 @@ public class ApplicationConfiguration {
 
     @Bean
     GetPaymentUseCase getPaymentUseCase(
-            PaymentRepositoryPort paymentRepository
+            PaymentRepositoryPort paymentRepository,
+            PaymentVisibilityPolicy paymentVisibilityPolicy
     ) {
-        return new GetPaymentService(paymentRepository);
+        return new GetPaymentService(
+                paymentRepository,
+                paymentVisibilityPolicy
+        );
+    }
+
+    @Bean
+    PaymentVisibilityPolicy paymentVisibilityPolicy(
+            AuthenticationGuard authenticationGuard
+    ) {
+        return new PaymentVisibilityPolicy(
+                authenticationGuard
+        );
     }
 
     @Bean
