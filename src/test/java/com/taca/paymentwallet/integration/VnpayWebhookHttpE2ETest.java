@@ -21,7 +21,6 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -752,12 +751,7 @@ class VnpayWebhookHttpE2ETest {
     ) {
         List<OutboxEventJpaEntity> events =
                 outboxEventJpaRepository
-                        .findByPublishedAtIsNullOrderByOccurredAtAsc(
-                                PageRequest.of(
-                                        0,
-                                        100
-                                )
-                        )
+                        .findAll()
                         .stream()
                         .filter(
                                 event ->

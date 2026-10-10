@@ -11,6 +11,9 @@ import com.taca.paymentwallet.application.port.in.RequestRefundUseCase;
 import com.taca.paymentwallet.application.query.GetPaymentQuery;
 import com.taca.paymentwallet.application.result.*;
 import com.taca.paymentwallet.application.security.InternalCallerPolicy;
+import com.taca.paymentwallet.domain.payment.InvalidPaymentStateException;
+import com.taca.paymentwallet.domain.payment.PaymentStatus;
+import com.taca.paymentwallet.domain.refund.RefundLimitExceededException;
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.domain.valueobject.PaymentId;
 import com.taca.paymentwallet.presentation.rest.GlobalRestExceptionHandler;
@@ -1536,6 +1539,152 @@ class PaymentControllerTest {
         verifyNoInteractions(
                 requestRefundUseCase
         );
+    }
+
+    @Test
+    void shouldReturnConflictWhenRefundAmountExceedsCapturedAmount() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        when(requestRefundUseCase.execute(any()))
+                .thenThrow(
+                        new RefundLimitExceededException(
+                                Money.vnd(100_000),
+                                Money.vnd(150_000)
+                        )
+                );
+
+        String body = """
+            {
+              "amount": 150000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-limit")
+                                .header("X-Request-ID", "req-refund-limit")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.error.code")
+                                .value("REFUND_AMOUNT_INVALID")
+                )
+                .andExpect(
+                        jsonPath("$.meta.request_id")
+                                .value("req-refund-limit")
+                );
+    }
+
+    @Test
+    void shouldReturnConflictWhenPaymentStateDoesNotAllowRefund() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        when(requestRefundUseCase.execute(any()))
+                .thenThrow(
+                        new InvalidPaymentStateException(
+                                PaymentStatus.PENDING,
+                                "request refund"
+                        )
+                );
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-state")
+                                .header("X-Request-ID", "req-refund-state")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.error.code")
+                                .value("REFUND_STATE_INVALID")
+                )
+                .andExpect(
+                        jsonPath("$.meta.request_id")
+                                .value("req-refund-state")
+                );
+    }
+
+    @Test
+    void shouldReturnConflictWhenRefundIdempotencyKeyIsReused() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        when(requestRefundUseCase.execute(any()))
+                .thenThrow(
+                        new IdempotencyKeyReuseException(
+                                "refund-idem-conflict"
+                        )
+                );
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-conflict")
+                                .header("X-Request-ID", "req-refund-idem-conflict")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.error.code")
+                                .value("PAYMENT_IDEMPOTENCY_CONFLICT")
+                )
+                .andExpect(
+                        jsonPath("$.meta.request_id")
+                                .value("req-refund-idem-conflict")
+                );
+    }
+
+    @Test
+    void shouldReturnConflictWhenRefundRequestIsAlreadyProcessing() throws Exception {
+        UUID paymentId = UUID.randomUUID();
+
+        when(requestRefundUseCase.execute(any()))
+                .thenThrow(
+                        new RequestAlreadyProcessingException(
+                                "refund-idem-processing"
+                        )
+                );
+
+        String body = """
+            {
+              "amount": 50000,
+              "reason": "Buyer requested refund"
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments/{paymentId}/refunds", paymentId)
+                                .header("Idempotency-Key", "refund-idem-processing")
+                                .header("X-Request-ID", "req-refund-processing")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isConflict())
+                .andExpect(
+                        jsonPath("$.error.code")
+                                .value("REQUEST_ALREADY_PROCESSING")
+                )
+                .andExpect(
+                        jsonPath("$.meta.request_id")
+                                .value("req-refund-processing")
+                );
     }
 
     private String validWebhookBody() {

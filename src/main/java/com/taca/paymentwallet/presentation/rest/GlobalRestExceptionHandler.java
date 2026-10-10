@@ -1,6 +1,8 @@
 package com.taca.paymentwallet.presentation.rest;
 
 import com.taca.paymentwallet.application.exception.*;
+import com.taca.paymentwallet.domain.payment.InvalidPaymentStateException;
+import com.taca.paymentwallet.domain.refund.RefundLimitExceededException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -91,6 +93,58 @@ public class GlobalRestExceptionHandler {
         return error(
                 HttpStatus.CONFLICT,
                 "PAYMENT_IDEMPOTENCY_CONFLICT",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(RefundLimitExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleRefundLimitExceeded(
+            RefundLimitExceededException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.CONFLICT,
+                "REFUND_AMOUNT_INVALID",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(InvalidPaymentStateException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidPaymentState(
+            InvalidPaymentStateException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.CONFLICT,
+                "REFUND_STATE_INVALID",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(RefundNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleRefundNotFound(
+            RefundNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.NOT_FOUND,
+                "REFUND_NOT_FOUND",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(RefundAmountMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handleRefundAmountMismatch(
+            RefundAmountMismatchException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.CONFLICT,
+                "REFUND_AMOUNT_MISMATCH",
                 exception.getMessage(),
                 request
         );

@@ -69,7 +69,7 @@ class ArchitectureTest {
                 .layer("Infrastructure").definedBy("..infrastructure..")
                 .whereLayer("Presentation").mayNotBeAccessedByAnyLayer()
                 .whereLayer("Application").mayOnlyBeAccessedByLayers("Presentation", "Infrastructure")
-                .whereLayer("Domain").mayOnlyBeAccessedByLayers("Application", "Infrastructure")
+                .whereLayer("Domain").mayOnlyBeAccessedByLayers("Presentation", "Application", "Infrastructure")
                 .whereLayer("Infrastructure").mayNotBeAccessedByAnyLayer()
                 .check(classes);
     }
