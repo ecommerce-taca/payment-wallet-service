@@ -7,6 +7,8 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CreatePaymentCommandTest {
 
@@ -15,7 +17,8 @@ class CreatePaymentCommandTest {
         CreatePaymentOrderCommand order = new CreatePaymentOrderCommand(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                100_000
+                100_000,
+                0
         );
 
         CreatePaymentCommand command = new CreatePaymentCommand(
@@ -40,7 +43,8 @@ class CreatePaymentCommandTest {
         CreatePaymentOrderCommand order = new CreatePaymentOrderCommand(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                90_000
+                90_000,
+                0
         );
 
         assertThrows(
@@ -63,7 +67,8 @@ class CreatePaymentCommandTest {
         CreatePaymentOrderCommand order = new CreatePaymentOrderCommand(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                100_000
+                100_000,
+                0
         );
 
         assertThrows(
@@ -79,5 +84,67 @@ class CreatePaymentCommandTest {
                         "127.0.0.1"
                 )
         );
+    }
+
+    @Test
+    void shouldCalculateMerchandiseAmount() {
+        CreatePaymentOrderCommand command = new CreatePaymentOrderCommand(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                120_000,
+                20_000
+        );
+
+        assertThat(command.amount()).isEqualTo(120_000);
+        assertThat(command.shippingFee()).isEqualTo(20_000);
+        assertThat(command.merchandiseAmount()).isEqualTo(100_000);
+    }
+
+    @Test
+    void shouldAllowZeroShippingFee() {
+        CreatePaymentOrderCommand command = new CreatePaymentOrderCommand(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                100_000,
+                0
+        );
+
+        assertThat(command.merchandiseAmount()).isEqualTo(100_000);
+    }
+
+    @Test
+    void shouldRejectNegativeShippingFee() {
+        assertThatThrownBy(() -> new CreatePaymentOrderCommand(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                100_000,
+                -1
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("shippingFee must not be negative");
+    }
+
+    @Test
+    void shouldRejectShippingFeeEqualToOrderAmount() {
+        assertThatThrownBy(() -> new CreatePaymentOrderCommand(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                100_000,
+                100_000
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("shippingFee must be less than order amount");
+    }
+
+    @Test
+    void shouldRejectShippingFeeGreaterThanOrderAmount() {
+        assertThatThrownBy(() -> new CreatePaymentOrderCommand(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                100_000,
+                120_000
+        ))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("shippingFee must be less than order amount");
     }
 }

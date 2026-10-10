@@ -2,11 +2,13 @@ package com.taca.paymentwallet.integration;
 
 import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
+import com.taca.paymentwallet.application.security.*;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaInboxProcessor;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaProducerSafetyGuard;
+import com.taca.paymentwallet.presentation.web.WebhookAuthenticationBypass;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -129,6 +131,24 @@ class ProductionContextSmokeTest {
     @Autowired
     private VnpayReadinessHealthIndicator vnpayReadinessHealthIndicator;
 
+    @Autowired
+    private AuthenticationGuard authenticationGuard;
+
+    @Autowired
+    private AuthorizationPolicy authorizationPolicy;
+
+    @Autowired
+    private ShopScopePolicy shopScopePolicy;
+
+    @Autowired
+    private MfaStepUpPolicy mfaStepUpPolicy;
+
+    @Autowired
+    private InternalCallerPolicy internalCallerPolicy;
+
+    @Autowired
+    private WebhookAuthenticationBypass webhookAuthenticationBypass;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -166,5 +186,17 @@ class ProductionContextSmokeTest {
                 .isEqualTo(
                         org.springframework.boot.health.contributor.Status.UP
                 );
+
+        assertThat(authenticationGuard).isNotNull();
+
+        assertThat(authorizationPolicy).isNotNull();
+
+        assertThat(shopScopePolicy).isNotNull();
+
+        assertThat(mfaStepUpPolicy).isNotNull();
+
+        assertThat(internalCallerPolicy).isNotNull();
+
+        assertThat(webhookAuthenticationBypass).isNotNull();
     }
 }

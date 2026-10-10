@@ -1,13 +1,8 @@
 package com.taca.paymentwallet.presentation.rest;
 
-import com.taca.paymentwallet.application.exception.IdempotencyKeyReuseException;
-import com.taca.paymentwallet.application.exception.InvalidVnpaySignatureException;
-import com.taca.paymentwallet.application.exception.PaymentAmountMismatchException;
-import com.taca.paymentwallet.application.exception.PaymentAttemptNotFoundException;
-import com.taca.paymentwallet.application.exception.PaymentNotFoundByCheckoutGroupException;
-import com.taca.paymentwallet.application.exception.PaymentNotFoundException;
-import com.taca.paymentwallet.application.exception.RequestAlreadyProcessingException;
-import com.taca.paymentwallet.application.exception.UnsupportedPaymentMethodException;
+import com.taca.paymentwallet.application.exception.*;
+import com.taca.paymentwallet.domain.payment.InvalidPaymentStateException;
+import com.taca.paymentwallet.domain.refund.RefundLimitExceededException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -90,17 +85,66 @@ public class GlobalRestExceptionHandler {
         );
     }
 
-    @ExceptionHandler(
-            IdempotencyKeyReuseException.class
-    )
-    public ResponseEntity<ApiErrorResponse>
-    handleIdempotencyKeyReuse(
+    @ExceptionHandler(IdempotencyKeyReuseException.class)
+    public ResponseEntity<ApiErrorResponse> handleIdempotencyKeyReuse(
             IdempotencyKeyReuseException exception,
             HttpServletRequest request
     ) {
         return error(
                 HttpStatus.CONFLICT,
-                "IDEMPOTENCY_KEY_REUSED",
+                "PAYMENT_IDEMPOTENCY_CONFLICT",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(RefundLimitExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleRefundLimitExceeded(
+            RefundLimitExceededException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.CONFLICT,
+                "REFUND_AMOUNT_INVALID",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(InvalidPaymentStateException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidPaymentState(
+            InvalidPaymentStateException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.CONFLICT,
+                "REFUND_STATE_INVALID",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(RefundNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleRefundNotFound(
+            RefundNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.NOT_FOUND,
+                "REFUND_NOT_FOUND",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(RefundAmountMismatchException.class)
+    public ResponseEntity<ApiErrorResponse> handleRefundAmountMismatch(
+            RefundAmountMismatchException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.CONFLICT,
+                "REFUND_AMOUNT_MISMATCH",
                 exception.getMessage(),
                 request
         );
@@ -187,6 +231,45 @@ public class GlobalRestExceptionHandler {
         );
     }
 
+    @ExceptionHandler(UnauthenticatedException.class)
+    public ResponseEntity<ApiErrorResponse> handleUnauthenticated(
+            UnauthenticatedException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.UNAUTHORIZED,
+                "PAYMENT_UNAUTHENTICATED",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    public ResponseEntity<ApiErrorResponse> handleForbidden(
+            ForbiddenException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.FORBIDDEN,
+                "PAYMENT_FORBIDDEN",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(MfaRequiredException.class)
+    public ResponseEntity<ApiErrorResponse> handleMfaRequired(
+            MfaRequiredException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.UNAUTHORIZED,
+                "AUTH_MFA_REQUIRED",
+                exception.getMessage(),
+                request
+        );
+    }
+
     @ExceptionHandler(
             IllegalArgumentException.class
     )
@@ -218,6 +301,19 @@ public class GlobalRestExceptionHandler {
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
                 "Internal server error",
+                request
+        );
+    }
+
+    @ExceptionHandler(InvalidPaymentRequestException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidPaymentRequest(
+            InvalidPaymentRequestException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.BAD_REQUEST,
+                "PAYMENT_INVALID_INPUT",
+                exception.getMessage(),
                 request
         );
     }

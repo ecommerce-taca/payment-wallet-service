@@ -2,6 +2,9 @@ package com.taca.paymentwallet.integration;
 
 import com.taca.paymentwallet.application.gateway.vnpay.CreateVnpayPaymentUrlResult;
 import com.taca.paymentwallet.application.port.out.*;
+import com.taca.paymentwallet.application.security.InternalCallerContext;
+import com.taca.paymentwallet.application.security.InternalCallerContextHolder;
+import com.taca.paymentwallet.application.security.InternalService;
 import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.repository.*;
@@ -122,174 +125,130 @@ class CreatePaymentHttpE2ETest {
     void shouldCreateVnpayPaymentThroughHttpAndPersistIt()
             throws Exception {
 
-        String body =
-                """
+        UUID checkoutGroupId =
+                UUID.fromString("31000000-0000-0000-0000-000000000001");
+
+        UUID buyerUserId =
+                UUID.fromString("31000000-0000-0000-0000-000000000002");
+
+        UUID orderId =
+                UUID.fromString("33000000-0000-0000-0000-000000000001");
+
+        UUID shopId =
+                UUID.fromString("34000000-0000-0000-0000-000000000001");
+
+        String body = """
                 {
-                  "checkout_group_id":
-                    "31000000-0000-0000-0000-000000000001",
-                  "buyer_user_id":
-                    "31000000-0000-0000-0000-000000000002",
+                  "checkout_group_id": "%s",
+                  "buyer_user_id": "%s",
                   "method": "VNPAY",
                   "amount": 100000,
                   "currency": "VND",
                   "orders": [
                     {
-                      "order_id":
-                        "31000000-0000-0000-0000-000000000003",
-                      "shop_id":
-                        "31000000-0000-0000-0000-000000000004",
-                      "amount": 100000
+                      "order_id": "%s",
+                      "shop_id": "%s",
+                      "amount": 100000,
+                      "shipping_fee": 0
                     }
                   ]
                 }
-                """;
-
-        mockMvc.perform(
-                        post(
-                                "/api/v1/payments"
-                        )
-                                .header(
-                                        "Idempotency-Key",
-                                        "http-e2e-idem-001"
-                                )
-                                .header(
-                                        "X-Request-ID",
-                                        "http-e2e-request-001"
-                                )
-                                .contentType(
-                                        MediaType.APPLICATION_JSON
-                                )
-                                .content(
-                                        body
-                                )
-                )
-                .andExpect(
-                        status().isCreated()
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.data.checkout_group_id"
-                        ).value(
-                                CHECKOUT_GROUP_ID.toString()
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.data.status"
-                        ).value(
-                                "PENDING"
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.data.method"
-                        ).value(
-                                "VNPAY"
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.data.amount"
-                        ).value(
-                                100_000
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.data.currency"
-                        ).value(
-                                "VND"
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.data.payment_url"
-                        ).value(
-                                PAYMENT_URL
-                        )
-                )
-                .andExpect(
-                        jsonPath(
-                                "$.meta.request_id"
-                        ).value(
-                                "http-e2e-request-001"
-                        )
+                """.formatted(
+                        checkoutGroupId,
+                        buyerUserId,
+                        orderId,
+                        shopId
                 );
 
-        var payment =
-                paymentJpaRepository
-                        .findByCheckoutGroupId(
-                                CHECKOUT_GROUP_ID
-                        )
-                        .orElseThrow();
-
-        assertThat(
-                payment.getCheckoutGroupId()
-        ).isEqualTo(
-                CHECKOUT_GROUP_ID
+        InternalCallerContextHolder.set(
+                new InternalCallerContext(InternalService.ORDER_COMMERCE)
         );
 
-        assertThat(
-                payment.getBuyerUserId()
-        ).isEqualTo(
-                BUYER_USER_ID
-        );
+        mockMvc.perform(post("/api/v1/payments")
+                            .header(
+                                    "Idempotency-Key",
+                                    "http-e2e-idem-001"
+                            )
+                            .header(
+                                    "X-Request-ID",
+                                    "http-e2e-request-001"
+                            )
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body)
+            )
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.data.checkout_group_id").value(CHECKOUT_GROUP_ID.toString()))
+            .andExpect(jsonPath("$.data.status").value("PENDING"))
+            .andExpect(jsonPath("$.data.method").value("VNPAY"))
+            .andExpect(jsonPath("$.data.amount").value(100_000))
+            .andExpect(jsonPath("$.data.currency").value("VND"))
+            .andExpect(jsonPath("$.data.payment_url").value(PAYMENT_URL))
+            .andExpect(jsonPath("$.meta.request_id").value("http-e2e-request-001")
+            );
 
-        assertThat(
-                payment.getMethod()
-        ).isEqualTo(
-                "VNPAY"
-        );
+        var payment = paymentJpaRepository
+                .findByCheckoutGroupId(CHECKOUT_GROUP_ID)
+                .orElseThrow();
 
-        assertThat(
-                payment.getStatus()
-        ).isEqualTo(
-                "PENDING"
-        );
+        assertThat(payment.getCheckoutGroupId()).isEqualTo(CHECKOUT_GROUP_ID);
 
-        assertThat(
-                payment.getAmount()
-        ).isEqualTo(
-                100_000L
-        );
+        assertThat(payment.getBuyerUserId()).isEqualTo(BUYER_USER_ID);
 
-        assertThat(
-                payment.getCurrency()
-        ).isEqualTo(
-                "VND"
-        );
+        assertThat(payment.getMethod()).isEqualTo("VNPAY");
 
-        var attempt =
-                paymentAttemptJpaRepository
-                        .findByProviderAndProviderTransactionRef(
-                                "VNPAY",
-                                PROVIDER_TRANSACTION_REF
-                        )
-                        .orElseThrow();
+        assertThat(payment.getStatus()).isEqualTo("PENDING");
 
-        assertThat(
-                attempt.getPaymentId()
-        ).isEqualTo(
-                payment.getId()
-        );
+        assertThat(payment.getAmount()).isEqualTo(100_000L);
 
-        assertThat(
-                attempt.getProvider()
-        ).isEqualTo(
-                "VNPAY"
-        );
+        assertThat(payment.getCurrency()).isEqualTo("VND");
 
-        assertThat(
-                attempt.getStatus()
-        ).isEqualTo(
-                "PENDING"
-        );
+        var attempt = paymentAttemptJpaRepository
+                    .findByProviderAndProviderTransactionRef(
+                            "VNPAY",
+                            PROVIDER_TRANSACTION_REF
+                    )
+                    .orElseThrow();
 
-        assertThat(
-                attempt.getProviderTransactionRef()
-        ).isEqualTo(
-                PROVIDER_TRANSACTION_REF
-        );
+        assertThat(attempt.getPaymentId()).isEqualTo(payment.getId());
+
+        assertThat(attempt.getProvider()).isEqualTo("VNPAY");
+
+        assertThat(attempt.getStatus()).isEqualTo("PENDING");
+
+        assertThat(attempt.getProviderTransactionRef()).isEqualTo(PROVIDER_TRANSACTION_REF);
+    }
+
+    @Test
+    void shouldRejectCreatePaymentWithoutInternalCaller() throws Exception {
+        InternalCallerContextHolder.clear();
+
+        String body = """
+            {
+              "checkout_group_id": "51000000-0000-0000-0000-000000000001",
+              "buyer_user_id": "52000000-0000-0000-0000-000000000001",
+              "method": "COD",
+              "amount": 100000,
+              "currency": "VND",
+              "orders": [
+                {
+                  "order_id": "53000000-0000-0000-0000-000000000001",
+                  "shop_id": "54000000-0000-0000-0000-000000000001",
+                  "amount": 100000,
+                  "shipping_fee": 0
+                }
+              ]
+            }
+            """;
+
+        mockMvc.perform(
+                        post("/api/v1/payments")
+                                .header("Idempotency-Key", "idem-security-e2e")
+                                .header("X-Request-ID", "req-security-e2e")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body)
+                )
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_UNAUTHENTICATED"));
     }
 
     @TestConfiguration
