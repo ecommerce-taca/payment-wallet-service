@@ -1,8 +1,11 @@
 package com.taca.paymentwallet.presentation.rest.seller;
 
+import com.taca.paymentwallet.application.exception.ForbiddenException;
+import com.taca.paymentwallet.application.exception.UnauthenticatedException;
 import com.taca.paymentwallet.application.port.in.GetSellerWalletUseCase;
 import com.taca.paymentwallet.application.query.GetSellerWalletQuery;
 import com.taca.paymentwallet.application.result.GetSellerWalletResult;
+import com.taca.paymentwallet.application.security.SellerAccessPolicy;
 import com.taca.paymentwallet.application.security.ShopScopePolicy;
 import com.taca.paymentwallet.presentation.rest.GlobalRestExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,17 +24,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class SellerWalletControllerTest {
 
     private GetSellerWalletUseCase getSellerWalletUseCase;
-    private ShopScopePolicy shopScopePolicy;
+    private SellerAccessPolicy sellerAccessPolicy;
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         getSellerWalletUseCase = mock(GetSellerWalletUseCase.class);
-        shopScopePolicy = mock(ShopScopePolicy.class);
+        sellerAccessPolicy = mock(SellerAccessPolicy.class);
 
         SellerWalletController controller = new SellerWalletController(
                 getSellerWalletUseCase,
-                shopScopePolicy
+                sellerAccessPolicy
         );
 
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
@@ -44,7 +47,7 @@ class SellerWalletControllerTest {
         UUID walletId = UUID.randomUUID();
         UUID shopId = UUID.randomUUID();
 
-        when(shopScopePolicy.requireSingleShopId()).thenReturn(shopId);
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(shopId);
         when(getSellerWalletUseCase.execute(any())).thenReturn(
                 new GetSellerWalletResult(
                         walletId,
@@ -80,7 +83,7 @@ class SellerWalletControllerTest {
     void shouldResolveShopBeforeQueryingWallet() throws Exception {
         UUID shopId = UUID.randomUUID();
 
-        when(shopScopePolicy.requireSingleShopId()).thenReturn(shopId);
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(shopId);
         when(getSellerWalletUseCase.execute(any())).thenReturn(
                 new GetSellerWalletResult(
                         UUID.randomUUID(),
@@ -98,8 +101,9 @@ class SellerWalletControllerTest {
                 )
                 .andExpect(status().isOk());
 
-        var inOrder = inOrder(shopScopePolicy, getSellerWalletUseCase);
-        inOrder.verify(shopScopePolicy).requireSingleShopId();
+        var inOrder = inOrder(sellerAccessPolicy, getSellerWalletUseCase);
+
+        inOrder.verify(sellerAccessPolicy).requireSellerShopId();
         inOrder.verify(getSellerWalletUseCase).execute(any());
     }
 
@@ -109,7 +113,39 @@ class SellerWalletControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error.code").value("MISSING_REQUIRED_HEADER"));
 
-        verifyNoInteractions(shopScopePolicy);
+        verifyNoInteractions(sellerAccessPolicy);
+        verifyNoInteractions(getSellerWalletUseCase);
+    }
+
+    @Test
+    void shouldRejectAnonymousSeller() throws Exception {
+        doThrow(new UnauthenticatedException())
+                .when(sellerAccessPolicy)
+                .requireSellerShopId();
+
+        mockMvc.perform(
+                        get("/api/v1/seller/wallet")
+                                .header("X-Request-ID", "req-seller-anonymous")
+                )
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_UNAUTHENTICATED"));
+
+        verifyNoInteractions(getSellerWalletUseCase);
+    }
+
+    @Test
+    void shouldRejectUnauthorizedSeller() throws Exception {
+        doThrow(new ForbiddenException())
+                .when(sellerAccessPolicy)
+                .requireSellerShopId();
+
+        mockMvc.perform(
+                        get("/api/v1/seller/wallet")
+                                .header("X-Request-ID", "req-seller-forbidden")
+                )
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_FORBIDDEN"));
+
         verifyNoInteractions(getSellerWalletUseCase);
     }
 }

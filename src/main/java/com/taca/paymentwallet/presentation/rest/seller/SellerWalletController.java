@@ -3,7 +3,7 @@ package com.taca.paymentwallet.presentation.rest.seller;
 import com.taca.paymentwallet.application.port.in.GetSellerWalletUseCase;
 import com.taca.paymentwallet.application.query.GetSellerWalletQuery;
 import com.taca.paymentwallet.application.result.GetSellerWalletResult;
-import com.taca.paymentwallet.application.security.ShopScopePolicy;
+import com.taca.paymentwallet.application.security.SellerAccessPolicy;
 import com.taca.paymentwallet.presentation.rest.ApiMeta;
 import com.taca.paymentwallet.presentation.rest.ApiResponse;
 import org.springframework.http.ResponseEntity;
@@ -20,31 +20,25 @@ import java.util.UUID;
 public class SellerWalletController {
 
     private final GetSellerWalletUseCase getSellerWalletUseCase;
-    private final ShopScopePolicy shopScopePolicy;
+    private final SellerAccessPolicy sellerAccessPolicy;
 
     public SellerWalletController(
             GetSellerWalletUseCase getSellerWalletUseCase,
-            ShopScopePolicy shopScopePolicy
+            SellerAccessPolicy sellerAccessPolicy
     ) {
         this.getSellerWalletUseCase = Objects.requireNonNull(getSellerWalletUseCase);
-        this.shopScopePolicy = Objects.requireNonNull(shopScopePolicy);
+        this.sellerAccessPolicy = Objects.requireNonNull(sellerAccessPolicy);
     }
 
     @GetMapping("/wallet")
     public ResponseEntity<ApiResponse<SellerWalletData>> getWallet(
             @RequestHeader("X-Request-ID") String requestId
     ) {
-        UUID shopId = shopScopePolicy.requireSingleShopId();
-
-        GetSellerWalletResult result = getSellerWalletUseCase.execute(
-                new GetSellerWalletQuery(shopId)
-        );
+        UUID shopId = sellerAccessPolicy.requireSellerShopId();
+        GetSellerWalletResult result = getSellerWalletUseCase.execute(new GetSellerWalletQuery(shopId));
 
         return ResponseEntity.ok(
-                new ApiResponse<>(
-                        toData(result),
-                        new ApiMeta(requestId)
-                )
+                new ApiResponse<>(toData(result), new ApiMeta(requestId))
         );
     }
 
