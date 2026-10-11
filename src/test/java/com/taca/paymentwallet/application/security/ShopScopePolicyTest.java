@@ -70,6 +70,35 @@ class ShopScopePolicyTest {
                 .hasMessage("shopId must not be null");
     }
 
+    @Test
+    void shouldReturnSingleShopId() {
+        ActorContextHolder.set(actor(Set.of(SHOP_ID)));
+
+        assertThat(policy.requireSingleShopId()).isEqualTo(SHOP_ID);
+    }
+
+    @Test
+    void shouldRejectEmptyScopeForSingleShop() {
+        ActorContextHolder.set(actor(Set.of()));
+
+        assertThatThrownBy(policy::requireSingleShopId)
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void shouldRejectMultipleShopsForSingleShop() {
+        ActorContextHolder.set(actor(Set.of(SHOP_ID, OTHER_SHOP_ID)));
+
+        assertThatThrownBy(policy::requireSingleShopId)
+                .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    void shouldRejectAnonymousActorForSingleShop() {
+        assertThatThrownBy(policy::requireSingleShopId)
+                .isInstanceOf(UnauthenticatedException.class);
+    }
+
     private ActorContext actor(Set<UUID> shopScope) {
         return new ActorContext(
                 USER_ID,
