@@ -8,6 +8,8 @@ import com.taca.paymentwallet.application.security.SellerAccessPolicy;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -29,14 +31,24 @@ public class SellerLedgerController {
     @GetMapping("/ledger")
     public ResponseEntity<SellerLedgerResponse> getLedger(
             @RequestHeader("X-Request-ID") String requestId,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "1") String page,
+            @RequestParam(defaultValue = "20") String size,
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) String type
     ) {
         UUID shopId = sellerAccessPolicy.requireSellerShopId();
 
-        GetSellerLedgerResult result = getSellerLedgerUseCase.execute(
-                new GetSellerLedgerQuery(shopId, page, size, null, null, null)
+        GetSellerLedgerQuery query = new GetSellerLedgerQuery(
+                shopId,
+                parseInteger(page, "page"),
+                parseInteger(size, "size"),
+                parseInstant(from, "from"),
+                parseInstant(to, "to"),
+                type
         );
+
+        GetSellerLedgerResult result = getSellerLedgerUseCase.execute(query);
 
         return ResponseEntity.ok(
                 new SellerLedgerResponse(
@@ -52,6 +64,26 @@ public class SellerLedgerController {
         );
     }
 
+    private int parseInteger(String value, String name) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(name + " must be a valid integer");
+        }
+    }
+
+    private Instant parseInstant(String value, String name) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        try {
+            return Instant.parse(value.trim());
+        } catch (DateTimeParseException exception) {
+            throw new IllegalArgumentException(name + " must be a valid ISO-8601 instant");
+        }
+    }
+
     private SellerLedgerData toData(GetSellerLedgerEntryResult entry) {
         return new SellerLedgerData(
                 entry.entryId(),
@@ -59,10 +91,7 @@ public class SellerLedgerController {
                 entry.entryType(),
                 entry.amount(),
                 entry.balanceAfter(),
-                new SellerLedgerReferenceData(
-                        entry.referenceType(),
-                        entry.referenceId()
-                ),
+                new SellerLedgerReferenceData(entry.referenceType(), entry.referenceId()),
                 entry.description(),
                 entry.createdAt()
         );
