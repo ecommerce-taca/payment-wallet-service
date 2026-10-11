@@ -210,4 +210,130 @@ class SellerLedgerControllerTest {
         verifyNoInteractions(sellerAccessPolicy);
         verifyNoInteractions(getSellerLedgerUseCase);
     }
+
+    @Test
+    void shouldPassLedgerFiltersToUseCase() throws Exception {
+        UUID shopId = UUID.randomUUID();
+
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(shopId);
+        when(getSellerLedgerUseCase.execute(any())).thenReturn(
+                new GetSellerLedgerResult(List.of(), 2, 50, 0, 0)
+        );
+
+        mockMvc.perform(
+                        get("/api/v1/seller/wallet/ledger")
+                                .header("X-Request-ID", "req-ledger-filter")
+                                .param("page", "2")
+                                .param("size", "50")
+                                .param("from", "2026-10-01T00:00:00Z")
+                                .param("to", "2026-11-01T00:00:00Z")
+                                .param("type", "credit")
+                )
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<GetSellerLedgerQuery> captor =
+                ArgumentCaptor.forClass(GetSellerLedgerQuery.class);
+
+        verify(getSellerLedgerUseCase).execute(captor.capture());
+
+        GetSellerLedgerQuery query = captor.getValue();
+
+        assertThat(query.shopId()).isEqualTo(shopId);
+        assertThat(query.page()).isEqualTo(2);
+        assertThat(query.size()).isEqualTo(50);
+        assertThat(query.from()).isEqualTo(Instant.parse("2026-10-01T00:00:00Z"));
+        assertThat(query.to()).isEqualTo(Instant.parse("2026-11-01T00:00:00Z"));
+        assertThat(query.type()).isEqualTo("CREDIT");
+    }
+
+    @Test
+    void shouldRejectInvalidPage() throws Exception {
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(UUID.randomUUID());
+
+        mockMvc.perform(
+                        get("/api/v1/seller/wallet/ledger")
+                                .header("X-Request-ID", "req-ledger-invalid-page")
+                                .param("page", "0")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(getSellerLedgerUseCase);
+    }
+
+    @Test
+    void shouldRejectNonNumericPage() throws Exception {
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(UUID.randomUUID());
+
+        mockMvc.perform(
+                        get("/api/v1/seller/wallet/ledger")
+                                .header("X-Request-ID", "req-ledger-invalid-page")
+                                .param("page", "abc")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(getSellerLedgerUseCase);
+    }
+
+    @Test
+    void shouldRejectOversizedPageSize() throws Exception {
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(UUID.randomUUID());
+
+        mockMvc.perform(
+                        get("/api/v1/seller/wallet/ledger")
+                                .header("X-Request-ID", "req-ledger-invalid-size")
+                                .param("size", "101")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(getSellerLedgerUseCase);
+    }
+
+    @Test
+    void shouldRejectMalformedDateFilter() throws Exception {
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(UUID.randomUUID());
+
+        mockMvc.perform(
+                        get("/api/v1/seller/wallet/ledger")
+                                .header("X-Request-ID", "req-ledger-invalid-date")
+                                .param("from", "2026-10-01")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(getSellerLedgerUseCase);
+    }
+
+    @Test
+    void shouldRejectInvalidDateRange() throws Exception {
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(UUID.randomUUID());
+
+        mockMvc.perform(
+                        get("/api/v1/seller/wallet/ledger")
+                                .header("X-Request-ID", "req-ledger-invalid-range")
+                                .param("from", "2026-11-01T00:00:00Z")
+                                .param("to", "2026-10-01T00:00:00Z")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(getSellerLedgerUseCase);
+    }
+
+    @Test
+    void shouldRejectUnsupportedLedgerType() throws Exception {
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(UUID.randomUUID());
+
+        mockMvc.perform(
+                        get("/api/v1/seller/wallet/ledger")
+                                .header("X-Request-ID", "req-ledger-invalid-type")
+                                .param("type", "PAYMENT_CAPTURE")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(getSellerLedgerUseCase);
+    }
 }

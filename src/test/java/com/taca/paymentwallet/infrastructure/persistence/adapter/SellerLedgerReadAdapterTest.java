@@ -5,7 +5,9 @@ import com.taca.paymentwallet.infrastructure.persistence.repository.LedgerEntryJ
 import com.taca.paymentwallet.domain.valueobject.ShopId;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -52,5 +54,36 @@ class SellerLedgerReadAdapterTest {
         assertThat(result.entries().getFirst().entryId()).isEqualTo(entryId);
         assertThat(result.entries().getFirst().balanceAfter()).isEqualTo(92_000L);
         assertThat(result.total()).isEqualTo(1);
+    }
+
+    @Test
+    void shouldForwardLedgerFilters() {
+        LedgerEntryJpaRepository repository = mock(LedgerEntryJpaRepository.class);
+
+        when(repository.findSellerLedger(any(), any(), any(), anyString(), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        SellerLedgerReadAdapter adapter = new SellerLedgerReadAdapter(repository);
+
+        UUID shopId = UUID.randomUUID();
+        Instant from = Instant.parse("2026-10-01T00:00:00Z");
+        Instant to = Instant.parse("2026-11-01T00:00:00Z");
+
+        adapter.findByShop(
+                new ShopId(shopId),
+                2,
+                50,
+                from,
+                to,
+                "CREDIT"
+        );
+
+        verify(repository).findSellerLedger(
+                eq(shopId),
+                eq(LocalDateTime.of(2026, 10, 1, 0, 0)),
+                eq(LocalDateTime.of(2026, 11, 1, 0, 0)),
+                eq("CREDIT"),
+                eq(PageRequest.of(1, 50))
+        );
     }
 }
