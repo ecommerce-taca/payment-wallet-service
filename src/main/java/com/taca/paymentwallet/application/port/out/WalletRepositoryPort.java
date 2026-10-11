@@ -10,6 +10,11 @@ public interface WalletRepositoryPort {
 
     Optional<Wallet> findById(WalletId walletId);
 
+    Optional<Wallet> findByShopIdAndCurrency(
+            ShopId shopId,
+            String currency
+    );
+
     Optional<Wallet> findByShopIdAndCurrencyForUpdate(
             ShopId shopId,
             String currency

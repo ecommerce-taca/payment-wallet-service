@@ -839,6 +839,18 @@ class ProcessVnpayWebhookServiceTest {
                     .findFirst()
                     .orElseThrow();
         }
+
+        @Override
+        public Optional<Wallet> findByShopIdAndCurrency(
+                ShopId shopId,
+                String currency
+        ) {
+            return walletsById.values()
+                    .stream()
+                    .filter(wallet -> wallet.shopId().equals(shopId))
+                    .filter(wallet -> wallet.currency().equals(currency))
+                    .findFirst();
+        }
     }
 
     private Payment createPendingVnpayPayment(
