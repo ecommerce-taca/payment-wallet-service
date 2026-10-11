@@ -338,4 +338,16 @@ public class ApplicationConfiguration {
                 walletRepository
         );
     }
+
+    @Bean
+    SellerAccessPolicy sellerAccessPolicy(AuthenticationGuard authenticationGuard) {
+        return new SellerAccessPolicy(authenticationGuard);
+    }
+
+    @Bean
+    GetSellerLedgerUseCase getSellerLedgerUseCase(
+            SellerLedgerReadPort sellerLedgerReadPort
+    ) {
+        return new GetSellerLedgerService(sellerLedgerReadPort);
+    }
 }
