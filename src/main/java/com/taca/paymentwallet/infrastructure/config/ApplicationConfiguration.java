@@ -329,4 +329,13 @@ public class ApplicationConfiguration {
                 properties.batchSize()
         );
     }
+
+    @Bean
+    GetSellerWalletUseCase getSellerWalletUseCase(
+            WalletRepositoryPort walletRepository
+    ) {
+        return new GetSellerWalletService(
+                walletRepository
+        );
+    }
 }

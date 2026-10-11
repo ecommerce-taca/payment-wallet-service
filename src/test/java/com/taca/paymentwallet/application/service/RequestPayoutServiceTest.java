@@ -372,6 +372,26 @@ class RequestPayoutServiceTest {
         }
 
         @Override
+        public Optional<Wallet> findByShopIdAndCurrency(
+                ShopId shopId,
+                String currency
+        ) {
+            if (wallet == null) {
+                return Optional.empty();
+            }
+
+            if (!wallet.shopId().equals(shopId)) {
+                return Optional.empty();
+            }
+
+            if (!wallet.currency().equals(currency)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(wallet);
+        }
+
+        @Override
         public Optional<Wallet> findByIdForUpdate(WalletId walletId) {
             return Optional.ofNullable(walletsById.get(walletId));
         }

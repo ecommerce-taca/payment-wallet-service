@@ -344,6 +344,18 @@ class RunSettlementServiceTest {
             wallets.put(wallet.id(), wallet);
             return wallet;
         }
+
+        @Override
+        public Optional<Wallet> findByShopIdAndCurrency(
+                ShopId shopId,
+                String currency
+        ) {
+            return wallets.values()
+                    .stream()
+                    .filter(wallet -> wallet.shopId().equals(shopId))
+                    .filter(wallet -> wallet.currency().equals(currency))
+                    .findFirst();
+        }
     }
 
     private static class FakeLedgerPostingRepositoryPort

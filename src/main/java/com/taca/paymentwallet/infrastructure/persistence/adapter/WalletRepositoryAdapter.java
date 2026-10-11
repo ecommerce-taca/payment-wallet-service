@@ -52,6 +52,24 @@ public class WalletRepositoryAdapter
     }
 
     @Override
+    public Optional<Wallet> findByShopIdAndCurrency(
+            ShopId shopId,
+            String currency
+    ) {
+        Objects.requireNonNull(
+                shopId,
+                "shopId must not be null"
+        );
+
+        return walletJpaRepository
+                .findByShopIdAndCurrency(
+                        shopId.value(),
+                        normalizeCurrency(currency)
+                )
+                .map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<Wallet> findByIdForUpdate(
             WalletId walletId
     ) {

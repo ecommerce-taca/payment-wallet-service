@@ -780,6 +780,18 @@ class ProcessCodPaymentServiceTest {
             walletsById.put(wallet.id(), wallet);
             return wallet;
         }
+
+        @Override
+        public Optional<Wallet> findByShopIdAndCurrency(
+                ShopId shopId,
+                String currency
+        ) {
+            return walletsById.values()
+                    .stream()
+                    .filter(wallet -> wallet.shopId().equals(shopId))
+                    .filter(wallet -> wallet.currency().equals(currency))
+                    .findFirst();
+        }
     }
 
     private static final class FakeLedgerPostingRepositoryPort
