@@ -316,6 +316,13 @@ public class InfrastructureConfiguration {
     }
 
     @Bean
+    SellerLedgerReadPort sellerLedgerReadPort(
+            LedgerEntryJpaRepository ledgerEntryRepository
+    ) {
+        return new SellerLedgerReadAdapter(ledgerEntryRepository);
+    }
+
+    @Bean
     LedgerAccountLookupPort ledgerAccountLookupPort(
             LedgerAccountJpaRepository ledgerAccountRepository,
             PaymentAllocationJpaRepository allocationRepository,
