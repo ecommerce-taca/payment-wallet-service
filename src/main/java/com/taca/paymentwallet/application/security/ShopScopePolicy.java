@@ -24,4 +24,14 @@ public final class ShopScopePolicy {
 
         return actor;
     }
+
+    public UUID requireSingleShopId() {
+        ActorContext actor = authenticationGuard.requireActor();
+
+        if (actor.shopScope().size() != 1) {
+            throw new ForbiddenException();
+        }
+
+        return actor.shopScope().iterator().next();
+    }
 }
