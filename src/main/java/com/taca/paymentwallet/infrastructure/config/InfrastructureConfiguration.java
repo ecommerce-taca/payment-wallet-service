@@ -627,4 +627,15 @@ public class InfrastructureConfiguration {
                 validator
         );
     }
+
+    @Bean
+    SellerRevenueReadPort sellerRevenueReadPort(
+            PaymentAllocationJpaRepository allocationRepository,
+            RefundAllocationJpaRepository refundAllocationRepository
+    ) {
+        return new SellerRevenueReadAdapter(
+                allocationRepository,
+                refundAllocationRepository
+        );
+    }
 }
