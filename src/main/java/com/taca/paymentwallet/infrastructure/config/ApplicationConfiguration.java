@@ -350,4 +350,11 @@ public class ApplicationConfiguration {
     ) {
         return new GetSellerLedgerService(sellerLedgerReadPort);
     }
+
+    @Bean
+    GetSellerRevenueUseCase getSellerRevenueUseCase(
+            SellerRevenueReadPort sellerRevenueReadPort
+    ) {
+        return new GetSellerRevenueService(sellerRevenueReadPort);
+    }
 }
