@@ -219,4 +219,89 @@ class SellerRevenueControllerTest {
                 )
         );
     }
+
+    @Test
+    void shouldRejectMalformedFromDate() throws Exception {
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(UUID.randomUUID());
+
+        mockMvc.perform(
+                        get("/api/v1/seller/revenue")
+                                .header("X-Request-ID", "req-revenue-invalid-from")
+                                .param("from", "2026-08")
+                                .param("to", "2026-08-31")
+                                .param("granularity", "DAY")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(getSellerRevenueUseCase);
+    }
+
+    @Test
+    void shouldRejectMalformedToDate() throws Exception {
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(UUID.randomUUID());
+
+        mockMvc.perform(
+                        get("/api/v1/seller/revenue")
+                                .header("X-Request-ID", "req-revenue-invalid-to")
+                                .param("from", "2026-08-01")
+                                .param("to", "invalid-date")
+                                .param("granularity", "DAY")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(getSellerRevenueUseCase);
+    }
+
+    @Test
+    void shouldRejectUnsupportedGranularity() throws Exception {
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(UUID.randomUUID());
+
+        mockMvc.perform(
+                        get("/api/v1/seller/revenue")
+                                .header("X-Request-ID", "req-revenue-invalid-granularity")
+                                .param("from", "2026-08-01")
+                                .param("to", "2026-08-31")
+                                .param("granularity", "YEAR")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(getSellerRevenueUseCase);
+    }
+
+    @Test
+    void shouldRejectReversedRevenueRange() throws Exception {
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(UUID.randomUUID());
+
+        mockMvc.perform(
+                        get("/api/v1/seller/revenue")
+                                .header("X-Request-ID", "req-revenue-invalid-range")
+                                .param("from", "2026-09-01")
+                                .param("to", "2026-08-01")
+                                .param("granularity", "DAY")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(getSellerRevenueUseCase);
+    }
+
+    @Test
+    void shouldRejectRevenueRangeLongerThan366Days() throws Exception {
+        when(sellerAccessPolicy.requireSellerShopId()).thenReturn(UUID.randomUUID());
+
+        mockMvc.perform(
+                        get("/api/v1/seller/revenue")
+                                .header("X-Request-ID", "req-revenue-range-too-large")
+                                .param("from", "2026-01-01")
+                                .param("to", "2027-01-02")
+                                .param("granularity", "DAY")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(getSellerRevenueUseCase);
+    }
 }

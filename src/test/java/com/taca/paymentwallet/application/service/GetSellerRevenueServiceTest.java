@@ -108,6 +108,114 @@ class GetSellerRevenueServiceTest {
         assertThat(result.buckets().get(1).period()).isEqualTo("2026-09-01");
     }
 
+    @Test
+    void shouldReturnZeroSummaryForEmptyRevenue() {
+        SellerRevenueReadPort port = (
+                shopId,
+                from,
+                to
+        ) -> List.of();
+
+        GetSellerRevenueService service = new GetSellerRevenueService(port);
+
+        GetSellerRevenueResult result = service.execute(
+                new GetSellerRevenueQuery(
+                        UUID.randomUUID(),
+                        LocalDate.of(2026, 8, 1),
+                        LocalDate.of(2026, 8, 31),
+                        RevenueGranularity.DAY
+                )
+        );
+
+        assertThat(result.summary().gross()).isZero();
+        assertThat(result.summary().commission()).isZero();
+        assertThat(result.summary().tax()).isZero();
+        assertThat(result.summary().net()).isZero();
+        assertThat(result.summary().refunded()).isZero();
+        assertThat(result.summary().orderCount()).isZero();
+        assertThat(result.buckets()).isEmpty();
+    }
+
+    @Test
+    void shouldIncludeRefundOnlyDayInSummary() {
+        SellerRevenueReadPort port = (
+                shopId,
+                from,
+                to
+        ) -> List.of(
+                row(
+                        LocalDate.of(2026, 8, 5),
+                        0,
+                        0,
+                        0,
+                        0,
+                        25_000,
+                        0
+                )
+        );
+
+        GetSellerRevenueService service = new GetSellerRevenueService(port);
+
+        GetSellerRevenueResult result = service.execute(
+                new GetSellerRevenueQuery(
+                        UUID.randomUUID(),
+                        LocalDate.of(2026, 8, 1),
+                        LocalDate.of(2026, 8, 31),
+                        RevenueGranularity.DAY
+                )
+        );
+
+        assertThat(result.summary().gross()).isZero();
+        assertThat(result.summary().refunded()).isEqualTo(25_000);
+        assertThat(result.summary().orderCount()).isZero();
+
+        assertThat(result.buckets()).hasSize(1);
+        assertThat(result.buckets().getFirst().period()).isEqualTo("2026-08-05");
+    }
+
+    @Test
+    void shouldSumRefundedRevenueAcrossDays() {
+        SellerRevenueReadPort port = (
+                shopId,
+                from,
+                to
+        ) -> List.of(
+                row(
+                        LocalDate.of(2026, 8, 5),
+                        100_000,
+                        7_000,
+                        1_000,
+                        92_000,
+                        10_000,
+                        1
+                ),
+                row(
+                        LocalDate.of(2026, 8, 10),
+                        200_000,
+                        14_000,
+                        2_000,
+                        184_000,
+                        30_000,
+                        2
+                )
+        );
+
+        GetSellerRevenueService service = new GetSellerRevenueService(port);
+
+        GetSellerRevenueResult result = service.execute(
+                new GetSellerRevenueQuery(
+                        UUID.randomUUID(),
+                        LocalDate.of(2026, 8, 1),
+                        LocalDate.of(2026, 8, 31),
+                        RevenueGranularity.MONTH
+                )
+        );
+
+        assertThat(result.summary().refunded()).isEqualTo(40_000);
+        assertThat(result.summary().gross()).isEqualTo(300_000);
+        assertThat(result.buckets()).hasSize(1);
+    }
+
     private SellerRevenueDailyView row(
             LocalDate date,
             long gross,

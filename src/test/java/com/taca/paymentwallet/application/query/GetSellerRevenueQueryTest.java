@@ -40,4 +40,37 @@ class GetSellerRevenueQueryTest {
                 )
         ).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void shouldAllow366DayRange() {
+        LocalDate from = LocalDate.of(2026, 1, 1);
+        LocalDate to = from.plusDays(365);
+
+        GetSellerRevenueQuery query = new GetSellerRevenueQuery(
+                UUID.randomUUID(),
+                from,
+                to,
+                RevenueGranularity.DAY
+        );
+
+        assertThat(query.from()).isEqualTo(from);
+        assertThat(query.to()).isEqualTo(to);
+    }
+
+    @Test
+    void shouldRejectRangeLongerThan366Days() {
+        LocalDate from = LocalDate.of(2026, 1, 1);
+        LocalDate to = from.plusDays(366);
+
+        assertThatThrownBy(() ->
+                new GetSellerRevenueQuery(
+                        UUID.randomUUID(),
+                        from,
+                        to,
+                        RevenueGranularity.DAY
+                )
+        )
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("revenue range must not exceed 366 days");
+    }
 }
