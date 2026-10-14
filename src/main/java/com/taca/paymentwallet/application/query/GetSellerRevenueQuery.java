@@ -1,6 +1,7 @@
 package com.taca.paymentwallet.application.query;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 public record GetSellerRevenueQuery(
@@ -9,6 +10,8 @@ public record GetSellerRevenueQuery(
         LocalDate to,
         RevenueGranularity granularity
 ) {
+
+    private static final long MAX_RANGE_DAYS = 366;
 
     public GetSellerRevenueQuery {
         if (shopId == null) {
@@ -29,6 +32,12 @@ public record GetSellerRevenueQuery(
 
         if (from.isAfter(to)) {
             throw new IllegalArgumentException("from must not be after to");
+        }
+
+        long rangeDays = ChronoUnit.DAYS.between(from, to) + 1;
+
+        if (rangeDays > MAX_RANGE_DAYS) {
+            throw new IllegalArgumentException("revenue range must not exceed 366 days");
         }
     }
 }
