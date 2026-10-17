@@ -92,6 +92,31 @@ class VnpayWebhookHttpE2ETest {
             DynamicPropertyRegistry registry
     ) {
         registry.add(
+                "spring.datasource.url",
+                MYSQL::getJdbcUrl
+        );
+
+        registry.add(
+                "spring.datasource.username",
+                MYSQL::getUsername
+        );
+
+        registry.add(
+                "spring.datasource.password",
+                MYSQL::getPassword
+        );
+
+        registry.add(
+                "spring.flyway.enabled",
+                () -> true
+        );
+
+        registry.add(
+                "spring.jpa.hibernate.ddl-auto",
+                () -> "validate"
+        );
+
+        registry.add(
                 "app.outbox.publisher.enabled",
                 () -> false
         );
