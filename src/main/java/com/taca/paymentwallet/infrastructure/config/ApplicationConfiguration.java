@@ -210,35 +210,6 @@ public class ApplicationConfiguration {
     }
 
     @Bean
-    RequestPayoutUseCase requestPayoutUseCase(
-            WalletRepositoryPort walletRepository,
-            PayoutRepositoryPort payoutRepository,
-            IdempotencyPort idempotencyPort,
-            RequestHashPort requestHashPort,
-            IdGeneratorPort idGeneratorPort,
-            LedgerAccountLookupPort ledgerAccountLookupPort,
-            LedgerPostingRepositoryPort ledgerPostingRepository,
-            OutboxPort outboxPort,
-            TransactionPort transactionPort,
-            RequestPayoutResultPayloadPort resultPayloadPort,
-            LedgerPostingFactory ledgerPostingFactory
-    ) {
-        return new RequestPayoutService(
-                walletRepository,
-                payoutRepository,
-                idempotencyPort,
-                requestHashPort,
-                idGeneratorPort,
-                ledgerAccountLookupPort,
-                ledgerPostingRepository,
-                outboxPort,
-                transactionPort,
-                resultPayloadPort,
-                ledgerPostingFactory
-        );
-    }
-
-    @Bean
     ProcessPayoutResultUseCase
     processPayoutResultUseCase(
             PayoutRepositoryPort payoutRepository,

@@ -99,7 +99,7 @@ class ProductionContextSmokeTest {
     private RequestRefundUseCase requestRefundUseCase;
 
     @Autowired
-    private RequestPayoutUseCase requestPayoutUseCase;
+    private ObjectProvider<RequestPayoutUseCase> requestPayoutUseCaseProvider;
 
     @Autowired
     private PublishOutboxUseCase publishOutboxUseCase;
@@ -157,7 +157,7 @@ class ProductionContextSmokeTest {
 
         assertThat(requestRefundUseCase).isNotNull();
 
-        assertThat(requestPayoutUseCase).isNotNull();
+        assertThat(requestPayoutUseCaseProvider.getIfAvailable()).isNull();
 
         assertThat(publishOutboxUseCase).isNotNull();
 
