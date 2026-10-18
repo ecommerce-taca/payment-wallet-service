@@ -303,11 +303,9 @@ public class ApplicationConfiguration {
 
     @Bean
     GetSellerWalletUseCase getSellerWalletUseCase(
-            WalletRepositoryPort walletRepository
+            SellerWalletReadPort sellerWalletReadPort
     ) {
-        return new GetSellerWalletService(
-                walletRepository
-        );
+        return new GetSellerWalletService(sellerWalletReadPort);
     }
 
     @Bean

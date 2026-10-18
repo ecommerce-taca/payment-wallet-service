@@ -229,6 +229,19 @@ public class GlobalRestExceptionHandler {
         );
     }
 
+    @ExceptionHandler(WalletNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleWalletNotFound(
+            WalletNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.NOT_FOUND,
+                "WALLET_NOT_FOUND",
+                exception.getMessage(),
+                request
+        );
+    }
+
     @ExceptionHandler(
             HttpMessageNotReadableException.class
     )

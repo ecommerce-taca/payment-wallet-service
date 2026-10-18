@@ -2,11 +2,13 @@ package com.taca.paymentwallet.presentation.rest.seller;
 
 import com.taca.paymentwallet.application.exception.ForbiddenException;
 import com.taca.paymentwallet.application.exception.UnauthenticatedException;
+import com.taca.paymentwallet.application.exception.WalletNotFoundException;
 import com.taca.paymentwallet.application.port.in.GetSellerWalletUseCase;
 import com.taca.paymentwallet.application.query.GetSellerWalletQuery;
 import com.taca.paymentwallet.application.result.GetSellerWalletResult;
 import com.taca.paymentwallet.application.security.SellerAccessPolicy;
 import com.taca.paymentwallet.application.security.ShopScopePolicy;
+import com.taca.paymentwallet.domain.valueobject.ShopId;
 import com.taca.paymentwallet.presentation.rest.GlobalRestExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +16,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,6 +50,8 @@ class SellerWalletControllerTest {
         UUID walletId = UUID.randomUUID();
         UUID shopId = UUID.randomUUID();
 
+        Instant asOf = Instant.parse("2026-08-31T04:00:00Z");
+
         when(sellerAccessPolicy.requireSellerShopId()).thenReturn(shopId);
         when(getSellerWalletUseCase.execute(any())).thenReturn(
                 new GetSellerWalletResult(
@@ -55,7 +60,8 @@ class SellerWalletControllerTest {
                         12_500_000,
                         3_200_000,
                         "VND",
-                        "ACTIVE"
+                        "ACTIVE",
+                        asOf
                 )
         );
 
@@ -70,7 +76,8 @@ class SellerWalletControllerTest {
                 .andExpect(jsonPath("$.data.pending_balance").value(3_200_000))
                 .andExpect(jsonPath("$.data.currency").value("VND"))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.meta.request_id").value("req-seller-wallet-001"));
+                .andExpect(jsonPath("$.meta.request_id").value("req-seller-wallet-001"))
+                .andExpect(jsonPath("$.data.as_of").value("2026-08-31T04:00:00Z"));;
 
         ArgumentCaptor<GetSellerWalletQuery> captor =
                 ArgumentCaptor.forClass(GetSellerWalletQuery.class);
@@ -83,6 +90,8 @@ class SellerWalletControllerTest {
     void shouldResolveShopBeforeQueryingWallet() throws Exception {
         UUID shopId = UUID.randomUUID();
 
+        Instant asOf = Instant.parse("2026-08-31T04:00:00Z");
+
         when(sellerAccessPolicy.requireSellerShopId()).thenReturn(shopId);
         when(getSellerWalletUseCase.execute(any())).thenReturn(
                 new GetSellerWalletResult(
@@ -91,7 +100,8 @@ class SellerWalletControllerTest {
                         0,
                         0,
                         "VND",
-                        "ACTIVE"
+                        "ACTIVE",
+                        asOf
                 )
         );
 
@@ -99,7 +109,8 @@ class SellerWalletControllerTest {
                         get("/api/v1/seller/wallet")
                                 .header("X-Request-ID", "req-seller-wallet-002")
                 )
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.as_of").value("2026-08-31T04:00:00Z"));
 
         var inOrder = inOrder(sellerAccessPolicy, getSellerWalletUseCase);
 
@@ -147,5 +158,34 @@ class SellerWalletControllerTest {
                 .andExpect(jsonPath("$.error.code").value("PAYMENT_FORBIDDEN"));
 
         verifyNoInteractions(getSellerWalletUseCase);
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenSellerWalletDoesNotExist() throws Exception {
+        UUID shopId = UUID.randomUUID();
+
+        when(sellerAccessPolicy.requireSellerShopId())
+                .thenReturn(shopId);
+
+        when(getSellerWalletUseCase.execute(any()))
+                .thenThrow(
+                        new WalletNotFoundException(
+                                new ShopId(shopId),
+                                "VND"
+                        )
+                );
+
+        mockMvc.perform(
+                        get("/api/v1/seller/wallet")
+                                .header(
+                                        "X-Request-ID",
+                                        "req-seller-wallet-not-found"
+                                )
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code")
+                        .value("WALLET_NOT_FOUND"))
+                .andExpect(jsonPath("$.meta.request_id")
+                        .value("req-seller-wallet-not-found"));
     }
 }
