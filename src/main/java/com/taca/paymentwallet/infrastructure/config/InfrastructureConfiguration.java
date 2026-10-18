@@ -298,6 +298,13 @@ public class InfrastructureConfiguration {
     }
 
     @Bean
+    SellerWalletReadPort sellerWalletReadPort(
+            WalletJpaRepository repository
+    ) {
+        return new SellerWalletReadAdapter(repository);
+    }
+
+    @Bean
     LedgerPostingRepositoryPort
     ledgerPostingRepositoryPort(
             LedgerPostingJpaRepository postingRepository,
@@ -313,6 +320,13 @@ public class InfrastructureConfiguration {
                 clockPort,
                 uuidGenerator
         );
+    }
+
+    @Bean
+    SellerLedgerReadPort sellerLedgerReadPort(
+            LedgerEntryJpaRepository ledgerEntryRepository
+    ) {
+        return new SellerLedgerReadAdapter(ledgerEntryRepository);
     }
 
     @Bean
@@ -618,6 +632,17 @@ public class InfrastructureConfiguration {
         return new VnpayReadinessHealthIndicator(
                 properties,
                 validator
+        );
+    }
+
+    @Bean
+    SellerRevenueReadPort sellerRevenueReadPort(
+            PaymentAllocationJpaRepository allocationRepository,
+            RefundAllocationJpaRepository refundAllocationRepository
+    ) {
+        return new SellerRevenueReadAdapter(
+                allocationRepository,
+                refundAllocationRepository
         );
     }
 }

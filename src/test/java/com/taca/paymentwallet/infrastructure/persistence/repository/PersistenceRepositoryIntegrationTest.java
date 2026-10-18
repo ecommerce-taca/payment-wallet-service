@@ -1,19 +1,6 @@
 package com.taca.paymentwallet.infrastructure.persistence.repository;
 
-import com.taca.paymentwallet.infrastructure.persistence.entity.AuditLogJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.FeeConfigJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.IdempotencyKeyJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.InboxEventJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.LedgerAccountJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.LedgerEntryJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.LedgerPostingJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.OutboxEventJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.PaymentAllocationJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.PaymentAttemptJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.PaymentEventJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.PaymentJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.TaxConfigJpaEntity;
-import com.taca.paymentwallet.infrastructure.persistence.entity.WalletJpaEntity;
+import com.taca.paymentwallet.infrastructure.persistence.entity.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -26,6 +13,7 @@ import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -94,6 +82,74 @@ class PersistenceRepositoryIntegrationTest {
 
     @Autowired
     private AuditLogJpaRepository auditLogRepository;
+
+    @Autowired
+    private RefundJpaRepository refundRepository;
+
+    @Autowired
+    private RefundAllocationJpaRepository refundAllocationRepository;
+
+    @Test
+    void shouldAggregateSellerRefundedRevenueByDay() {
+        WalletJpaEntity wallet = walletRepository.saveAndFlush(newWallet());
+        PaymentJpaEntity payment = paymentRepository.saveAndFlush(newPayment("SUCCESS"));
+        FeeConfigJpaEntity feeConfig = feeConfigRepository.saveAndFlush(newFeeConfig());
+        TaxConfigJpaEntity taxConfig = taxConfigRepository.saveAndFlush(newTaxConfig());
+
+        PaymentAllocationJpaEntity allocation = new PaymentAllocationJpaEntity();
+        allocation.setId(UUID.randomUUID());
+        allocation.setPaymentId(payment.getId());
+        allocation.setOrderId(UUID.randomUUID());
+        allocation.setShopId(wallet.getShopId());
+        allocation.setWalletId(wallet.getId());
+        allocation.setGrossAmount(100_000L);
+        allocation.setCommissionAmount(7_000L);
+        allocation.setTaxAmount(1_000L);
+        allocation.setSellerNetAmount(92_000L);
+        allocation.setCurrency("VND");
+        allocation.setFeeConfigId(feeConfig.getId());
+        allocation.setTaxConfigId(taxConfig.getId());
+        allocation.setCreatedAt(LocalDateTime.of(2026, 8, 1, 10, 0));
+
+        paymentAllocationRepository.saveAndFlush(allocation);
+
+        RefundJpaEntity refund = new RefundJpaEntity();
+        refund.setId(UUID.randomUUID());
+        refund.setPaymentId(payment.getId());
+        refund.setAmount(25_000L);
+        refund.setCurrency("VND");
+        refund.setReason("Revenue integration test");
+        refund.setStatus("SUCCESS");
+        refund.setProvider("VNPAY");
+        refund.setIdempotencyKey("refund-" + UUID.randomUUID());
+        refund.setCreatedAt(LocalDateTime.of(2026, 8, 5, 12, 0));
+        refund.setUpdatedAt(LocalDateTime.of(2026, 8, 5, 12, 0));
+        refund.setCompletedAt(LocalDateTime.of(2026, 8, 5, 12, 0));
+
+        refundRepository.saveAndFlush(refund);
+
+        RefundAllocationJpaEntity refundAllocation = new RefundAllocationJpaEntity();
+        refundAllocation.setId(UUID.randomUUID());
+        refundAllocation.setRefundId(refund.getId());
+        refundAllocation.setPaymentAllocationId(allocation.getId());
+        refundAllocation.setGrossAmount(25_000L);
+        refundAllocation.setCommissionReversal(1_750L);
+        refundAllocation.setTaxReversal(250L);
+        refundAllocation.setSellerReversal(23_000L);
+        refundAllocation.setCreatedAt(LocalDateTime.of(2026, 8, 5, 12, 0));
+
+        refundAllocationRepository.saveAndFlush(refundAllocation);
+
+        var result = refundAllocationRepository.findSellerRefundedRevenueByDay(
+                wallet.getShopId(),
+                LocalDateTime.of(2026, 8, 1, 0, 0),
+                LocalDateTime.of(2026, 9, 1, 0, 0)
+        );
+
+        assertThat(result).hasSize(1);
+        assertThat(result.getFirst().getDate()).isEqualTo(LocalDate.of(2026, 8, 5));
+        assertThat(result.getFirst().getRefunded()).isEqualTo(25_000L);
+    }
 
     @Test
     void shouldPersistAndFindPaymentByCheckoutGroupId() {
@@ -313,6 +369,50 @@ class PersistenceRepositoryIntegrationTest {
                 auditLog.getTargetType(),
                 auditLog.getTargetId()
         )).hasSize(1);
+    }
+
+    @Test
+    void shouldAggregateSellerRevenueByDay() {
+        WalletJpaEntity wallet = walletRepository.saveAndFlush(newWallet());
+        PaymentJpaEntity payment = paymentRepository.saveAndFlush(newPayment("SUCCESS"));
+        FeeConfigJpaEntity feeConfig = feeConfigRepository.saveAndFlush(newFeeConfig());
+        TaxConfigJpaEntity taxConfig = taxConfigRepository.saveAndFlush(newTaxConfig());
+
+        LocalDateTime createdAt = LocalDateTime.of(2026, 8, 10, 10, 30);
+
+        PaymentAllocationJpaEntity allocation = new PaymentAllocationJpaEntity();
+        allocation.setId(UUID.randomUUID());
+        allocation.setPaymentId(payment.getId());
+        allocation.setOrderId(UUID.randomUUID());
+        allocation.setShopId(wallet.getShopId());
+        allocation.setWalletId(wallet.getId());
+        allocation.setGrossAmount(100_000L);
+        allocation.setCommissionAmount(7_000L);
+        allocation.setTaxAmount(1_000L);
+        allocation.setSellerNetAmount(92_000L);
+        allocation.setCurrency("VND");
+        allocation.setFeeConfigId(feeConfig.getId());
+        allocation.setTaxConfigId(taxConfig.getId());
+        allocation.setCreatedAt(createdAt);
+
+        paymentAllocationRepository.saveAndFlush(allocation);
+
+        var result = paymentAllocationRepository.findSellerRevenueByDay(
+                wallet.getShopId(),
+                LocalDateTime.of(2026, 8, 1, 0, 0),
+                LocalDateTime.of(2026, 9, 1, 0, 0)
+        );
+
+        assertThat(result).hasSize(1);
+
+        var row = result.getFirst();
+
+        assertThat(row.getDate()).isEqualTo(LocalDate.of(2026, 8, 10));
+        assertThat(row.getGross()).isEqualTo(100_000L);
+        assertThat(row.getCommission()).isEqualTo(7_000L);
+        assertThat(row.getTax()).isEqualTo(1_000L);
+        assertThat(row.getNet()).isEqualTo(92_000L);
+        assertThat(row.getOrderCount()).isEqualTo(1L);
     }
 
     private PaymentJpaEntity newPayment(String status) {

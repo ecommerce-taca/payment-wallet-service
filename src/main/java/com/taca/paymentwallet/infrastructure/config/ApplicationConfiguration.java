@@ -210,35 +210,6 @@ public class ApplicationConfiguration {
     }
 
     @Bean
-    RequestPayoutUseCase requestPayoutUseCase(
-            WalletRepositoryPort walletRepository,
-            PayoutRepositoryPort payoutRepository,
-            IdempotencyPort idempotencyPort,
-            RequestHashPort requestHashPort,
-            IdGeneratorPort idGeneratorPort,
-            LedgerAccountLookupPort ledgerAccountLookupPort,
-            LedgerPostingRepositoryPort ledgerPostingRepository,
-            OutboxPort outboxPort,
-            TransactionPort transactionPort,
-            RequestPayoutResultPayloadPort resultPayloadPort,
-            LedgerPostingFactory ledgerPostingFactory
-    ) {
-        return new RequestPayoutService(
-                walletRepository,
-                payoutRepository,
-                idempotencyPort,
-                requestHashPort,
-                idGeneratorPort,
-                ledgerAccountLookupPort,
-                ledgerPostingRepository,
-                outboxPort,
-                transactionPort,
-                resultPayloadPort,
-                ledgerPostingFactory
-        );
-    }
-
-    @Bean
     ProcessPayoutResultUseCase
     processPayoutResultUseCase(
             PayoutRepositoryPort payoutRepository,
@@ -328,5 +299,31 @@ public class ApplicationConfiguration {
                 properties.retention(),
                 properties.batchSize()
         );
+    }
+
+    @Bean
+    GetSellerWalletUseCase getSellerWalletUseCase(
+            SellerWalletReadPort sellerWalletReadPort
+    ) {
+        return new GetSellerWalletService(sellerWalletReadPort);
+    }
+
+    @Bean
+    SellerAccessPolicy sellerAccessPolicy(AuthenticationGuard authenticationGuard) {
+        return new SellerAccessPolicy(authenticationGuard);
+    }
+
+    @Bean
+    GetSellerLedgerUseCase getSellerLedgerUseCase(
+            SellerLedgerReadPort sellerLedgerReadPort
+    ) {
+        return new GetSellerLedgerService(sellerLedgerReadPort);
+    }
+
+    @Bean
+    GetSellerRevenueUseCase getSellerRevenueUseCase(
+            SellerRevenueReadPort sellerRevenueReadPort
+    ) {
+        return new GetSellerRevenueService(sellerRevenueReadPort);
     }
 }

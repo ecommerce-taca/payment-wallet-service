@@ -447,14 +447,70 @@ class WalletRepositoryAdapterTest {
         );
     }
 
+    @Test
+    void shouldFindWalletByShopAndCurrency() {
+        Wallet wallet = wallet();
+
+        WalletJpaEntity entity = entityFrom(wallet);
+
+        when(
+                walletRepository
+                        .findByShopIdAndCurrency(
+                                wallet.shopId().value(),
+                                "VND"
+                        )
+        ).thenReturn(
+                Optional.of(entity)
+        );
+
+        Optional<Wallet> result =
+                adapter.findByShopIdAndCurrency(
+                        wallet.shopId(),
+                        "vnd"
+                );
+
+        assertTrue(result.isPresent());
+
+        assertEquals(wallet.id(), result.get().id());
+
+        assertEquals(
+                wallet.shopId(),
+                result.get().shopId()
+        );
+
+        verify(walletRepository)
+                .findByShopIdAndCurrency(
+                        wallet.shopId().value(),
+                        "VND"
+                );
+
+        verify(walletRepository, never())
+                .findByShopIdAndCurrencyForUpdate(
+                        any(),
+                        any()
+                );
+    }
+
+    @Test
+    void shouldRejectBlankCurrencyForReadLookup() {
+        ShopId shopId = new ShopId(UUID.randomUUID());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () ->
+                        adapter.findByShopIdAndCurrency(
+                                shopId,
+                                "   "
+                        )
+        );
+
+        verifyNoInteractions(walletRepository);
+    }
+
     private Wallet wallet() {
         return Wallet.create(
-                new WalletId(
-                        UUID.randomUUID()
-                ),
-                new ShopId(
-                        UUID.randomUUID()
-                )
+                new WalletId(UUID.randomUUID()),
+                new ShopId(UUID.randomUUID())
         );
     }
 
