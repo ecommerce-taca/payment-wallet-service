@@ -2,11 +2,13 @@ package com.taca.paymentwallet.presentation.rest.seller;
 
 import com.taca.paymentwallet.application.exception.ForbiddenException;
 import com.taca.paymentwallet.application.exception.UnauthenticatedException;
+import com.taca.paymentwallet.application.exception.WalletNotFoundException;
 import com.taca.paymentwallet.application.port.in.GetSellerWalletUseCase;
 import com.taca.paymentwallet.application.query.GetSellerWalletQuery;
 import com.taca.paymentwallet.application.result.GetSellerWalletResult;
 import com.taca.paymentwallet.application.security.SellerAccessPolicy;
 import com.taca.paymentwallet.application.security.ShopScopePolicy;
+import com.taca.paymentwallet.domain.valueobject.ShopId;
 import com.taca.paymentwallet.presentation.rest.GlobalRestExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -156,5 +158,34 @@ class SellerWalletControllerTest {
                 .andExpect(jsonPath("$.error.code").value("PAYMENT_FORBIDDEN"));
 
         verifyNoInteractions(getSellerWalletUseCase);
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenSellerWalletDoesNotExist() throws Exception {
+        UUID shopId = UUID.randomUUID();
+
+        when(sellerAccessPolicy.requireSellerShopId())
+                .thenReturn(shopId);
+
+        when(getSellerWalletUseCase.execute(any()))
+                .thenThrow(
+                        new WalletNotFoundException(
+                                new ShopId(shopId),
+                                "VND"
+                        )
+                );
+
+        mockMvc.perform(
+                        get("/api/v1/seller/wallet")
+                                .header(
+                                        "X-Request-ID",
+                                        "req-seller-wallet-not-found"
+                                )
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code")
+                        .value("WALLET_NOT_FOUND"))
+                .andExpect(jsonPath("$.meta.request_id")
+                        .value("req-seller-wallet-not-found"));
     }
 }

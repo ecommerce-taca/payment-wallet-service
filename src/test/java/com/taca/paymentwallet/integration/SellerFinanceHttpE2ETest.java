@@ -337,6 +337,33 @@ class SellerFinanceHttpE2ETest {
                 .andExpect(jsonPath("$.data.buckets").isEmpty());
     }
 
+    @Test
+    void shouldReturnNotFoundWhenSellerWalletDoesNotExist() throws Exception {
+
+        mockMvc.perform(
+                        sellerGet("/api/v1/seller/wallet")
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code")
+                        .value("WALLET_NOT_FOUND"))
+                .andExpect(jsonPath("$.meta.request_id")
+                        .value("req-seller-finance-e2e"));
+    }
+
+    @Test
+    void shouldRejectInvalidSellerLedgerQueryThroughHttp() throws Exception {
+
+        mockMvc.perform(
+                        sellerGet("/api/v1/seller/wallet/ledger")
+                                .param("page", "0")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code")
+                        .value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.meta.request_id")
+                        .value("req-seller-finance-e2e"));
+    }
+
     private MockHttpServletRequestBuilder sellerGet(String path) {
         return get(path)
                 .header("X-User-ID", USER_ID.toString())
