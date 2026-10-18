@@ -36,6 +36,17 @@ public class ApplicationConfiguration {
     }
 
     @Bean
+    FinanceOpsPolicy financeOpsPolicy(
+            AuthorizationPolicy authorizationPolicy,
+            MfaStepUpPolicy mfaStepUpPolicy
+    ) {
+        return new FinanceOpsPolicy(
+                authorizationPolicy,
+                mfaStepUpPolicy
+        );
+    }
+
+    @Bean
     InternalCallerPolicy internalCallerPolicy(AuthenticationGuard authenticationGuard) {
         return new InternalCallerPolicy(authenticationGuard);
     }
