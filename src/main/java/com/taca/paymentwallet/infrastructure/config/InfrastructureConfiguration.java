@@ -298,6 +298,13 @@ public class InfrastructureConfiguration {
     }
 
     @Bean
+    SellerWalletReadPort sellerWalletReadPort(
+            WalletJpaRepository repository
+    ) {
+        return new SellerWalletReadAdapter(repository);
+    }
+
+    @Bean
     LedgerPostingRepositoryPort
     ledgerPostingRepositoryPort(
             LedgerPostingJpaRepository postingRepository,

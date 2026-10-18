@@ -2,6 +2,7 @@ package com.taca.paymentwallet.presentation.rest.seller;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
+import java.time.Instant;
 import java.util.UUID;
 
 public record SellerWalletData(
@@ -19,6 +20,9 @@ public record SellerWalletData(
 
         String currency,
 
-        String status
+        String status,
+
+        @JsonProperty("as_of")
+        Instant asOf
 ) {
 }

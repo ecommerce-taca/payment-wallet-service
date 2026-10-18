@@ -49,7 +49,8 @@ public class SellerWalletController {
                 result.availableBalance(),
                 result.pendingBalance(),
                 result.currency(),
-                result.status()
+                result.status(),
+                result.asOf()
         );
     }
 }

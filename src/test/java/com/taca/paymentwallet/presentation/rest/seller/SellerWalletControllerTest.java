@@ -14,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -47,6 +48,8 @@ class SellerWalletControllerTest {
         UUID walletId = UUID.randomUUID();
         UUID shopId = UUID.randomUUID();
 
+        Instant asOf = Instant.parse("2026-08-31T04:00:00Z");
+
         when(sellerAccessPolicy.requireSellerShopId()).thenReturn(shopId);
         when(getSellerWalletUseCase.execute(any())).thenReturn(
                 new GetSellerWalletResult(
@@ -55,7 +58,8 @@ class SellerWalletControllerTest {
                         12_500_000,
                         3_200_000,
                         "VND",
-                        "ACTIVE"
+                        "ACTIVE",
+                        asOf
                 )
         );
 
@@ -70,7 +74,8 @@ class SellerWalletControllerTest {
                 .andExpect(jsonPath("$.data.pending_balance").value(3_200_000))
                 .andExpect(jsonPath("$.data.currency").value("VND"))
                 .andExpect(jsonPath("$.data.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.meta.request_id").value("req-seller-wallet-001"));
+                .andExpect(jsonPath("$.meta.request_id").value("req-seller-wallet-001"))
+                .andExpect(jsonPath("$.data.as_of").value("2026-08-31T04:00:00Z"));;
 
         ArgumentCaptor<GetSellerWalletQuery> captor =
                 ArgumentCaptor.forClass(GetSellerWalletQuery.class);
@@ -83,6 +88,8 @@ class SellerWalletControllerTest {
     void shouldResolveShopBeforeQueryingWallet() throws Exception {
         UUID shopId = UUID.randomUUID();
 
+        Instant asOf = Instant.parse("2026-08-31T04:00:00Z");
+
         when(sellerAccessPolicy.requireSellerShopId()).thenReturn(shopId);
         when(getSellerWalletUseCase.execute(any())).thenReturn(
                 new GetSellerWalletResult(
@@ -91,7 +98,8 @@ class SellerWalletControllerTest {
                         0,
                         0,
                         "VND",
-                        "ACTIVE"
+                        "ACTIVE",
+                        asOf
                 )
         );
 
@@ -99,7 +107,8 @@ class SellerWalletControllerTest {
                         get("/api/v1/seller/wallet")
                                 .header("X-Request-ID", "req-seller-wallet-002")
                 )
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.as_of").value("2026-08-31T04:00:00Z"));
 
         var inOrder = inOrder(sellerAccessPolicy, getSellerWalletUseCase);
 
