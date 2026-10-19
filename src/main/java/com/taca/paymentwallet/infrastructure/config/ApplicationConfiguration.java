@@ -337,4 +337,11 @@ public class ApplicationConfiguration {
     ) {
         return new GetSellerRevenueService(sellerRevenueReadPort);
     }
+
+    @Bean
+    GetAdminFeeConfigsUseCase getAdminFeeConfigsUseCase(
+            AdminFeeConfigReadPort adminFeeConfigReadPort
+    ) {
+        return new GetAdminFeeConfigsService(adminFeeConfigReadPort);
+    }
 }
