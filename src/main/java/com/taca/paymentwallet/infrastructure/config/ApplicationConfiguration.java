@@ -344,4 +344,19 @@ public class ApplicationConfiguration {
     ) {
         return new GetAdminFeeConfigsService(adminFeeConfigReadPort);
     }
+
+    @Bean
+    CreateAdminFeeConfigUseCase createAdminFeeConfigUseCase(
+            AdminFeeConfigWritePort writePort,
+            AdminAuditPort auditPort,
+            TransactionPort transactionPort,
+            ClockPort clockPort
+    ) {
+        return new CreateAdminFeeConfigService(
+                writePort,
+                auditPort,
+                transactionPort,
+                clockPort
+        );
+    }
 }
