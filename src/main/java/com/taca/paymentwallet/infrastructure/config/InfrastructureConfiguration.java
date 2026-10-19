@@ -686,4 +686,11 @@ public class InfrastructureConfiguration {
     ) {
         return new AdminAuditAdapter(support);
     }
+
+    @Bean
+    AdminTaxConfigReadPort adminTaxConfigReadPort(
+            TaxConfigJpaRepository repository
+    ) {
+        return new AdminTaxConfigReadAdapter(repository);
+    }
 }
