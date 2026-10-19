@@ -645,4 +645,11 @@ public class InfrastructureConfiguration {
                 refundAllocationRepository
         );
     }
+
+    @Bean
+    AdminFeeConfigReadPort adminFeeConfigReadPort(
+            FeeConfigJpaRepository repository
+    ) {
+        return new AdminFeeConfigReadAdapter(repository);
+    }
 }
