@@ -366,4 +366,19 @@ public class ApplicationConfiguration {
     ) {
         return new GetAdminTaxConfigsService(adminTaxConfigReadPort);
     }
+
+    @Bean
+    CreateAdminTaxConfigUseCase createAdminTaxConfigUseCase(
+            AdminTaxConfigWritePort writePort,
+            AdminAuditPort auditPort,
+            TransactionPort transactionPort,
+            ClockPort clockPort
+    ) {
+        return new CreateAdminTaxConfigService(
+                writePort,
+                auditPort,
+                transactionPort,
+                clockPort
+        );
+    }
 }

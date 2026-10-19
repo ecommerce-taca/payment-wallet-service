@@ -693,4 +693,17 @@ public class InfrastructureConfiguration {
     ) {
         return new AdminTaxConfigReadAdapter(repository);
     }
+
+    @Bean
+    AdminTaxConfigWritePort adminTaxConfigWritePort(
+            TaxConfigJpaRepository repository,
+            PersistenceUuidGenerator uuidGenerator,
+            ClockPort clockPort
+    ) {
+        return new AdminTaxConfigWriteAdapter(
+                repository,
+                uuidGenerator,
+                clockPort
+        );
+    }
 }
