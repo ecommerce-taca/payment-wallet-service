@@ -706,4 +706,17 @@ public class InfrastructureConfiguration {
                 clockPort
         );
     }
+
+    @Bean
+    AdminSettlementReadPort adminSettlementReadPort(
+            SettlementBatchJpaRepository batchRepository,
+            SettlementBatchItemJpaRepository itemRepository,
+            SettlementLineJpaRepository lineRepository
+    ) {
+        return new AdminSettlementReadAdapter(
+                batchRepository,
+                itemRepository,
+                lineRepository
+        );
+    }
 }
