@@ -13,6 +13,7 @@ import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
+import com.taca.paymentwallet.infrastructure.persistence.audit.AuditLogPersistenceSupport;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
 import com.taca.paymentwallet.infrastructure.persistence.repository.*;
 import com.taca.paymentwallet.infrastructure.persistence.support.PersistenceUuidGenerator;
@@ -651,5 +652,38 @@ public class InfrastructureConfiguration {
             FeeConfigJpaRepository repository
     ) {
         return new AdminFeeConfigReadAdapter(repository);
+    }
+
+    @Bean
+    AdminFeeConfigWritePort adminFeeConfigWritePort(
+            FeeConfigJpaRepository repository,
+            PersistenceUuidGenerator uuidGenerator,
+            ClockPort clockPort
+    ) {
+        return new AdminFeeConfigWriteAdapter(
+                repository,
+                uuidGenerator,
+                clockPort
+        );
+    }
+
+    @Bean
+    AuditLogPersistenceSupport auditLogPersistenceSupport(
+            AuditLogJpaRepository repository,
+            PersistenceUuidGenerator uuidGenerator,
+            ObjectMapper objectMapper
+    ) {
+        return new AuditLogPersistenceSupport(
+                repository,
+                uuidGenerator,
+                objectMapper
+        );
+    }
+
+    @Bean
+    AdminAuditPort adminAuditPort(
+            AuditLogPersistenceSupport support
+    ) {
+        return new AdminAuditAdapter(support);
     }
 }
