@@ -359,4 +359,11 @@ public class ApplicationConfiguration {
                 clockPort
         );
     }
+
+    @Bean
+    GetAdminTaxConfigsUseCase getAdminTaxConfigsUseCase(
+            AdminTaxConfigReadPort adminTaxConfigReadPort
+    ) {
+        return new GetAdminTaxConfigsService(adminTaxConfigReadPort);
+    }
 }
