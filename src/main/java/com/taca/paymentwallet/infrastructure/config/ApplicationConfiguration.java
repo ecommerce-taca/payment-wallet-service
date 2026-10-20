@@ -381,4 +381,11 @@ public class ApplicationConfiguration {
                 clockPort
         );
     }
+
+    @Bean
+    GetAdminSettlementsUseCase getAdminSettlementsUseCase(
+            AdminSettlementReadPort adminSettlementReadPort
+    ) {
+        return new GetAdminSettlementsService(adminSettlementReadPort);
+    }
 }

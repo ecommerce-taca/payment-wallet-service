@@ -1,0 +1,187 @@
+package com.taca.paymentwallet.presentation.rest.admin;
+
+import com.taca.paymentwallet.application.exception.ForbiddenException;
+import com.taca.paymentwallet.application.exception.UnauthenticatedException;
+import com.taca.paymentwallet.application.port.in.GetAdminSettlementsUseCase;
+import com.taca.paymentwallet.application.result.GetAdminSettlementBatchResult;
+import com.taca.paymentwallet.application.security.FinanceOpsPolicy;
+import com.taca.paymentwallet.presentation.rest.GlobalRestExceptionHandler;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+class AdminSettlementControllerTest {
+
+    private GetAdminSettlementsUseCase getAdminSettlementsUseCase;
+    private FinanceOpsPolicy financeOpsPolicy;
+    private MockMvc mockMvc;
+
+    @BeforeEach
+    void setUp() {
+        getAdminSettlementsUseCase = mock(GetAdminSettlementsUseCase.class);
+        financeOpsPolicy = mock(FinanceOpsPolicy.class);
+
+        AdminSettlementController controller =
+                new AdminSettlementController(
+                        getAdminSettlementsUseCase,
+                        financeOpsPolicy
+                );
+
+        mockMvc = MockMvcBuilders
+                .standaloneSetup(controller)
+                .setControllerAdvice(new GlobalRestExceptionHandler())
+                .build();
+    }
+
+    @Test
+    void shouldReturnSettlementBatches() throws Exception {
+        UUID id = UUID.randomUUID();
+
+        when(getAdminSettlementsUseCase.execute()).thenReturn(
+                List.of(
+                        new GetAdminSettlementBatchResult(
+                                id,
+                                Instant.parse("2026-10-01T00:00:00Z"),
+                                Instant.parse("2026-10-08T00:00:00Z"),
+                                "COMPLETED",
+                                2,
+                                1_000_000L,
+                                100_000L,
+                                50_000L,
+                                850_000L,
+                                800_000L,
+                                50_000L,
+                                Instant.parse("2026-10-08T01:00:00Z"),
+                                Instant.parse("2026-10-08T01:05:00Z"),
+                                null
+                        )
+                )
+        );
+
+        mockMvc.perform(
+                        get("/api/v1/admin/settlements")
+                                .header("X-Request-ID", "req-admin-settlement-001")
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].id").value(id.toString()))
+                .andExpect(jsonPath("$.data[0].period_start")
+                        .value("2026-10-01T00:00:00Z"))
+                .andExpect(jsonPath("$.data[0].period_end")
+                        .value("2026-10-08T00:00:00Z"))
+                .andExpect(jsonPath("$.data[0].status")
+                        .value("COMPLETED"))
+                .andExpect(jsonPath("$.data[0].shop_count")
+                        .value(2))
+                .andExpect(jsonPath("$.data[0].total_gross")
+                        .value(1_000_000))
+                .andExpect(jsonPath("$.data[0].total_commission")
+                        .value(100_000))
+                .andExpect(jsonPath("$.data[0].total_tax")
+                        .value(50_000))
+                .andExpect(jsonPath("$.data[0].total_net")
+                        .value(850_000))
+                .andExpect(jsonPath("$.data[0].total_released")
+                        .value(800_000))
+                .andExpect(jsonPath("$.data[0].total_held")
+                        .value(50_000))
+                .andExpect(jsonPath("$.data[0].created_at")
+                        .value("2026-10-08T01:00:00Z"))
+                .andExpect(jsonPath("$.data[0].closed_at")
+                        .value("2026-10-08T01:05:00Z"))
+                .andExpect(jsonPath("$.meta.request_id")
+                        .value("req-admin-settlement-001"));
+
+        verify(financeOpsPolicy).requireFinanceOps();
+        verify(getAdminSettlementsUseCase).execute();
+    }
+
+    @Test
+    void shouldReturnEmptyList() throws Exception {
+        when(getAdminSettlementsUseCase.execute()).thenReturn(List.of());
+
+        mockMvc.perform(
+                        get("/api/v1/admin/settlements")
+                                .header("X-Request-ID", "req-admin-settlement-empty")
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data").isEmpty());
+
+        verify(financeOpsPolicy).requireFinanceOps();
+        verify(getAdminSettlementsUseCase).execute();
+    }
+
+    @Test
+    void shouldRequireRequestId() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/settlements"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code")
+                        .value("MISSING_REQUIRED_HEADER"));
+
+        verifyNoInteractions(financeOpsPolicy);
+        verifyNoInteractions(getAdminSettlementsUseCase);
+    }
+
+    @Test
+    void shouldRejectAnonymousActor() throws Exception {
+        doThrow(new UnauthenticatedException())
+                .when(financeOpsPolicy)
+                .requireFinanceOps();
+
+        mockMvc.perform(
+                        get("/api/v1/admin/settlements")
+                                .header("X-Request-ID", "req-admin-settlement-anonymous")
+                )
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code")
+                        .value("PAYMENT_UNAUTHENTICATED"));
+
+        verifyNoInteractions(getAdminSettlementsUseCase);
+    }
+
+    @Test
+    void shouldRejectNonFinanceOpsActor() throws Exception {
+        doThrow(new ForbiddenException())
+                .when(financeOpsPolicy)
+                .requireFinanceOps();
+
+        mockMvc.perform(
+                        get("/api/v1/admin/settlements")
+                                .header("X-Request-ID", "req-admin-settlement-forbidden")
+                )
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code")
+                        .value("PAYMENT_FORBIDDEN"));
+
+        verifyNoInteractions(getAdminSettlementsUseCase);
+    }
+
+    @Test
+    void shouldAuthorizeBeforeReadingSettlements() throws Exception {
+        when(getAdminSettlementsUseCase.execute()).thenReturn(List.of());
+
+        mockMvc.perform(
+                        get("/api/v1/admin/settlements")
+                                .header("X-Request-ID", "req-admin-settlement-order")
+                )
+                .andExpect(status().isOk());
+
+        var inOrder = inOrder(
+                financeOpsPolicy,
+                getAdminSettlementsUseCase
+        );
+
+        inOrder.verify(financeOpsPolicy).requireFinanceOps();
+        inOrder.verify(getAdminSettlementsUseCase).execute();
+    }
+}
