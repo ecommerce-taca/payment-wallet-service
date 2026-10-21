@@ -66,7 +66,7 @@ Admin Finance APIs thuộc Phase 8.
 | 14 | `PUT /admin/taxes` | `FINANCE_OPS` + step-up | Tạo tax version mới | Phase 8 |
 | 15 | `GET /admin/settlements` | `FINANCE_OPS` | Danh sách settlement batch | Phase 8 |
 | 16 | `GET /admin/settlements/{batchId}` | `FINANCE_OPS` | Chi tiết settlement batch | Phase 8 |
-| 17 | `POST /admin/settlements/{batchId}/retry` | `FINANCE_OPS` + step-up | Retry batch `FAILED` | Phase 8 |
+| 17 | `POST /admin/settlements/{batchId}/retry` | `FINANCE_OPS` + step-up | Retry batch `FAILED` | Blocked — ADR-003 |
 | 18 | `GET /admin/finance/summary` | `FINANCE_OPS` | Tổng hợp tài chính sàn | Phase 8 |
 | 18a | `GET /admin/finance/summary/export` | `FINANCE_OPS` | Xuất báo cáo tài chính | Phase 8 |
 | 19 | `GET /health/live` | Ops | Liveness | Implemented |
@@ -754,7 +754,7 @@ Các code ở mục này không đồng nghĩa endpoint tương ứng đã đư�
 | 8 | Bank account source | Ownership/source của `bank_account_id` chưa được chốt theo ADR-003. |
 | 9 | Payout notification recipient | `owner_user_id` và `owner_email` chưa có authoritative source theo ADR-003. |
 | 10 | Seller payout history | Target endpoint có trong API inventory nhưng runtime chưa implement. |
-| 11 | Settlement trigger/eligibility | Hold window, eligible timestamp và upstream trigger vẫn OPEN; không production-wire `RunSettlementUseCase` bằng dữ liệu chưa authoritative. |
+| 11 | Settlement trigger/eligibility/retry | Hold window, eligible timestamp, upstream trigger và authoritative semantics để retry một `FAILED` batch vẫn OPEN; không production-wire `RunSettlementUseCase` hoặc expose settlement retry endpoint bằng dữ liệu chưa authoritative. |
 | 12 | Commission/tax business policy | Rate/version/rounding tiếp tục phải tuân theo accepted finance configuration contract ở các phase sau. |
 
 ## 6. Phase 6 closeout
