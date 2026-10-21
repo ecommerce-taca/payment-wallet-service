@@ -332,6 +332,19 @@ public class GlobalRestExceptionHandler {
         );
     }
 
+    @ExceptionHandler(SettlementBatchNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleSettlementBatchNotFound(
+            SettlementBatchNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.NOT_FOUND,
+                "SETTLEMENT_BATCH_NOT_FOUND",
+                exception.getMessage(),
+                request
+        );
+    }
+
     @ExceptionHandler(InvalidPaymentRequestException.class)
     public ResponseEntity<ApiErrorResponse> handleInvalidPaymentRequest(
             InvalidPaymentRequestException exception,

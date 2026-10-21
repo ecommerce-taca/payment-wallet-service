@@ -388,4 +388,13 @@ public class ApplicationConfiguration {
     ) {
         return new GetAdminSettlementsService(adminSettlementReadPort);
     }
+
+    @Bean
+    GetAdminSettlementDetailUseCase getAdminSettlementDetailUseCase(
+            AdminSettlementReadPort adminSettlementReadPort
+    ) {
+        return new GetAdminSettlementDetailService(
+                adminSettlementReadPort
+        );
+    }
 }
