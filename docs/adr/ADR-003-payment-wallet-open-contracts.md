@@ -141,6 +141,37 @@ Until the eligibility contract is resolved:
 - no allocation may move from `SELLER_PENDING` to `SELLER_AVAILABLE`
   solely because it is absent from `settlement_lines`.
 
+### Settlement retry
+
+The admin target contract includes:
+
+`POST /api/v1/admin/settlements/{batchId}/retry`
+
+for a `FAILED` settlement batch.
+
+The authoritative retry semantics are not yet defined. In particular, the
+contract does not currently establish whether retry:
+
+- reprocesses the persisted items of the failed batch;
+- creates a new batch;
+- mutates the existing batch back to `PROCESSING`;
+- re-evaluates candidates for the original period;
+- or how partially released items are handled.
+
+Status:
+
+OPEN — settlement retry must not be exposed until the retry semantics and
+settlement eligibility contract are authoritative.
+
+Until resolved:
+
+- do not expose the admin settlement retry HTTP endpoint;
+- do not use `RunSettlementUseCase` as an implicit retry implementation;
+- do not re-query candidates for the failed batch period and call that a retry;
+- do not release funds solely because an allocation is absent from
+  `settlement_lines`;
+- keep production settlement execution unwired.
+
 ## 7. Rules
 
 An OPEN item in this ADR:
