@@ -719,4 +719,15 @@ public class InfrastructureConfiguration {
                 lineRepository
         );
     }
+
+    @Bean
+    AdminPaymentReconciliationReadPort adminPaymentReconciliationReadPort(
+            AdminPaymentReconciliationJpaRepository repository,
+            ClockPort clockPort
+    ) {
+        return new AdminPaymentReconciliationReadAdapter(
+                repository,
+                clockPort
+        );
+    }
 }
