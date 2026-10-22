@@ -397,4 +397,11 @@ public class ApplicationConfiguration {
                 adminSettlementReadPort
         );
     }
+
+    @Bean
+    GetAdminPaymentReconciliationUseCase getAdminPaymentReconciliationUseCase(
+            AdminPaymentReconciliationReadPort readPort
+    ) {
+        return new GetAdminPaymentReconciliationService(readPort);
+    }
 }
