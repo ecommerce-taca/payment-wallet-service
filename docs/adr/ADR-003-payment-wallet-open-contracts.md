@@ -149,28 +149,36 @@ The admin target contract includes:
 
 for a `FAILED` settlement batch.
 
-The authoritative retry semantics are not yet defined. In particular, the
-contract does not currently establish whether retry:
+The retry semantics are now defined as follows:
 
-- reprocesses the persisted items of the failed batch;
-- creates a new batch;
-- mutates the existing batch back to `PROCESSING`;
-- re-evaluates candidates for the original period;
-- or how partially released items are handled.
+- retry operates on the existing persisted settlement batch;
+- retry keeps the same `batch_id`, period, items and settlement lines;
+- retry does not create a new settlement batch;
+- retry does not query `SettlementCandidatePort`;
+- retry does not re-evaluate settlement candidate eligibility;
+- a `FAILED` batch transitions to `PROCESSING`;
+- `FAILED` items transition back to `PENDING`;
+- `COMPLETED` items remain `COMPLETED` and retain their existing
+  `posting_id`;
+- completed items must never release seller funds again;
+- only retryable non-completed items are processed;
+- the batch becomes `COMPLETED` only when all persisted items are
+  `COMPLETED`.
 
 Status:
 
-OPEN — settlement retry must not be exposed until the retry semantics and
-settlement eligibility contract are authoritative.
+RESOLVED FOR RETRY SEMANTICS.
 
-Until resolved:
+This resolution does not resolve settlement candidate eligibility or the
+production trigger for creating new settlement batches.
 
-- do not expose the admin settlement retry HTTP endpoint;
-- do not use `RunSettlementUseCase` as an implicit retry implementation;
-- do not re-query candidates for the failed batch period and call that a retry;
-- do not release funds solely because an allocation is absent from
-  `settlement_lines`;
-- keep production settlement execution unwired.
+Until those separate contracts are resolved:
+
+- production `SettlementCandidatePort` remains unwired;
+- production `RunSettlementUseCase` remains unwired;
+- retry must use only the persisted batch hierarchy;
+- retry must never call `RunSettlementUseCase`;
+- retry must never query new candidates for the failed batch period.
 
 ## 7. Rules
 

@@ -60,7 +60,7 @@ class AdminFinanceContractAuditTest {
     }
 
     @Test
-    void shouldKeepSettlementRetryEndpointUnexposedWhileRetryContractIsOpen() {
+    void shouldKeepSettlementRetryEndpointUnexposedUntilRetryApplicationIsReady() {
         assertThat(
                 hasPostMapping(
                         AdminSettlementController.class,

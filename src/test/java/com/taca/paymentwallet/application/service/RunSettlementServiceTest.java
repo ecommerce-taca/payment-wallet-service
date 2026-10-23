@@ -308,8 +308,24 @@ class RunSettlementServiceTest {
             this.savedBatch = settlementBatch;
             return settlementBatch;
         }
-    }
 
+        @Override
+        public Optional<SettlementBatch> findByIdForUpdate(
+                SettlementBatchId settlementBatchId
+        ) {
+            if (savedBatch == null || !savedBatch.id().equals(settlementBatchId)) {
+                return Optional.empty();
+            }
+
+            return Optional.of(savedBatch);
+        }
+
+        @Override
+        public SettlementBatch update(SettlementBatch settlementBatch) {
+            this.savedBatch = settlementBatch;
+            return settlementBatch;
+        }
+    }
     private static class FakeWalletRepositoryPort implements WalletRepositoryPort {
 
         private final Map<WalletId, Wallet> wallets = new HashMap<>();
