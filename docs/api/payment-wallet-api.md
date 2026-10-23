@@ -67,7 +67,7 @@ Admin Finance APIs thuộc Phase 8.
 | 15 | `GET /admin/settlements` | `FINANCE_OPS` | Danh sách settlement batch | Phase 8 |
 | 16 | `GET /admin/settlements/{batchId}` | `FINANCE_OPS` | Chi tiết settlement batch | Phase 8 |
 | 17 | `POST /admin/settlements/{batchId}/retry` | `FINANCE_OPS` + step-up | Retry batch `FAILED` | Blocked — ADR-003 |
-| 18 | `GET /admin/finance/summary` | `FINANCE_OPS` | Tổng hợp tài chính sàn | Phase 8 |
+| 18 | `GET /admin/finance/summary` | `FINANCE_OPS` | Tổng hợp tài chính sàn | Implemented |
 | 18a | `GET /admin/finance/summary/export` | `FINANCE_OPS` | Xuất báo cáo tài chính | Phase 8 |
 | 19 | `GET /health/live` | Ops | Liveness | Implemented |
 | 20 | `GET /health/ready` | Ops | Readiness | Implemented |
@@ -699,6 +699,41 @@ Fee/Tax config là effective-dated và append-only.
 Settlement không được production-wire chỉ dựa vào việc allocation chưa xuất hiện trong `settlement_lines`.
 
 Authoritative settlement eligibility vẫn OPEN theo ADR-003.
+
+### Admin finance summary
+
+`GET /admin/finance/summary`
+
+Header bắt buộc:
+
+- `X-Request-ID`
+
+Authorization:
+
+- `FINANCE_OPS`.
+
+Response runtime:
+
+```json
+{
+  "data": {
+    "captured_amount": 1000000,
+    "refunded_amount": 100000,
+    "gross_amount": 900000,
+    "commission_amount": 90000,
+    "tax_amount": 45000,
+    "seller_net_amount": 765000,
+    "available_balance": 500000,
+    "pending_balance": 265000,
+    "completed_payout_amount": 200000,
+    "as_of": "2026-10-23T10:00:00Z"
+  },
+  "meta": {
+    "request_id": "req-finance-summary-001"
+  }
+}
+```
+
 
 ## 4. Mã lỗi
 
