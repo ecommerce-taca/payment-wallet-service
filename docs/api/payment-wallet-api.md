@@ -68,7 +68,7 @@ Admin Finance APIs thuộc Phase 8.
 | 16 | `GET /admin/settlements/{batchId}` | `FINANCE_OPS` | Chi tiết settlement batch | Implemented |
 | 17 | `POST /admin/settlements/{batchId}/retry` | `FINANCE_OPS` + step-up | Retry batch `FAILED` | Implemented |
 | 18 | `GET /admin/finance/summary` | `FINANCE_OPS` | Tổng hợp tài chính sàn | Implemented |
-| 18a | `GET /admin/finance/summary/export` | `FINANCE_OPS` | Xuất báo cáo tài chính | Not implemented — export contract incomplete |
+| 18a | `GET /admin/finance/summary/export` | `FINANCE_OPS` | Xuất báo cáo tài chính | Foundation only — storage adapter not exposed |
 | 19 | `GET /health/live` | Ops | Liveness | Implemented |
 | 20 | `GET /health/ready` | Ops | Readiness | Implemented |
 
@@ -797,6 +797,46 @@ Response `200 OK`:
   }
 }
 ```
+
+### `GET /admin/finance/summary/export`
+
+Target export contract for the current admin finance summary.
+
+Authorization:
+
+- `FINANCE_OPS`.
+
+Export format:
+
+- CSV encoded as UTF-8;
+- the artifact contains one snapshot row corresponding to the current
+  admin finance summary;
+- columns are:
+  `captured_amount`,
+  `refunded_amount`,
+  `gross_amount`,
+  `commission_amount`,
+  `tax_amount`,
+  `seller_net_amount`,
+  `available_balance`,
+  `pending_balance`,
+  `completed_payout_amount`,
+  `as_of`.
+
+Download contract:
+
+- the endpoint returns a temporary download URL rather than the CSV bytes;
+- `EXPORT_URL_TTL` is 30 minutes;
+- storage provider details are not part of the API contract;
+- object-storage credentials and internal object keys must not be exposed.
+
+Phase 8V status:
+
+- CSV renderer implemented;
+- provider-neutral export storage port implemented;
+- export application service implemented;
+- no production storage adapter is registered;
+- HTTP endpoint remains intentionally unexposed until Phase 8W.
 
 
 ## 4. Mã lỗi
