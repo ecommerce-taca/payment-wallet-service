@@ -3,6 +3,7 @@ package com.taca.paymentwallet.presentation.rest;
 import com.taca.paymentwallet.application.exception.*;
 import com.taca.paymentwallet.domain.payment.InvalidPaymentStateException;
 import com.taca.paymentwallet.domain.refund.RefundLimitExceededException;
+import com.taca.paymentwallet.domain.settlement.InvalidSettlementStateException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -48,6 +49,19 @@ public class GlobalRestExceptionHandler {
         return error(
                 HttpStatus.CONFLICT,
                 "PAYMENT_AMOUNT_MISMATCH",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(InvalidSettlementStateException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidSettlementState(
+            InvalidSettlementStateException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.CONFLICT,
+                "SETTLEMENT_BATCH_INVALID_STATE",
                 exception.getMessage(),
                 request
         );

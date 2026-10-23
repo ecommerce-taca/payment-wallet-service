@@ -1,16 +1,18 @@
 package com.taca.paymentwallet.presentation.rest.admin;
 
 import com.taca.paymentwallet.application.exception.ForbiddenException;
+import com.taca.paymentwallet.application.exception.MfaRequiredException;
 import com.taca.paymentwallet.application.exception.SettlementBatchNotFoundException;
 import com.taca.paymentwallet.application.exception.UnauthenticatedException;
 import com.taca.paymentwallet.application.port.in.GetAdminSettlementDetailUseCase;
 import com.taca.paymentwallet.application.port.in.GetAdminSettlementsUseCase;
+import com.taca.paymentwallet.application.port.in.RetryAdminSettlementUseCase;
 import com.taca.paymentwallet.application.query.GetAdminSettlementDetailQuery;
-import com.taca.paymentwallet.application.result.GetAdminSettlementBatchItemResult;
-import com.taca.paymentwallet.application.result.GetAdminSettlementBatchResult;
-import com.taca.paymentwallet.application.result.GetAdminSettlementDetailResult;
-import com.taca.paymentwallet.application.result.GetAdminSettlementLineResult;
+import com.taca.paymentwallet.application.result.*;
+import com.taca.paymentwallet.application.security.ActorContext;
 import com.taca.paymentwallet.application.security.FinanceOpsPolicy;
+import com.taca.paymentwallet.application.security.SecurityRoles;
+import com.taca.paymentwallet.domain.settlement.InvalidSettlementStateException;
 import com.taca.paymentwallet.presentation.rest.GlobalRestExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,10 +21,12 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class AdminSettlementControllerTest {
@@ -31,19 +35,21 @@ class AdminSettlementControllerTest {
     private FinanceOpsPolicy financeOpsPolicy;
     private MockMvc mockMvc;
     private GetAdminSettlementDetailUseCase getAdminSettlementDetailUseCase;
+    private RetryAdminSettlementUseCase retryAdminSettlementUseCase;
 
     @BeforeEach
     void setUp() {
         getAdminSettlementsUseCase = mock(GetAdminSettlementsUseCase.class);
         financeOpsPolicy = mock(FinanceOpsPolicy.class);
         getAdminSettlementDetailUseCase = mock(GetAdminSettlementDetailUseCase.class);
+        retryAdminSettlementUseCase = mock(RetryAdminSettlementUseCase.class);
 
-        AdminSettlementController controller =
-                new AdminSettlementController(
-                        getAdminSettlementsUseCase,
-                        getAdminSettlementDetailUseCase,
-                        financeOpsPolicy
-                );
+        AdminSettlementController controller = new AdminSettlementController(
+                getAdminSettlementsUseCase,
+                getAdminSettlementDetailUseCase,
+                retryAdminSettlementUseCase,
+                financeOpsPolicy
+        );
 
         mockMvc = MockMvcBuilders
                 .standaloneSetup(controller)
@@ -338,5 +344,165 @@ class AdminSettlementControllerTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(getAdminSettlementDetailUseCase);
+    }
+
+    @Test
+    void shouldRetryFailedSettlementBatch() throws Exception {
+        UUID batchId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+
+        when(financeOpsPolicy.requireFinanceOpsWithStepUp()).thenReturn(
+                new ActorContext(actorId, Set.of(SecurityRoles.FINANCE_OPS), Set.of(), Set.of())
+        );
+
+        when(retryAdminSettlementUseCase.execute(any())).thenReturn(
+                new RetryAdminSettlementResult(batchId, "COMPLETED", 2)
+        );
+
+        mockMvc.perform(
+                        post("/api/v1/admin/settlements/{batchId}/retry", batchId)
+                                .header("X-Request-ID", "req-settlement-retry-001")
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.batch_id").value(batchId.toString()))
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.retried_item_count").value(2))
+                .andExpect(jsonPath("$.meta.request_id").value("req-settlement-retry-001"));
+
+        verify(financeOpsPolicy).requireFinanceOpsWithStepUp();
+        verify(retryAdminSettlementUseCase).execute(any());
+    }
+
+    @Test
+    void shouldRequireStepUpForSettlementRetry() throws Exception {
+        UUID batchId = UUID.randomUUID();
+
+        doThrow(new MfaRequiredException())
+                .when(financeOpsPolicy)
+                .requireFinanceOpsWithStepUp();
+
+        mockMvc.perform(
+                        post("/api/v1/admin/settlements/{batchId}/retry", batchId)
+                                .header("X-Request-ID", "req-settlement-retry-mfa")
+                )
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.error.code").value("AUTH_MFA_REQUIRED"));
+
+        verifyNoInteractions(retryAdminSettlementUseCase);
+    }
+    @Test
+    void shouldRejectNonFinanceOpsSettlementRetry() throws Exception {
+        UUID batchId = UUID.randomUUID();
+
+        doThrow(new ForbiddenException())
+                .when(financeOpsPolicy)
+                .requireFinanceOpsWithStepUp();
+
+        mockMvc.perform(
+                        post("/api/v1/admin/settlements/{batchId}/retry", batchId)
+                                .header("X-Request-ID", "req-settlement-retry-forbidden")
+                )
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.error.code").value("PAYMENT_FORBIDDEN"));
+
+        verifyNoInteractions(retryAdminSettlementUseCase);
+    }
+
+    @Test
+    void shouldRejectMalformedRetryBatchId() throws Exception {
+        UUID actorId = UUID.randomUUID();
+
+        when(financeOpsPolicy.requireFinanceOpsWithStepUp()).thenReturn(
+                new ActorContext(actorId, Set.of(SecurityRoles.FINANCE_OPS), Set.of(), Set.of())
+        );
+
+        mockMvc.perform(
+                        post("/api/v1/admin/settlements/not-a-uuid/retry")
+                                .header("X-Request-ID", "req-settlement-retry-invalid")
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_REQUEST"));
+
+        verifyNoInteractions(retryAdminSettlementUseCase);
+    }
+
+    @Test
+    void shouldReturnNotFoundWhenRetryBatchDoesNotExist() throws Exception {
+        UUID batchId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+
+        when(financeOpsPolicy.requireFinanceOpsWithStepUp()).thenReturn(
+                new ActorContext(actorId, Set.of(SecurityRoles.FINANCE_OPS), Set.of(), Set.of())
+        );
+
+        when(retryAdminSettlementUseCase.execute(any()))
+                .thenThrow(new SettlementBatchNotFoundException(batchId));
+
+        mockMvc.perform(
+                        post("/api/v1/admin/settlements/{batchId}/retry", batchId)
+                                .header("X-Request-ID", "req-settlement-retry-not-found")
+                )
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error.code").value("SETTLEMENT_BATCH_NOT_FOUND"));
+    }
+
+    @Test
+    void shouldReturnConflictWhenSettlementCannotBeRetried() throws Exception {
+        UUID batchId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+
+        when(financeOpsPolicy.requireFinanceOpsWithStepUp()).thenReturn(
+                new ActorContext(actorId, Set.of(SecurityRoles.FINANCE_OPS), Set.of(), Set.of())
+        );
+
+        when(retryAdminSettlementUseCase.execute(any()))
+                .thenThrow(new InvalidSettlementStateException(
+                        "Only failed settlement batch can be retried"
+                ));
+
+        mockMvc.perform(
+                        post("/api/v1/admin/settlements/{batchId}/retry", batchId)
+                                .header("X-Request-ID", "req-settlement-retry-state")
+                )
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.error.code")
+                        .value("SETTLEMENT_BATCH_INVALID_STATE"));
+    }
+
+    @Test
+    void shouldRequireRequestIdForSettlementRetry() throws Exception {
+        mockMvc.perform(
+                        post("/api/v1/admin/settlements/{batchId}/retry", UUID.randomUUID())
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("MISSING_REQUIRED_HEADER"));
+
+        verifyNoInteractions(financeOpsPolicy);
+        verifyNoInteractions(retryAdminSettlementUseCase);
+    }
+
+    @Test
+    void shouldAuthorizeBeforeRetryingSettlement() throws Exception {
+        UUID batchId = UUID.randomUUID();
+        UUID actorId = UUID.randomUUID();
+
+        when(financeOpsPolicy.requireFinanceOpsWithStepUp()).thenReturn(
+                new ActorContext(actorId, Set.of(SecurityRoles.FINANCE_OPS), Set.of(), Set.of())
+        );
+
+        when(retryAdminSettlementUseCase.execute(any())).thenReturn(
+                new RetryAdminSettlementResult(batchId, "COMPLETED", 1)
+        );
+
+        mockMvc.perform(
+                        post("/api/v1/admin/settlements/{batchId}/retry", batchId)
+                                .header("X-Request-ID", "req-settlement-retry-order")
+                )
+                .andExpect(status().isOk());
+
+        var inOrder = inOrder(financeOpsPolicy, retryAdminSettlementUseCase);
+
+        inOrder.verify(financeOpsPolicy).requireFinanceOpsWithStepUp();
+        inOrder.verify(retryAdminSettlementUseCase).execute(any());
     }
 }
