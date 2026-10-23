@@ -404,4 +404,11 @@ public class ApplicationConfiguration {
     ) {
         return new GetAdminPaymentReconciliationService(readPort);
     }
+
+    @Bean
+    GetAdminFinanceSummaryUseCase getAdminFinanceSummaryUseCase(
+            AdminFinanceSummaryReadPort readPort
+    ) {
+        return new GetAdminFinanceSummaryService(readPort);
+    }
 }
