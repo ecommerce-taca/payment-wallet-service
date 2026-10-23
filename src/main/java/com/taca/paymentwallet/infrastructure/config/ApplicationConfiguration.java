@@ -361,6 +361,33 @@ public class ApplicationConfiguration {
     }
 
     @Bean
+    RetryAdminSettlementUseCase retryAdminSettlementUseCase(
+            SettlementRepositoryPort settlementRepository,
+            WalletRepositoryPort walletRepository,
+            LedgerPostingRepositoryPort ledgerPostingRepository,
+            LedgerAccountLookupPort ledgerAccountLookupPort,
+            OutboxPort outboxPort,
+            AdminAuditPort auditPort,
+            TransactionPort transactionPort,
+            IdGeneratorPort idGeneratorPort,
+            LedgerPostingFactory ledgerPostingFactory,
+            ClockPort clockPort
+    ) {
+        return new RetryAdminSettlementService(
+                settlementRepository,
+                walletRepository,
+                ledgerPostingRepository,
+                ledgerAccountLookupPort,
+                outboxPort,
+                auditPort,
+                transactionPort,
+                idGeneratorPort,
+                ledgerPostingFactory,
+                clockPort
+        );
+    }
+
+    @Bean
     GetAdminTaxConfigsUseCase getAdminTaxConfigsUseCase(
             AdminTaxConfigReadPort adminTaxConfigReadPort
     ) {

@@ -60,13 +60,11 @@ class AdminFinanceContractAuditTest {
     }
 
     @Test
-    void shouldKeepSettlementRetryEndpointUnexposedUntilRetryApplicationIsReady() {
-        assertThat(
-                hasPostMapping(
-                        AdminSettlementController.class,
-                        "/settlements/{batchId}/retry"
-                )
-        ).isFalse();
+    void shouldExposeAuthoritativeSettlementRetryEndpoint() {
+        assertThat(hasPostMapping(
+                AdminSettlementController.class,
+                "/settlements/{batchId}/retry"
+        )).isTrue();
     }
 
     @Test

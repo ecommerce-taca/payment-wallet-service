@@ -66,7 +66,7 @@ Admin Finance APIs thuộc Phase 8.
 | 14 | `PUT /admin/taxes` | `FINANCE_OPS` + step-up | Tạo tax version mới | Implemented |
 | 15 | `GET /admin/settlements` | `FINANCE_OPS` | Danh sách settlement batch | Implemented |
 | 16 | `GET /admin/settlements/{batchId}` | `FINANCE_OPS` | Chi tiết settlement batch | Implemented |
-| 17 | `POST /admin/settlements/{batchId}/retry` | `FINANCE_OPS` + step-up | Retry batch `FAILED` | Blocked — ADR-003 |
+| 17 | `POST /admin/settlements/{batchId}/retry` | `FINANCE_OPS` + step-up | Retry batch `FAILED` | Implemented |
 | 18 | `GET /admin/finance/summary` | `FINANCE_OPS` | Tổng hợp tài chính sàn | Implemented |
 | 18a | `GET /admin/finance/summary/export` | `FINANCE_OPS` | Xuất báo cáo tài chính | Not implemented — export contract incomplete |
 | 19 | `GET /health/live` | Ops | Liveness | Implemented |
@@ -756,6 +756,45 @@ Request:
   "rate_bps": 100,
   "effective_from": "2026-11-01T00:00:00Z",
   "note": "Platform tax November 2026"
+}
+```
+
+### `POST /admin/settlements/{batchId}/retry`
+
+Retries an existing `FAILED` settlement batch.
+
+Headers:
+
+- `X-Request-ID`
+
+Authorization:
+
+- `FINANCE_OPS`
+- MFA step-up required.
+
+The endpoint has no request body.
+
+Rules:
+
+- only `FAILED` batches may be retried;
+- the existing batch, items and settlement lines are reused;
+- completed items are never processed again;
+- no new settlement candidates are queried;
+- no new settlement batch is created;
+- retry is transactional.
+
+Response `200 OK`:
+
+```json
+{
+  "data": {
+    "batch_id": "019...",
+    "status": "COMPLETED",
+    "retried_item_count": 2
+  },
+  "meta": {
+    "request_id": "req-settlement-retry-001"
+  }
 }
 ```
 

@@ -1,12 +1,12 @@
 package com.taca.paymentwallet.presentation.rest.admin;
 
+import com.taca.paymentwallet.application.command.RetryAdminSettlementCommand;
 import com.taca.paymentwallet.application.port.in.GetAdminSettlementDetailUseCase;
 import com.taca.paymentwallet.application.port.in.GetAdminSettlementsUseCase;
+import com.taca.paymentwallet.application.port.in.RetryAdminSettlementUseCase;
 import com.taca.paymentwallet.application.query.GetAdminSettlementDetailQuery;
-import com.taca.paymentwallet.application.result.GetAdminSettlementBatchItemResult;
-import com.taca.paymentwallet.application.result.GetAdminSettlementBatchResult;
-import com.taca.paymentwallet.application.result.GetAdminSettlementDetailResult;
-import com.taca.paymentwallet.application.result.GetAdminSettlementLineResult;
+import com.taca.paymentwallet.application.result.*;
+import com.taca.paymentwallet.application.security.ActorContext;
 import com.taca.paymentwallet.application.security.FinanceOpsPolicy;
 import com.taca.paymentwallet.presentation.rest.ApiMeta;
 import com.taca.paymentwallet.presentation.rest.ApiResponse;
@@ -24,14 +24,17 @@ public class AdminSettlementController {
     private final GetAdminSettlementsUseCase getAdminSettlementsUseCase;
     private final FinanceOpsPolicy financeOpsPolicy;
     private final GetAdminSettlementDetailUseCase getAdminSettlementDetailUseCase;
+    private final RetryAdminSettlementUseCase retryAdminSettlementUseCase;
 
     public AdminSettlementController(
             GetAdminSettlementsUseCase getAdminSettlementsUseCase,
             GetAdminSettlementDetailUseCase getAdminSettlementDetailUseCase,
+            RetryAdminSettlementUseCase retryAdminSettlementUseCase,
             FinanceOpsPolicy financeOpsPolicy
     ) {
         this.getAdminSettlementsUseCase = Objects.requireNonNull(getAdminSettlementsUseCase);
         this.getAdminSettlementDetailUseCase = Objects.requireNonNull(getAdminSettlementDetailUseCase);
+        this.retryAdminSettlementUseCase = Objects.requireNonNull(retryAdminSettlementUseCase);
         this.financeOpsPolicy = Objects.requireNonNull(financeOpsPolicy);
     }
 
@@ -68,6 +71,29 @@ public class AdminSettlementController {
         return ResponseEntity.ok(
                 new ApiResponse<>(
                         toDetailData(result),
+                        new ApiMeta(requestId)
+                )
+        );
+    }
+
+    @PostMapping("/settlements/{batchId}/retry")
+    public ResponseEntity<ApiResponse<RetryAdminSettlementData>> retrySettlement(
+            @PathVariable String batchId,
+            @RequestHeader("X-Request-ID") String requestId
+    ) {
+        ActorContext actor = financeOpsPolicy.requireFinanceOpsWithStepUp();
+
+        RetryAdminSettlementResult result = retryAdminSettlementUseCase.execute(
+                new RetryAdminSettlementCommand(parseBatchId(batchId), actor.userId())
+        );
+
+        return ResponseEntity.ok(
+                new ApiResponse<>(
+                        new RetryAdminSettlementData(
+                                result.batchId(),
+                                result.status(),
+                                result.retriedItemCount()
+                        ),
                         new ApiMeta(requestId)
                 )
         );
