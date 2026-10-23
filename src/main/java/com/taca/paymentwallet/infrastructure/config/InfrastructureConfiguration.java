@@ -730,4 +730,15 @@ public class InfrastructureConfiguration {
                 clockPort
         );
     }
+
+    @Bean
+    AdminFinanceSummaryReadPort adminFinanceSummaryReadPort(
+            AdminFinanceSummaryJpaRepository repository,
+            ClockPort clockPort
+    ) {
+        return new AdminFinanceSummaryReadAdapter(
+                repository,
+                clockPort
+        );
+    }
 }
