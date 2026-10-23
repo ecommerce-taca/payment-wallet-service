@@ -61,9 +61,9 @@ Admin Finance APIs thuộc Phase 8.
 | 9 | `GET /seller/payouts` | Seller | Xem payout history | Not implemented |
 | 10 | `GET /admin/payments/reconciliation` | `FINANCE_OPS` | Reconcile provider/payment/ledger | Implemented |
 | 11 | `GET /admin/fees` | `FINANCE_OPS` | Danh sách version commission | Implemented |
-| 12 | `PUT /admin/fees` | `FINANCE_OPS` + step-up | Tạo commission version mới | Foundation only — HTTP contract not exposed |
+| 12 | `PUT /admin/fees` | `FINANCE_OPS` + step-up | Tạo commission version mới | Implemented |
 | 13 | `GET /admin/taxes` | `FINANCE_OPS` | Danh sách version thuế | Implemented |
-| 14 | `PUT /admin/taxes` | `FINANCE_OPS` + step-up | Tạo tax version mới | Foundation only — HTTP contract not exposed |
+| 14 | `PUT /admin/taxes` | `FINANCE_OPS` + step-up | Tạo tax version mới | Implemented |
 | 15 | `GET /admin/settlements` | `FINANCE_OPS` | Danh sách settlement batch | Implemented |
 | 16 | `GET /admin/settlements/{batchId}` | `FINANCE_OPS` | Chi tiết settlement batch | Implemented |
 | 17 | `POST /admin/settlements/{batchId}/retry` | `FINANCE_OPS` + step-up | Retry batch `FAILED` | Blocked — ADR-003 |
@@ -731,6 +731,31 @@ Response runtime:
   "meta": {
     "request_id": "req-finance-summary-001"
   }
+}
+```
+
+### `PUT /admin/taxes`
+
+Tạo một tax configuration version mới.
+
+Headers bắt buộc:
+
+- `X-Request-ID`
+
+Authorization:
+
+- `FINANCE_OPS`;
+- MFA step-up bắt buộc.
+
+Request:
+
+```json
+{
+  "scope": "PLATFORM",
+  "category_id": null,
+  "rate_bps": 100,
+  "effective_from": "2026-11-01T00:00:00Z",
+  "note": "Platform tax November 2026"
 }
 ```
 
