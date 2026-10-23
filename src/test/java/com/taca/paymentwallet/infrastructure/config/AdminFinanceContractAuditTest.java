@@ -70,13 +70,13 @@ class AdminFinanceContractAuditTest {
     }
 
     @Test
-    void shouldKeepFeeMutationEndpointUnexposedUntilHttpContractIsAuthoritative() {
+    void shouldExposeAuthoritativeFeeMutationEndpoint() {
         assertThat(
                 hasPutMapping(
                         AdminFeeController.class,
                         "/fees"
                 )
-        ).isFalse();
+        ).isTrue();
     }
 
     @Test
