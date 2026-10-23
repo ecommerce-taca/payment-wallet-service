@@ -6,6 +6,7 @@ import com.taca.paymentwallet.domain.settlement.SettlementBatch;
 import com.taca.paymentwallet.domain.settlement.SettlementBatchItem;
 import com.taca.paymentwallet.domain.settlement.SettlementBatchStatus;
 import com.taca.paymentwallet.domain.settlement.SettlementLine;
+import com.taca.paymentwallet.domain.valueobject.SettlementBatchId;
 import com.taca.paymentwallet.infrastructure.persistence.entity.SettlementBatchItemJpaEntity;
 import com.taca.paymentwallet.infrastructure.persistence.entity.SettlementBatchJpaEntity;
 import com.taca.paymentwallet.infrastructure.persistence.entity.SettlementLineJpaEntity;
@@ -16,8 +17,8 @@ import com.taca.paymentwallet.infrastructure.persistence.repository.SettlementBa
 import com.taca.paymentwallet.infrastructure.persistence.repository.SettlementLineJpaRepository;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class SettlementRepositoryAdapter
         implements SettlementRepositoryPort {
@@ -113,6 +114,142 @@ public class SettlementRepositoryAdapter
         lineRepository.saveAll(lineEntities);
 
         return settlementBatch;
+    }
+
+    @Override
+    public Optional<SettlementBatch> findByIdForUpdate(
+            SettlementBatchId settlementBatchId
+    ) {
+        Objects.requireNonNull(
+                settlementBatchId,
+                "settlementBatchId must not be null"
+        );
+
+        return batchRepository
+                .findByIdForUpdate(
+                        settlementBatchId.value()
+                )
+                .map(this::loadHierarchy);
+    }
+
+    @Override
+    public SettlementBatch update(
+            SettlementBatch settlementBatch
+    ) {
+        Objects.requireNonNull(
+                settlementBatch,
+                "settlementBatch must not be null"
+        );
+
+        SettlementBatchJpaEntity batchEntity =
+                batchRepository
+                        .findById(
+                                settlementBatch.id().value()
+                        )
+                        .orElseThrow();
+
+        batchEntity.setStatus(
+                settlementBatch.status().name()
+        );
+
+        batchEntity.setClosedAt(
+                resolveClosedAtForUpdate(
+                        settlementBatch
+                )
+        );
+
+        if (settlementBatch.status()
+                == SettlementBatchStatus.PROCESSING) {
+            batchEntity.setLastError(null);
+        }
+
+        List<SettlementBatchItemJpaEntity> itemEntities =
+                itemRepository
+                        .findByBatchId(
+                                settlementBatch.id().value()
+                        );
+
+        Map<UUID, SettlementBatchItem> itemsById =
+                settlementBatch.items()
+                        .stream()
+                        .collect(
+                                Collectors.toMap(
+                                        item -> item.id().value(),
+                                        item -> item
+                                )
+                        );
+
+        for (SettlementBatchItemJpaEntity entity : itemEntities) {
+
+            SettlementBatchItem item = itemsById.get(entity.getId());
+
+            if (item == null) {
+                throw new IllegalStateException(
+                        "Settlement batch item not found in aggregate: "
+                                + entity.getId()
+                );
+            }
+
+            entity.setStatus(item.status().name());
+
+            entity.setPostingId(
+                    item.postingId() == null
+                            ? null
+                            : item.postingId().value()
+            );
+        }
+
+        batchRepository.save(batchEntity);
+
+        itemRepository.saveAll(itemEntities);
+
+        return settlementBatch;
+    }
+
+    private LocalDateTime resolveClosedAtForUpdate(
+            SettlementBatch batch
+    ) {
+        if (batch.status()
+                == SettlementBatchStatus.COMPLETED
+                || batch.status()
+                == SettlementBatchStatus.FAILED) {
+
+            return PersistenceTimeMapper
+                    .toLocalDateTime(
+                            clockPort.now()
+                    );
+        }
+
+        return null;
+    }
+
+    private SettlementBatch loadHierarchy(
+            SettlementBatchJpaEntity batchEntity
+    ) {
+        List<SettlementBatchItemJpaEntity> itemEntities =
+                itemRepository
+                        .findByBatchIdOrderByCreatedAtAsc(
+                                batchEntity.getId()
+                        );
+
+        Map<UUID, List<SettlementLineJpaEntity>>
+                linesByItemId =
+                itemEntities.stream()
+                        .collect(
+                                Collectors.toMap(
+                                        SettlementBatchItemJpaEntity::getId,
+                                        item -> lineRepository
+                                                .findBySettlementBatchItemIdOrderByCreatedAtAsc(
+                                                        item.getId()
+                                                )
+                                )
+                        );
+
+        return mapper.toDomain(
+                batchEntity,
+                itemEntities,
+                linesByItemId
+        );
     }
 
     private void ensureAllocationsAreNotAlreadySettled(
