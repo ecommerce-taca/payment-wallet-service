@@ -1,10 +1,15 @@
 package com.taca.paymentwallet.infrastructure.config;
 
 import com.taca.paymentwallet.application.port.in.RunSettlementUseCase;
+import com.taca.paymentwallet.presentation.rest.admin.AdminFeeController;
+import com.taca.paymentwallet.presentation.rest.admin.AdminFinanceSummaryController;
 import com.taca.paymentwallet.presentation.rest.admin.AdminSettlementController;
+import com.taca.paymentwallet.presentation.rest.admin.AdminTaxController;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Bean;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -27,18 +32,122 @@ class AdminFinanceContractAuditTest {
     }
 
     @Test
+    void shouldExposeAuthoritativeAdminFinanceReadEndpoints() {
+        assertThat(hasGetMapping(
+                AdminFeeController.class,
+                "/fees"
+        )).isTrue();
+
+        assertThat(hasGetMapping(
+                AdminTaxController.class,
+                "/taxes"
+        )).isTrue();
+
+        assertThat(hasGetMapping(
+                AdminSettlementController.class,
+                "/settlements"
+        )).isTrue();
+
+        assertThat(hasGetMapping(
+                AdminSettlementController.class,
+                "/settlements/{batchId}"
+        )).isTrue();
+
+        assertThat(hasGetMapping(
+                AdminFinanceSummaryController.class,
+                "/summary"
+        )).isTrue();
+    }
+
+    @Test
     void shouldKeepSettlementRetryEndpointUnexposedWhileRetryContractIsOpen() {
-        boolean retryEndpointExists = Arrays.stream(
-                        AdminSettlementController.class.getDeclaredMethods()
+        assertThat(
+                hasPostMapping(
+                        AdminSettlementController.class,
+                        "/settlements/{batchId}/retry"
                 )
+        ).isFalse();
+    }
+
+    @Test
+    void shouldKeepFeeMutationEndpointUnexposedUntilHttpContractIsAuthoritative() {
+        assertThat(
+                hasPutMapping(
+                        AdminFeeController.class,
+                        "/fees"
+                )
+        ).isFalse();
+    }
+
+    @Test
+    void shouldKeepTaxMutationEndpointUnexposedUntilHttpContractIsAuthoritative() {
+        assertThat(
+                hasPutMapping(
+                        AdminTaxController.class,
+                        "/taxes"
+                )
+        ).isFalse();
+    }
+
+    @Test
+    void shouldKeepFinanceSummaryExportUnexposedUntilExportContractIsAuthoritative() {
+        assertThat(
+                hasGetMapping(
+                        AdminFinanceSummaryController.class,
+                        "/summary/export"
+                )
+        ).isFalse();
+    }
+
+    private boolean hasGetMapping(
+            Class<?> controller,
+            String path
+    ) {
+        return Arrays.stream(controller.getDeclaredMethods())
+                .map(method -> method.getAnnotation(GetMapping.class))
+                .filter(annotation -> annotation != null)
+                .flatMap(annotation -> mappings(
+                        annotation.value(),
+                        annotation.path()
+                ))
+                .anyMatch(path::equals);
+    }
+
+    private boolean hasPostMapping(
+            Class<?> controller,
+            String path
+    ) {
+        return Arrays.stream(controller.getDeclaredMethods())
                 .map(method -> method.getAnnotation(PostMapping.class))
                 .filter(annotation -> annotation != null)
-                .flatMap(annotation -> Stream.concat(
-                        Arrays.stream(annotation.value()),
-                        Arrays.stream(annotation.path())
+                .flatMap(annotation -> mappings(
+                        annotation.value(),
+                        annotation.path()
                 ))
-                .anyMatch("/settlements/{batchId}/retry"::equals);
+                .anyMatch(path::equals);
+    }
 
-        assertThat(retryEndpointExists).isFalse();
+    private boolean hasPutMapping(
+            Class<?> controller,
+            String path
+    ) {
+        return Arrays.stream(controller.getDeclaredMethods())
+                .map(method -> method.getAnnotation(PutMapping.class))
+                .filter(annotation -> annotation != null)
+                .flatMap(annotation -> mappings(
+                        annotation.value(),
+                        annotation.path()
+                ))
+                .anyMatch(path::equals);
+    }
+
+    private Stream<String> mappings(
+            String[] value,
+            String[] path
+    ) {
+        return Stream.concat(
+                Arrays.stream(value),
+                Arrays.stream(path)
+        );
     }
 }

@@ -59,16 +59,16 @@ Admin Finance APIs thuộc Phase 8.
 | 7a | `GET /seller/revenue/export` | Seller | Xuất báo cáo doanh thu | Not implemented |
 | 8 | `POST /seller/payouts` | Seller + step-up | Yêu cầu rút tiền | Blocked — ADR-003 |
 | 9 | `GET /seller/payouts` | Seller | Xem payout history | Not implemented |
-| 10 | `GET /admin/payments/reconciliation` | `FINANCE_OPS` | Reconcile provider/payment/ledger | Phase 8 |
-| 11 | `GET /admin/fees` | `FINANCE_OPS` | Danh sách version commission | Phase 8 |
-| 12 | `PUT /admin/fees` | `FINANCE_OPS` + step-up | Tạo commission version mới | Phase 8 |
-| 13 | `GET /admin/taxes` | `FINANCE_OPS` | Danh sách version thuế | Phase 8 |
-| 14 | `PUT /admin/taxes` | `FINANCE_OPS` + step-up | Tạo tax version mới | Phase 8 |
-| 15 | `GET /admin/settlements` | `FINANCE_OPS` | Danh sách settlement batch | Phase 8 |
-| 16 | `GET /admin/settlements/{batchId}` | `FINANCE_OPS` | Chi tiết settlement batch | Phase 8 |
+| 10 | `GET /admin/payments/reconciliation` | `FINANCE_OPS` | Reconcile provider/payment/ledger | Implemented |
+| 11 | `GET /admin/fees` | `FINANCE_OPS` | Danh sách version commission | Implemented |
+| 12 | `PUT /admin/fees` | `FINANCE_OPS` + step-up | Tạo commission version mới | Foundation only — HTTP contract not exposed |
+| 13 | `GET /admin/taxes` | `FINANCE_OPS` | Danh sách version thuế | Implemented |
+| 14 | `PUT /admin/taxes` | `FINANCE_OPS` + step-up | Tạo tax version mới | Foundation only — HTTP contract not exposed |
+| 15 | `GET /admin/settlements` | `FINANCE_OPS` | Danh sách settlement batch | Implemented |
+| 16 | `GET /admin/settlements/{batchId}` | `FINANCE_OPS` | Chi tiết settlement batch | Implemented |
 | 17 | `POST /admin/settlements/{batchId}/retry` | `FINANCE_OPS` + step-up | Retry batch `FAILED` | Blocked — ADR-003 |
 | 18 | `GET /admin/finance/summary` | `FINANCE_OPS` | Tổng hợp tài chính sàn | Implemented |
-| 18a | `GET /admin/finance/summary/export` | `FINANCE_OPS` | Xuất báo cáo tài chính | Phase 8 |
+| 18a | `GET /admin/finance/summary/export` | `FINANCE_OPS` | Xuất báo cáo tài chính | Not implemented — export contract incomplete |
 | 19 | `GET /health/live` | Ops | Liveness | Implemented |
 | 20 | `GET /health/ready` | Ops | Readiness | Implemented |
 
@@ -789,8 +789,9 @@ Các code ở mục này không đồng nghĩa endpoint tương ứng đã đư�
 | 8 | Bank account source | Ownership/source của `bank_account_id` chưa được chốt theo ADR-003. |
 | 9 | Payout notification recipient | `owner_user_id` và `owner_email` chưa có authoritative source theo ADR-003. |
 | 10 | Seller payout history | Target endpoint có trong API inventory nhưng runtime chưa implement. |
-| 11 | Settlement trigger/eligibility/retry | Hold window, eligible timestamp, upstream trigger và authoritative semantics để retry một `FAILED` batch vẫn OPEN; không production-wire `RunSettlementUseCase` hoặc expose settlement retry endpoint bằng dữ liệu chưa authoritative. |
-| 12 | Commission/tax business policy | Rate/version/rounding tiếp tục phải tuân theo accepted finance configuration contract ở các phase sau. |
+| 11 | Settlement trigger/eligibility/retry | Hold window, eligible timestamp, upstream trigger và retry semantics vẫn OPEN theo ADR-003; không production-wire `RunSettlementUseCase` hoặc expose retry endpoint. |
+| 12 | Admin fee/tax mutation HTTP contract | Application/persistence mutation foundation đã có, nhưng request/response contract cho `PUT /admin/fees` và `PUT /admin/taxes` chưa authoritative; HTTP endpoint chưa expose. |
+| 13 | Admin finance summary export | Target endpoint tồn tại và `EXPORT_URL_TTL = 30 phút`, nhưng file format/storage/signed-URL/filter contract chưa authoritative; endpoint chưa expose. |
 
 ## 6. Phase 6 closeout
 
@@ -847,3 +848,46 @@ Các target endpoint chưa runtime implement/expose:
 - `GET /seller/payouts`.
 
 Phase 7 vì vậy được close cho phần seller wallet/ledger/revenue và payout safety gate. Những target contract chưa hoàn thiện tiếp tục được carry forward rõ ràng thay vì được giả lập để đạt trạng thái DONE.
+
+## Phase 8 closeout — Admin Finance
+
+Phase 8 establishes the Admin Finance runtime foundation and exposes all
+read-only admin finance APIs whose contracts are currently authoritative.
+
+Implemented runtime endpoints:
+
+- `GET /admin/payments/reconciliation`
+- `GET /admin/fees`
+- `GET /admin/taxes`
+- `GET /admin/settlements`
+- `GET /admin/settlements/{batchId}`
+- `GET /admin/finance/summary`
+
+Implemented application/persistence foundations but not exposed over HTTP:
+
+- fee configuration mutation;
+- tax configuration mutation.
+
+These mutation foundations remain append-only and effective-dated. The public
+`PUT /admin/fees` and `PUT /admin/taxes` endpoints must not be exposed until
+their authoritative HTTP request/response contracts are finalized.
+
+Blocked by ADR-003:
+
+- production settlement execution;
+- `POST /admin/settlements/{batchId}/retry`.
+
+The settlement eligibility and retry semantics remain OPEN and must not be
+derived from the absence of a payment allocation in `settlement_lines`.
+
+Not implemented because the export contract is incomplete:
+
+- `GET /admin/finance/summary/export`.
+
+The current documentation defines `EXPORT_URL_TTL = 30 minutes`, but does not
+authoritatively define the export file format, storage/signing contract,
+columns or request/filter contract.
+
+Phase 8 therefore closes with the supported runtime surface above while
+retaining unresolved contracts as explicit debt rather than fabricating
+production behavior.
