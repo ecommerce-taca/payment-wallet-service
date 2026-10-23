@@ -1,9 +1,14 @@
 package com.taca.paymentwallet.application.port.out;
 
+import com.taca.paymentwallet.infrastructure.config.InfrastructureConfiguration;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.annotation.Bean;
 
+import java.lang.reflect.Method;
 import java.time.Instant;
+import java.util.Arrays;
 
+import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AdminFinanceSummaryViewTest {
@@ -65,5 +70,17 @@ class AdminFinanceSummaryViewTest {
                         null
                 )
         );
+    }
+
+    @Test
+    void shouldKeepFinanceSummaryExportStorageUnwiredUntilAdapterIsReady() {
+        boolean beanExists = Arrays.stream(
+                        InfrastructureConfiguration.class.getDeclaredMethods()
+                )
+                .filter(method -> method.isAnnotationPresent(Bean.class))
+                .map(Method::getReturnType)
+                .anyMatch(AdminFinanceSummaryExportStoragePort.class::isAssignableFrom);
+
+        assertThat(beanExists).isFalse();
     }
 }
