@@ -3,6 +3,7 @@ package com.taca.paymentwallet.integration;
 import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.AdminFinanceSummaryExportDownloadPort;
 import com.taca.paymentwallet.application.port.out.AdminFinanceSummaryExportStoragePort;
+import com.taca.paymentwallet.application.port.out.OperationMetricsPort;
 import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
 import com.taca.paymentwallet.application.security.*;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
@@ -166,6 +167,9 @@ class ProductionContextSmokeTest {
     @Autowired
     private AdminFinanceSummaryExportDownloadPort adminFinanceSummaryExportDownloadPort;
 
+    @Autowired
+    private OperationMetricsPort operationMetricsPort;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -225,5 +229,7 @@ class ProductionContextSmokeTest {
         assertThat(adminFinanceSummaryExportStoragePort).isNotNull();
 
         assertThat(adminFinanceSummaryExportDownloadPort).isNotNull();
+
+        assertThat(operationMetricsPort).isNotNull();
     }
 }

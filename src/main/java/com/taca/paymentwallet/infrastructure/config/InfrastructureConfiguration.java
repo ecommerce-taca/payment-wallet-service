@@ -13,6 +13,7 @@ import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicato
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
+import com.taca.paymentwallet.infrastructure.observability.MicrometerOperationMetricsAdapter;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.audit.AuditLogPersistenceSupport;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
@@ -748,5 +749,14 @@ public class InfrastructureConfiguration {
             ClockPort clockPort
     ) {
         return new TemporaryAdminFinanceSummaryExportStorageAdapter(clockPort);
+    }
+
+    @Bean
+    OperationMetricsPort operationMetricsPort(
+            MeterRegistry meterRegistry
+    ) {
+        return new MicrometerOperationMetricsAdapter(
+                meterRegistry
+        );
     }
 }
