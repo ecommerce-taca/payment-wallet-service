@@ -235,3 +235,32 @@ Payment `PENDING → SUCCESS/FAILED/EXPIRED`; `PENDING_COD → SUCCESS` (capture
 | 5 | Refund initiation do Order/Admin gọi Payment; **return/dispute workflow ngoài v1** — sẽ do service `dispute` (v1.1) điều phối, gọi cùng contract `POST /payments/{paymentId}/refunds`. Trong v1 refund chỉ khởi tạo thủ công qua `/admin/payments` hoặc Order. | Ảnh hưởng API/permission. | Product/Finance |
 | 6 | Phạm vi Admin/back-office đã chốt (2026-09-18): Fees/Taxes, Finance, Seller settlement, Settlement batches phục vụ qua `/api/v1/admin/**` **trên service này**, không tách microservice. `dispute`/`campaign` là service v1.1. | Nếu tách service admin gộp phải chuyển ownership fee/tax/settlement. | Architecture + Finance |
 | 7 | Cơ chế kích hoạt settlement batch (scheduled job theo cửa sổ hoàn tiền vs. event `order.completed` — **ghi chú: `order.completed` hiện không tồn tại**, order-commerce không phát event này; nếu chọn hướng event phải mở rộng contract order trước) và độ dài cửa sổ chưa chốt. Admin screen chỉ giám sát + `retry` batch `FAILED`. | Ảnh hưởng thời điểm `pending → available` và SLA payout. | Finance + Order owner |
+
+
+## Observability baseline
+
+The service uses Spring Boot Actuator and Micrometer as the current
+observability foundation.
+
+Health:
+
+- `/health/live` is process liveness and must remain independent of external
+  dependencies;
+- `/health/ready` evaluates DB, Kafka readiness, outbox backlog and VNPAY
+  runtime readiness;
+- health details are not publicly exposed.
+
+Custom metrics currently implemented:
+
+- `payment_wallet_outbox_publish_total`;
+- `payment_wallet_outbox_publish_latency`;
+- `payment_wallet_outbox_dlq_publish_total`.
+
+Custom metric tags must have bounded cardinality. Identifiers such as payment,
+refund, shop, user, batch and request IDs must not be metric tags.
+
+The canonical distributed trace transport is W3C `traceparent` /
+`tracestate`. `X-Request-ID` remains the business request correlation header.
+
+The service does not currently commit to Prometheus, Grafana, OpenTelemetry
+Collector, Loki or another external observability backend.
