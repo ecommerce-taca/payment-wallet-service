@@ -1,6 +1,10 @@
 package com.taca.paymentwallet.infrastructure.config;
 
+import com.taca.paymentwallet.application.port.in.DownloadAdminFinanceSummaryExportUseCase;
+import com.taca.paymentwallet.application.port.in.ExportAdminFinanceSummaryUseCase;
+import com.taca.paymentwallet.application.port.in.RetryAdminSettlementUseCase;
 import com.taca.paymentwallet.application.port.in.RunSettlementUseCase;
+import com.taca.paymentwallet.infrastructure.export.TemporaryAdminFinanceSummaryExportStorageAdapter;
 import com.taca.paymentwallet.presentation.rest.admin.AdminFeeController;
 import com.taca.paymentwallet.presentation.rest.admin.AdminFinanceSummaryController;
 import com.taca.paymentwallet.presentation.rest.admin.AdminSettlementController;
@@ -93,6 +97,54 @@ class AdminFinanceContractAuditTest {
                 AdminFinanceSummaryController.class,
                 "/summary/export"
         )).isTrue();
+    }
+
+    @Test
+    void shouldWireSettlementRetryApplication() {
+        assertThat(
+                hasBeanAssignableTo(RetryAdminSettlementUseCase.class)
+        ).isTrue();
+    }
+
+    @Test
+    void shouldWireFinanceSummaryExportApplication() {
+        assertThat(
+                hasBeanAssignableTo(ExportAdminFinanceSummaryUseCase.class)
+        ).isTrue();
+
+        assertThat(
+                hasBeanAssignableTo(DownloadAdminFinanceSummaryExportUseCase.class)
+        ).isTrue();
+    }
+
+    @Test
+    void shouldWireFinanceSummaryExportStorage() {
+        boolean beanExists = Arrays.stream(
+                        InfrastructureConfiguration.class.getDeclaredMethods()
+                )
+                .filter(method -> method.isAnnotationPresent(Bean.class))
+                .map(Method::getReturnType)
+                .anyMatch(
+                        TemporaryAdminFinanceSummaryExportStorageAdapter.class
+                                ::isAssignableFrom
+                );
+
+        assertThat(beanExists).isTrue();
+    }
+
+    @Test
+    void shouldExposeFinanceSummaryExportDownloadEndpoint() {
+        assertThat(hasGetMapping(
+                AdminFinanceSummaryController.class,
+                "/summary/exports/{token}"
+        )).isTrue();
+    }
+
+    private boolean hasBeanAssignableTo(Class<?> type) {
+        return Arrays.stream(ApplicationConfiguration.class.getDeclaredMethods())
+                .filter(method -> method.isAnnotationPresent(Bean.class))
+                .map(Method::getReturnType)
+                .anyMatch(type::isAssignableFrom);
     }
 
     private boolean hasGetMapping(
