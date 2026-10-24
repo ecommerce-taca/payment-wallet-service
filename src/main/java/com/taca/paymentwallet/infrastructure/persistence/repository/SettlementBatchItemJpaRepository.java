@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface SettlementBatchItemJpaRepository extends JpaRepository<SettlementBatchItemJpaEntity, UUID> {
 
     List<SettlementBatchItemJpaEntity> findByBatchId(UUID batchId);
+
+    List<SettlementBatchItemJpaEntity> findByBatchIdOrderByCreatedAtAsc(UUID batchId);
 }

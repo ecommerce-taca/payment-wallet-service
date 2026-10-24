@@ -1,5 +1,6 @@
 package com.taca.paymentwallet.infrastructure.config;
 
+import com.taca.paymentwallet.application.export.AdminFinanceSummaryCsvRenderer;
 import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.*;
 import com.taca.paymentwallet.application.security.*;
@@ -33,6 +34,17 @@ public class ApplicationConfiguration {
     @Bean
     MfaStepUpPolicy mfaStepUpPolicy() {
         return new MfaStepUpPolicy();
+    }
+
+    @Bean
+    FinanceOpsPolicy financeOpsPolicy(
+            AuthorizationPolicy authorizationPolicy,
+            MfaStepUpPolicy mfaStepUpPolicy
+    ) {
+        return new FinanceOpsPolicy(
+                authorizationPolicy,
+                mfaStepUpPolicy
+        );
     }
 
     @Bean
@@ -325,5 +337,125 @@ public class ApplicationConfiguration {
             SellerRevenueReadPort sellerRevenueReadPort
     ) {
         return new GetSellerRevenueService(sellerRevenueReadPort);
+    }
+
+    @Bean
+    GetAdminFeeConfigsUseCase getAdminFeeConfigsUseCase(
+            AdminFeeConfigReadPort adminFeeConfigReadPort
+    ) {
+        return new GetAdminFeeConfigsService(adminFeeConfigReadPort);
+    }
+
+    @Bean
+    CreateAdminFeeConfigUseCase createAdminFeeConfigUseCase(
+            AdminFeeConfigWritePort writePort,
+            AdminAuditPort auditPort,
+            TransactionPort transactionPort,
+            ClockPort clockPort
+    ) {
+        return new CreateAdminFeeConfigService(
+                writePort,
+                auditPort,
+                transactionPort,
+                clockPort
+        );
+    }
+
+    @Bean
+    RetryAdminSettlementUseCase retryAdminSettlementUseCase(
+            SettlementRepositoryPort settlementRepository,
+            WalletRepositoryPort walletRepository,
+            LedgerPostingRepositoryPort ledgerPostingRepository,
+            LedgerAccountLookupPort ledgerAccountLookupPort,
+            OutboxPort outboxPort,
+            AdminAuditPort auditPort,
+            TransactionPort transactionPort,
+            IdGeneratorPort idGeneratorPort,
+            LedgerPostingFactory ledgerPostingFactory,
+            ClockPort clockPort
+    ) {
+        return new RetryAdminSettlementService(
+                settlementRepository,
+                walletRepository,
+                ledgerPostingRepository,
+                ledgerAccountLookupPort,
+                outboxPort,
+                auditPort,
+                transactionPort,
+                idGeneratorPort,
+                ledgerPostingFactory,
+                clockPort
+        );
+    }
+
+    @Bean
+    GetAdminTaxConfigsUseCase getAdminTaxConfigsUseCase(
+            AdminTaxConfigReadPort adminTaxConfigReadPort
+    ) {
+        return new GetAdminTaxConfigsService(adminTaxConfigReadPort);
+    }
+
+    @Bean
+    CreateAdminTaxConfigUseCase createAdminTaxConfigUseCase(
+            AdminTaxConfigWritePort writePort,
+            AdminAuditPort auditPort,
+            TransactionPort transactionPort,
+            ClockPort clockPort
+    ) {
+        return new CreateAdminTaxConfigService(
+                writePort,
+                auditPort,
+                transactionPort,
+                clockPort
+        );
+    }
+
+    @Bean
+    GetAdminSettlementsUseCase getAdminSettlementsUseCase(
+            AdminSettlementReadPort adminSettlementReadPort
+    ) {
+        return new GetAdminSettlementsService(adminSettlementReadPort);
+    }
+
+    @Bean
+    GetAdminSettlementDetailUseCase getAdminSettlementDetailUseCase(
+            AdminSettlementReadPort adminSettlementReadPort
+    ) {
+        return new GetAdminSettlementDetailService(
+                adminSettlementReadPort
+        );
+    }
+
+    @Bean
+    GetAdminPaymentReconciliationUseCase getAdminPaymentReconciliationUseCase(
+            AdminPaymentReconciliationReadPort readPort
+    ) {
+        return new GetAdminPaymentReconciliationService(readPort);
+    }
+
+    @Bean
+    GetAdminFinanceSummaryUseCase getAdminFinanceSummaryUseCase(
+            AdminFinanceSummaryReadPort readPort
+    ) {
+        return new GetAdminFinanceSummaryService(readPort);
+    }
+
+    @Bean
+    ExportAdminFinanceSummaryUseCase exportAdminFinanceSummaryUseCase(
+            AdminFinanceSummaryReadPort readPort,
+            AdminFinanceSummaryExportStoragePort storagePort
+    ) {
+        return new ExportAdminFinanceSummaryService(
+                readPort,
+                storagePort,
+                new AdminFinanceSummaryCsvRenderer()
+        );
+    }
+
+    @Bean
+    DownloadAdminFinanceSummaryExportUseCase downloadAdminFinanceSummaryExportUseCase(
+            AdminFinanceSummaryExportDownloadPort downloadPort
+    ) {
+        return new DownloadAdminFinanceSummaryExportService(downloadPort);
     }
 }

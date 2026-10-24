@@ -92,6 +92,22 @@ public class SettlementBatch extends AggregateRoot {
         );
     }
 
+    public void prepareRetry() {
+        if (status != SettlementBatchStatus.FAILED) {
+            throw new InvalidSettlementStateException(
+                    "Only failed settlement batch can be retried"
+            );
+        }
+
+        for (SettlementBatchItem item : items) {
+            if (item.status() == SettlementBatchItemStatus.FAILED) {
+                item.prepareRetry();
+            }
+        }
+
+        status = SettlementBatchStatus.PROCESSING;
+    }
+
     private void validateState() {
         if (status == SettlementBatchStatus.COMPLETED) {
             boolean allCompleted = items.stream()

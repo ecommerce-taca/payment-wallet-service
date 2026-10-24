@@ -141,6 +141,45 @@ Until the eligibility contract is resolved:
 - no allocation may move from `SELLER_PENDING` to `SELLER_AVAILABLE`
   solely because it is absent from `settlement_lines`.
 
+### Settlement retry
+
+The admin target contract includes:
+
+`POST /api/v1/admin/settlements/{batchId}/retry`
+
+for a `FAILED` settlement batch.
+
+The retry semantics are now defined as follows:
+
+- retry operates on the existing persisted settlement batch;
+- retry keeps the same `batch_id`, period, items and settlement lines;
+- retry does not create a new settlement batch;
+- retry does not query `SettlementCandidatePort`;
+- retry does not re-evaluate settlement candidate eligibility;
+- a `FAILED` batch transitions to `PROCESSING`;
+- `FAILED` items transition back to `PENDING`;
+- `COMPLETED` items remain `COMPLETED` and retain their existing
+  `posting_id`;
+- completed items must never release seller funds again;
+- only retryable non-completed items are processed;
+- the batch becomes `COMPLETED` only when all persisted items are
+  `COMPLETED`.
+
+Status:
+
+RESOLVED FOR RETRY SEMANTICS.
+
+This resolution does not resolve settlement candidate eligibility or the
+production trigger for creating new settlement batches.
+
+Until those separate contracts are resolved:
+
+- production `SettlementCandidatePort` remains unwired;
+- production `RunSettlementUseCase` remains unwired;
+- retry must use only the persisted batch hierarchy;
+- retry must never call `RunSettlementUseCase`;
+- retry must never query new candidates for the failed batch period.
+
 ## 7. Rules
 
 An OPEN item in this ADR:
@@ -149,3 +188,13 @@ An OPEN item in this ADR:
 - must not introduce a new cross-service dependency silently;
 - must be resolved by a separate Accepted ADR or an authoritative upstream
   contract before production behavior depends on it.
+
+Runtime status:
+
+- `POST /api/v1/admin/settlements/{batchId}/retry` is implemented;
+- the endpoint requires `FINANCE_OPS` and MFA step-up;
+- retry uses only the persisted settlement hierarchy;
+- retry semantics are resolved independently from new-settlement eligibility.
+
+This does not change the OPEN status of settlement trigger and candidate
+eligibility.

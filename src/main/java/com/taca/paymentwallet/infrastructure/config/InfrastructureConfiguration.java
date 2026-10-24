@@ -6,6 +6,7 @@ import com.taca.paymentwallet.domain.finance.RefundAllocationCalculator;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256PaymentUrlHashAdapter;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256RequestHashAdapter;
+import com.taca.paymentwallet.infrastructure.export.TemporaryAdminFinanceSummaryExportStorageAdapter;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
@@ -13,6 +14,7 @@ import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
+import com.taca.paymentwallet.infrastructure.persistence.audit.AuditLogPersistenceSupport;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
 import com.taca.paymentwallet.infrastructure.persistence.repository.*;
 import com.taca.paymentwallet.infrastructure.persistence.support.PersistenceUuidGenerator;
@@ -644,5 +646,107 @@ public class InfrastructureConfiguration {
                 allocationRepository,
                 refundAllocationRepository
         );
+    }
+
+    @Bean
+    AdminFeeConfigReadPort adminFeeConfigReadPort(
+            FeeConfigJpaRepository repository
+    ) {
+        return new AdminFeeConfigReadAdapter(repository);
+    }
+
+    @Bean
+    AdminFeeConfigWritePort adminFeeConfigWritePort(
+            FeeConfigJpaRepository repository,
+            PersistenceUuidGenerator uuidGenerator,
+            ClockPort clockPort
+    ) {
+        return new AdminFeeConfigWriteAdapter(
+                repository,
+                uuidGenerator,
+                clockPort
+        );
+    }
+
+    @Bean
+    AuditLogPersistenceSupport auditLogPersistenceSupport(
+            AuditLogJpaRepository repository,
+            PersistenceUuidGenerator uuidGenerator,
+            ObjectMapper objectMapper
+    ) {
+        return new AuditLogPersistenceSupport(
+                repository,
+                uuidGenerator,
+                objectMapper
+        );
+    }
+
+    @Bean
+    AdminAuditPort adminAuditPort(
+            AuditLogPersistenceSupport support
+    ) {
+        return new AdminAuditAdapter(support);
+    }
+
+    @Bean
+    AdminTaxConfigReadPort adminTaxConfigReadPort(
+            TaxConfigJpaRepository repository
+    ) {
+        return new AdminTaxConfigReadAdapter(repository);
+    }
+
+    @Bean
+    AdminTaxConfigWritePort adminTaxConfigWritePort(
+            TaxConfigJpaRepository repository,
+            PersistenceUuidGenerator uuidGenerator,
+            ClockPort clockPort
+    ) {
+        return new AdminTaxConfigWriteAdapter(
+                repository,
+                uuidGenerator,
+                clockPort
+        );
+    }
+
+    @Bean
+    AdminSettlementReadPort adminSettlementReadPort(
+            SettlementBatchJpaRepository batchRepository,
+            SettlementBatchItemJpaRepository itemRepository,
+            SettlementLineJpaRepository lineRepository
+    ) {
+        return new AdminSettlementReadAdapter(
+                batchRepository,
+                itemRepository,
+                lineRepository
+        );
+    }
+
+    @Bean
+    AdminPaymentReconciliationReadPort adminPaymentReconciliationReadPort(
+            AdminPaymentReconciliationJpaRepository repository,
+            ClockPort clockPort
+    ) {
+        return new AdminPaymentReconciliationReadAdapter(
+                repository,
+                clockPort
+        );
+    }
+
+    @Bean
+    AdminFinanceSummaryReadPort adminFinanceSummaryReadPort(
+            AdminFinanceSummaryJpaRepository repository,
+            ClockPort clockPort
+    ) {
+        return new AdminFinanceSummaryReadAdapter(
+                repository,
+                clockPort
+        );
+    }
+
+    @Bean
+    TemporaryAdminFinanceSummaryExportStorageAdapter adminFinanceSummaryExportStorage(
+            ClockPort clockPort
+    ) {
+        return new TemporaryAdminFinanceSummaryExportStorageAdapter(clockPort);
     }
 }

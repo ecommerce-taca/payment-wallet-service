@@ -3,6 +3,7 @@ package com.taca.paymentwallet.presentation.rest;
 import com.taca.paymentwallet.application.exception.*;
 import com.taca.paymentwallet.domain.payment.InvalidPaymentStateException;
 import com.taca.paymentwallet.domain.refund.RefundLimitExceededException;
+import com.taca.paymentwallet.domain.settlement.InvalidSettlementStateException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -48,6 +49,32 @@ public class GlobalRestExceptionHandler {
         return error(
                 HttpStatus.CONFLICT,
                 "PAYMENT_AMOUNT_MISMATCH",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(InvalidSettlementStateException.class)
+    public ResponseEntity<ApiErrorResponse> handleInvalidSettlementState(
+            InvalidSettlementStateException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.CONFLICT,
+                "SETTLEMENT_BATCH_INVALID_STATE",
+                exception.getMessage(),
+                request
+        );
+    }
+
+    @ExceptionHandler(AdminFinanceSummaryExportNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleFinanceExportNotFound(
+            AdminFinanceSummaryExportNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.NOT_FOUND,
+                "FINANCE_EXPORT_NOT_FOUND",
                 exception.getMessage(),
                 request
         );
@@ -328,6 +355,19 @@ public class GlobalRestExceptionHandler {
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 "INTERNAL_ERROR",
                 "Internal server error",
+                request
+        );
+    }
+
+    @ExceptionHandler(SettlementBatchNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleSettlementBatchNotFound(
+            SettlementBatchNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.NOT_FOUND,
+                "SETTLEMENT_BATCH_NOT_FOUND",
+                exception.getMessage(),
                 request
         );
     }

@@ -1,9 +1,7 @@
 package com.taca.paymentwallet.infrastructure.persistence.adapter;
 
 import com.taca.paymentwallet.application.port.out.ClockPort;
-import com.taca.paymentwallet.domain.settlement.SettlementBatch;
-import com.taca.paymentwallet.domain.settlement.SettlementBatchItem;
-import com.taca.paymentwallet.domain.settlement.SettlementLine;
+import com.taca.paymentwallet.domain.settlement.*;
 import com.taca.paymentwallet.domain.valueobject.LedgerPostingId;
 import com.taca.paymentwallet.domain.valueobject.Money;
 import com.taca.paymentwallet.domain.valueobject.PaymentAllocationId;
@@ -580,5 +578,126 @@ class SettlementRepositoryAdapterTest {
         assertEquals(2, itemCaptor.getValue().size());
 
         assertEquals(3, lineCaptor.getValue().size());
+    }
+
+    @Test
+    void shouldLoadSettlementBatchForUpdate() {
+        UUID batchId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        UUID lineId = UUID.randomUUID();
+        UUID allocationId = UUID.randomUUID();
+
+        SettlementBatchJpaEntity batchEntity =
+                new SettlementBatchJpaEntity();
+
+        batchEntity.setId(batchId);
+        batchEntity.setPeriodStart(
+                LocalDateTime.of(
+                        2026, 9, 1, 0, 0
+                )
+        );
+        batchEntity.setPeriodEnd(
+                LocalDateTime.of(
+                        2026, 9, 2, 0, 0
+                )
+        );
+        batchEntity.setStatus("FAILED");
+        batchEntity.setShopCount(1);
+        batchEntity.setTotalGross(100_000L);
+        batchEntity.setTotalCommission(7_000L);
+        batchEntity.setTotalTax(1_000L);
+        batchEntity.setTotalNet(92_000L);
+        batchEntity.setTotalReleased(92_000L);
+        batchEntity.setTotalHeld(0L);
+        batchEntity.setCreatedAt(
+                LocalDateTime.of(
+                        2026, 9, 2, 1, 0
+                )
+        );
+
+        SettlementBatchItemJpaEntity itemEntity =
+                new SettlementBatchItemJpaEntity();
+
+        itemEntity.setId(itemId);
+        itemEntity.setBatchId(batchId);
+        itemEntity.setShopId(UUID.randomUUID());
+        itemEntity.setWalletId(UUID.randomUUID());
+        itemEntity.setGross(100_000L);
+        itemEntity.setCommission(7_000L);
+        itemEntity.setTax(1_000L);
+        itemEntity.setNet(92_000L);
+        itemEntity.setReleasedAmount(92_000L);
+        itemEntity.setHeldAmount(0L);
+        itemEntity.setStatus("FAILED");
+        itemEntity.setPostingId(null);
+        itemEntity.setCreatedAt(
+                LocalDateTime.of(
+                        2026, 9, 2, 1, 0
+                )
+        );
+
+        SettlementLineJpaEntity lineEntity =
+                new SettlementLineJpaEntity();
+
+        lineEntity.setId(lineId);
+        lineEntity.setSettlementBatchItemId(itemId);
+        lineEntity.setPaymentAllocationId(allocationId);
+        lineEntity.setReleasedAmount(92_000L);
+        lineEntity.setCreatedAt(
+                LocalDateTime.of(
+                        2026, 9, 2, 1, 0
+                )
+        );
+
+        when(batchRepository.findByIdForUpdate(batchId))
+                .thenReturn(
+                        java.util.Optional.of(
+                                batchEntity
+                        )
+                );
+
+        when(itemRepository
+                .findByBatchIdOrderByCreatedAtAsc(batchId))
+                .thenReturn(
+                        List.of(itemEntity)
+                );
+
+        when(lineRepository
+                .findBySettlementBatchItemIdOrderByCreatedAtAsc(
+                        itemId
+                ))
+                .thenReturn(
+                        List.of(lineEntity)
+                );
+
+        SettlementBatch batch =
+                adapter.findByIdForUpdate(
+                                new SettlementBatchId(
+                                        batchId
+                                )
+                        )
+                        .orElseThrow();
+
+        assertEquals(
+                SettlementBatchStatus.FAILED,
+                batch.status()
+        );
+
+        assertEquals(
+                SettlementBatchItemStatus.FAILED,
+                batch.items()
+                        .getFirst()
+                        .status()
+        );
+
+        assertEquals(
+                allocationId,
+                batch.items()
+                        .getFirst()
+                        .lines()
+                        .getFirst()
+                        .paymentAllocationId()
+                        .value()
+        );
     }
 }

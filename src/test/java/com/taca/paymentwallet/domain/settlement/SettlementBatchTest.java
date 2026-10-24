@@ -14,8 +14,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 class SettlementBatchTest {
 
@@ -212,6 +211,146 @@ class SettlementBatchTest {
                         List.of(pendingItem),
                         SettlementBatchStatus.COMPLETED
                 )
+        );
+    }
+
+    @Test
+    void shouldPrepareFailedBatchForRetry() {
+        SettlementBatchItem item =
+                createItem(
+                        new PaymentAllocationId(
+                                UUID.randomUUID()
+                        )
+                );
+
+        SettlementBatch batch =
+                createBatchWithItem(item);
+
+        batch.markProcessing();
+        item.markFailed();
+        batch.markFailed();
+
+        batch.prepareRetry();
+
+        assertEquals(
+                SettlementBatchStatus.PROCESSING,
+                batch.status()
+        );
+
+        assertEquals(
+                SettlementBatchItemStatus.PENDING,
+                item.status()
+        );
+    }
+
+    @Test
+    void shouldKeepCompletedItemCompletedWhenPreparingRetry() {
+        SettlementBatchItem completedItem =
+                createItem(
+                        new PaymentAllocationId(
+                                UUID.randomUUID()
+                        )
+                );
+
+        SettlementBatchItem failedItem =
+                createItem(
+                        new PaymentAllocationId(
+                                UUID.randomUUID()
+                        )
+                );
+
+        SettlementBatch batch =
+                createBatchWithItems(
+                        List.of(
+                                completedItem,
+                                failedItem
+                        )
+                );
+
+        LedgerPostingId postingId =
+                new LedgerPostingId(
+                        UUID.randomUUID()
+                );
+
+        batch.markProcessing();
+
+        completedItem.markCompleted(postingId);
+        failedItem.markFailed();
+
+        batch.markFailed();
+        batch.prepareRetry();
+
+        assertEquals(
+                SettlementBatchStatus.PROCESSING,
+                batch.status()
+        );
+
+        assertEquals(
+                SettlementBatchItemStatus.COMPLETED,
+                completedItem.status()
+        );
+
+        assertEquals(
+                postingId,
+                completedItem.postingId()
+        );
+
+        assertEquals(
+                SettlementBatchItemStatus.PENDING,
+                failedItem.status()
+        );
+
+        assertNull(failedItem.postingId());
+    }
+
+    @Test
+    void shouldRejectRetryForPendingBatch() {
+        SettlementBatch batch = createBatch();
+
+        assertThrows(
+                InvalidSettlementStateException.class,
+                batch::prepareRetry
+        );
+    }
+
+    @Test
+    void shouldPrepareFailedItemForRetry() {
+        SettlementBatchItem item =
+                createItem(
+                        new PaymentAllocationId(
+                                UUID.randomUUID()
+                        )
+                );
+
+        item.markFailed();
+        item.prepareRetry();
+
+        assertEquals(
+                SettlementBatchItemStatus.PENDING,
+                item.status()
+        );
+
+        assertNull(item.postingId());
+    }
+
+    @Test
+    void shouldRejectRetryForCompletedItem() {
+        SettlementBatchItem item =
+                createItem(
+                        new PaymentAllocationId(
+                                UUID.randomUUID()
+                        )
+                );
+
+        item.markCompleted(
+                new LedgerPostingId(
+                        UUID.randomUUID()
+                )
+        );
+
+        assertThrows(
+                InvalidSettlementStateException.class,
+                item::prepareRetry
         );
     }
 

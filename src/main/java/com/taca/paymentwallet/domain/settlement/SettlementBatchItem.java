@@ -138,6 +138,16 @@ public class SettlementBatchItem {
         );
     }
 
+    public void prepareRetry() {
+        if (status != SettlementBatchItemStatus.FAILED) {
+            throw new InvalidSettlementStateException(
+                    "Only failed settlement item can be retried"
+            );
+        }
+
+        status = SettlementBatchItemStatus.PENDING;
+    }
+
     private void validateState() {
         if (status == SettlementBatchItemStatus.COMPLETED
                 && postingId == null) {
