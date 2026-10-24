@@ -67,6 +67,19 @@ public class GlobalRestExceptionHandler {
         );
     }
 
+    @ExceptionHandler(AdminFinanceSummaryExportNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleFinanceExportNotFound(
+            AdminFinanceSummaryExportNotFoundException exception,
+            HttpServletRequest request
+    ) {
+        return error(
+                HttpStatus.NOT_FOUND,
+                "FINANCE_EXPORT_NOT_FOUND",
+                exception.getMessage(),
+                request
+        );
+    }
+
     @ExceptionHandler(
             PaymentAttemptNotFoundException.class
     )

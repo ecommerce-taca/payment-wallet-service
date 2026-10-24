@@ -1,6 +1,7 @@
 package com.taca.paymentwallet.application.port.out;
 
 import com.taca.paymentwallet.infrastructure.config.InfrastructureConfiguration;
+import com.taca.paymentwallet.infrastructure.export.TemporaryAdminFinanceSummaryExportStorageAdapter;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Bean;
 
@@ -73,14 +74,17 @@ class AdminFinanceSummaryViewTest {
     }
 
     @Test
-    void shouldKeepFinanceSummaryExportStorageUnwiredUntilAdapterIsReady() {
+    void shouldWireFinanceSummaryExportStorage() {
         boolean beanExists = Arrays.stream(
                         InfrastructureConfiguration.class.getDeclaredMethods()
                 )
                 .filter(method -> method.isAnnotationPresent(Bean.class))
                 .map(Method::getReturnType)
-                .anyMatch(AdminFinanceSummaryExportStoragePort.class::isAssignableFrom);
+                .anyMatch(
+                        TemporaryAdminFinanceSummaryExportStorageAdapter.class
+                                ::isAssignableFrom
+                );
 
-        assertThat(beanExists).isFalse();
+        assertThat(beanExists).isTrue();
     }
 }

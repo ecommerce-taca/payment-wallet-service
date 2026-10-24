@@ -68,7 +68,7 @@ Admin Finance APIs thuộc Phase 8.
 | 16 | `GET /admin/settlements/{batchId}` | `FINANCE_OPS` | Chi tiết settlement batch | Implemented |
 | 17 | `POST /admin/settlements/{batchId}/retry` | `FINANCE_OPS` + step-up | Retry batch `FAILED` | Implemented |
 | 18 | `GET /admin/finance/summary` | `FINANCE_OPS` | Tổng hợp tài chính sàn | Implemented |
-| 18a | `GET /admin/finance/summary/export` | `FINANCE_OPS` | Xuất báo cáo tài chính | Foundation only — storage adapter not exposed |
+| 18a | `GET /admin/finance/summary/export` | `FINANCE_OPS` | Xuất báo cáo tài chính | Implemented |
 | 19 | `GET /health/live` | Ops | Liveness | Implemented |
 | 20 | `GET /health/ready` | Ops | Readiness | Implemented |
 
@@ -832,11 +832,13 @@ Download contract:
 
 Phase 8V status:
 
-- CSV renderer implemented;
-- provider-neutral export storage port implemented;
-- export application service implemented;
-- no production storage adapter is registered;
-- HTTP endpoint remains intentionally unexposed until Phase 8W.
+Runtime status:
+- CSV UTF-8 export is implemented;
+- the endpoint requires `FINANCE_OPS`;
+- exports are stored temporarily behind an opaque capability token;
+- temporary download URLs expire after 30 minutes;
+- expired or unknown URLs return `FINANCE_EXPORT_NOT_FOUND`;
+- storage provider details are not exposed by the API.
 
 
 ## 4. Mã lỗi
@@ -895,7 +897,7 @@ Các code ở mục này không đồng nghĩa endpoint tương ứng đã đư�
 | 10 | Seller payout history | Target endpoint có trong API inventory nhưng runtime chưa implement. |
 | 11 | Settlement trigger/eligibility/retry | Hold window, eligible timestamp, upstream trigger và retry semantics vẫn OPEN theo ADR-003; không production-wire `RunSettlementUseCase` hoặc expose retry endpoint. |
 | 12 | Admin fee/tax mutation HTTP contract | Application/persistence mutation foundation đã có, nhưng request/response contract cho `PUT /admin/fees` và `PUT /admin/taxes` chưa authoritative; HTTP endpoint chưa expose. |
-| 13 | Admin finance summary export | Target endpoint tồn tại và `EXPORT_URL_TTL = 30 phút`, nhưng file format/storage/signed-URL/filter contract chưa authoritative; endpoint chưa expose. |
+| Admin finance summary export storage scaling | Runtime uses temporary in-process storage; a shared object-storage adapter may replace it for multi-instance deployment without changing the application/API contract. |
 
 ## 6. Phase 6 closeout
 
