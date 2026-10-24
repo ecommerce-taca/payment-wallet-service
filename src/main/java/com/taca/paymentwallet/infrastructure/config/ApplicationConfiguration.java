@@ -1,5 +1,6 @@
 package com.taca.paymentwallet.infrastructure.config;
 
+import com.taca.paymentwallet.application.export.AdminFinanceSummaryCsvRenderer;
 import com.taca.paymentwallet.application.port.in.*;
 import com.taca.paymentwallet.application.port.out.*;
 import com.taca.paymentwallet.application.security.*;
@@ -437,5 +438,24 @@ public class ApplicationConfiguration {
             AdminFinanceSummaryReadPort readPort
     ) {
         return new GetAdminFinanceSummaryService(readPort);
+    }
+
+    @Bean
+    ExportAdminFinanceSummaryUseCase exportAdminFinanceSummaryUseCase(
+            AdminFinanceSummaryReadPort readPort,
+            AdminFinanceSummaryExportStoragePort storagePort
+    ) {
+        return new ExportAdminFinanceSummaryService(
+                readPort,
+                storagePort,
+                new AdminFinanceSummaryCsvRenderer()
+        );
+    }
+
+    @Bean
+    DownloadAdminFinanceSummaryExportUseCase downloadAdminFinanceSummaryExportUseCase(
+            AdminFinanceSummaryExportDownloadPort downloadPort
+    ) {
+        return new DownloadAdminFinanceSummaryExportService(downloadPort);
     }
 }

@@ -6,6 +6,7 @@ import com.taca.paymentwallet.domain.finance.RefundAllocationCalculator;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256PaymentUrlHashAdapter;
 import com.taca.paymentwallet.infrastructure.crypto.Sha256RequestHashAdapter;
+import com.taca.paymentwallet.infrastructure.export.TemporaryAdminFinanceSummaryExportStorageAdapter;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
@@ -740,5 +741,12 @@ public class InfrastructureConfiguration {
                 repository,
                 clockPort
         );
+    }
+
+    @Bean
+    TemporaryAdminFinanceSummaryExportStorageAdapter adminFinanceSummaryExportStorage(
+            ClockPort clockPort
+    ) {
+        return new TemporaryAdminFinanceSummaryExportStorageAdapter(clockPort);
     }
 }

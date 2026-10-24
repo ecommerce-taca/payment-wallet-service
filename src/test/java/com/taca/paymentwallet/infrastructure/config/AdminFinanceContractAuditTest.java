@@ -88,11 +88,11 @@ class AdminFinanceContractAuditTest {
     }
 
     @Test
-    void shouldKeepFinanceSummaryExportUnexposedUntilStorageIsReady() {
+    void shouldExposeFinanceSummaryExportEndpoint() {
         assertThat(hasGetMapping(
                 AdminFinanceSummaryController.class,
                 "/summary/export"
-        )).isFalse();
+        )).isTrue();
     }
 
     private boolean hasGetMapping(
