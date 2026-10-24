@@ -1,6 +1,8 @@
 package com.taca.paymentwallet.integration;
 
 import com.taca.paymentwallet.application.port.in.*;
+import com.taca.paymentwallet.application.port.out.AdminFinanceSummaryExportDownloadPort;
+import com.taca.paymentwallet.application.port.out.AdminFinanceSummaryExportStoragePort;
 import com.taca.paymentwallet.application.port.out.SettlementCandidatePort;
 import com.taca.paymentwallet.application.security.*;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
@@ -149,6 +151,21 @@ class ProductionContextSmokeTest {
     @Autowired
     private WebhookAuthenticationBypass webhookAuthenticationBypass;
 
+    @Autowired
+    private RetryAdminSettlementUseCase retryAdminSettlementUseCase;
+
+    @Autowired
+    private ExportAdminFinanceSummaryUseCase exportAdminFinanceSummaryUseCase;
+
+    @Autowired
+    private DownloadAdminFinanceSummaryExportUseCase downloadAdminFinanceSummaryExportUseCase;
+
+    @Autowired
+    private AdminFinanceSummaryExportStoragePort adminFinanceSummaryExportStoragePort;
+
+    @Autowired
+    private AdminFinanceSummaryExportDownloadPort adminFinanceSummaryExportDownloadPort;
+
     @Test
     void shouldStartProductionContextWithoutTestConfiguration() {
         assertThat(createPaymentUseCase).isNotNull();
@@ -198,5 +215,15 @@ class ProductionContextSmokeTest {
         assertThat(internalCallerPolicy).isNotNull();
 
         assertThat(webhookAuthenticationBypass).isNotNull();
+
+        assertThat(retryAdminSettlementUseCase).isNotNull();
+
+        assertThat(exportAdminFinanceSummaryUseCase).isNotNull();
+
+        assertThat(downloadAdminFinanceSummaryExportUseCase).isNotNull();
+
+        assertThat(adminFinanceSummaryExportStoragePort).isNotNull();
+
+        assertThat(adminFinanceSummaryExportDownloadPort).isNotNull();
     }
 }

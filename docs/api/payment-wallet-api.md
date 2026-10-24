@@ -684,9 +684,9 @@ Health:
 
 ### 3.8 Admin finance back-office (`FINANCE_OPS`)
 
-> Phase 8 target contract.
+> Phase 8 runtime contract.
 
-Các nhóm API mục tiêu:
+Các nhóm API runtime:
 
 - reconciliation;
 - fee configuration;
@@ -878,7 +878,9 @@ Runtime status:
 | `PAYOUT_NOT_ALLOWED` | 403/409 | Payout không thỏa policy |
 | `FEE_CONFIG_INVALID` | 409 | Fee/tax config không hợp lệ |
 | `SETTLEMENT_BATCH_INVALID_STATE` | 409 | Settlement action không hợp lệ với state |
-
+| `SETTLEMENT_BATCH_NOT_FOUND` | 404 | Settlement batch không tồn tại |
+| `SETTLEMENT_BATCH_INVALID_STATE` | 409 | Settlement retry yêu cầu batch ở trạng thái `FAILED` |
+| `FINANCE_EXPORT_NOT_FOUND` | 404 | Finance export không tồn tại hoặc đã hết hạn |
 Các code ở mục này không đồng nghĩa endpoint tương ứng đã được runtime expose.
 
 ## 5. Known contract debt & open items
@@ -895,10 +897,8 @@ Các code ở mục này không đồng nghĩa endpoint tương ứng đã đư�
 | 8 | Bank account source | Ownership/source của `bank_account_id` chưa được chốt theo ADR-003. |
 | 9 | Payout notification recipient | `owner_user_id` và `owner_email` chưa có authoritative source theo ADR-003. |
 | 10 | Seller payout history | Target endpoint có trong API inventory nhưng runtime chưa implement. |
-| 11 | Settlement trigger/eligibility/retry | Hold window, eligible timestamp, upstream trigger và retry semantics vẫn OPEN theo ADR-003; không production-wire `RunSettlementUseCase` hoặc expose retry endpoint. |
-| 12 | Admin fee/tax mutation HTTP contract | Application/persistence mutation foundation đã có, nhưng request/response contract cho `PUT /admin/fees` và `PUT /admin/taxes` chưa authoritative; HTTP endpoint chưa expose. |
-| Admin finance summary export storage scaling | Runtime uses temporary in-process storage; a shared object-storage adapter may replace it for multi-instance deployment without changing the application/API contract. |
-
+| 11 | Settlement trigger/eligibility | Hold window, eligible timestamp và upstream trigger để tạo settlement batch mới vẫn OPEN theo ADR-003. Production `SettlementCandidatePort` và `RunSettlementUseCase` tiếp tục không được wire. Admin retry semantics cho persisted `FAILED` batch đã được resolve và runtime endpoint đã implement. |
+| 12 | Admin finance summary export storage scaling | Runtime hiện dùng temporary in-process storage. Multi-instance deployment có thể thay bằng shared object storage mà không thay đổi application/API contract. |
 ## 6. Phase 6 closeout
 
 Phase 6 hoàn thiện phạm vi Payment + Refund APIs:
@@ -957,43 +957,72 @@ Phase 7 vì vậy được close cho phần seller wallet/ledger/revenue và pay
 
 ## Phase 8 closeout — Admin Finance
 
-Phase 8 establishes the Admin Finance runtime foundation and exposes all
-read-only admin finance APIs whose contracts are currently authoritative.
+Phase 8 completes the supported Admin Finance runtime surface whose contracts
+are authoritative.
 
 Implemented runtime endpoints:
 
-- `GET /admin/payments/reconciliation`
-- `GET /admin/fees`
-- `GET /admin/taxes`
-- `GET /admin/settlements`
-- `GET /admin/settlements/{batchId}`
-- `GET /admin/finance/summary`
-
-Implemented application/persistence foundations but not exposed over HTTP:
-
-- fee configuration mutation;
-- tax configuration mutation.
-
-These mutation foundations remain append-only and effective-dated. The public
-`PUT /admin/fees` and `PUT /admin/taxes` endpoints must not be exposed until
-their authoritative HTTP request/response contracts are finalized.
-
-Blocked by ADR-003:
-
-- production settlement execution;
-- `POST /admin/settlements/{batchId}/retry`.
-
-The settlement eligibility and retry semantics remain OPEN and must not be
-derived from the absence of a payment allocation in `settlement_lines`.
-
-Not implemented because the export contract is incomplete:
-
+- `GET /admin/payments/reconciliation`;
+- `GET /admin/fees`;
+- `PUT /admin/fees`;
+- `GET /admin/taxes`;
+- `PUT /admin/taxes`;
+- `GET /admin/settlements`;
+- `GET /admin/settlements/{batchId}`;
+- `POST /admin/settlements/{batchId}/retry`;
+- `GET /admin/finance/summary`;
 - `GET /admin/finance/summary/export`.
 
-The current documentation defines `EXPORT_URL_TTL = 30 minutes`, but does not
-authoritatively define the export file format, storage/signing contract,
-columns or request/filter contract.
+Authorization:
 
-Phase 8 therefore closes with the supported runtime surface above while
-retaining unresolved contracts as explicit debt rather than fabricating
-production behavior.
+- Admin Finance endpoints require `FINANCE_OPS`;
+- fee mutation, tax mutation and settlement retry additionally require
+  MFA step-up;
+- all exposed Admin Finance API operations keep the existing
+  `X-Request-ID` contract where applicable.
+
+Fee and tax configuration:
+
+- configuration is effective-dated;
+- updates append a new version;
+- existing versions are not modified or deleted;
+- mutation records use the authenticated Finance Ops actor as `created_by`;
+- admin audit records are written for configuration mutations.
+
+Settlement:
+
+- settlement batch list/detail reads use persisted settlement data;
+- retry operates only on an existing `FAILED` batch;
+- retry preserves the same batch, items and settlement lines;
+- completed items and their posting IDs are preserved;
+- completed items are never financially released again;
+- retry does not query `SettlementCandidatePort`;
+- retry does not invoke `RunSettlementUseCase`.
+
+Production creation of new settlement batches remains intentionally gated:
+
+- settlement candidate eligibility remains OPEN under ADR-003;
+- production `SettlementCandidatePort` is not registered;
+- production `RunSettlementUseCase` is not registered;
+- absence from `settlement_lines` alone never authorizes movement from
+  `SELLER_PENDING` to `SELLER_AVAILABLE`.
+
+Finance summary:
+
+- the runtime summary exposes captured, refunded, allocation,
+  seller-wallet and completed-payout aggregates;
+- export produces UTF-8 CSV using the same authoritative summary snapshot;
+- export URLs expire after 30 minutes;
+- the current runtime storage implementation is temporary in-process storage
+  behind an opaque capability token;
+- storage implementation details are not part of the public export contract.
+
+Reconciliation:
+
+- reconciliation is read-only;
+- `match:false` identifies an investigation case only;
+- reconciliation never performs automatic financial repair.
+
+Phase 8 intentionally does not resolve unrelated open contracts such as
+seller payout, seller revenue export, settlement trigger/eligibility,
+notification recipients or bank-account ownership.

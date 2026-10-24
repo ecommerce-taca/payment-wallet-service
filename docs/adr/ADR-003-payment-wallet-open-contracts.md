@@ -188,3 +188,13 @@ An OPEN item in this ADR:
 - must not introduce a new cross-service dependency silently;
 - must be resolved by a separate Accepted ADR or an authoritative upstream
   contract before production behavior depends on it.
+
+Runtime status:
+
+- `POST /api/v1/admin/settlements/{batchId}/retry` is implemented;
+- the endpoint requires `FINANCE_OPS` and MFA step-up;
+- retry uses only the persisted settlement hierarchy;
+- retry semantics are resolved independently from new-settlement eligibility.
+
+This does not change the OPEN status of settlement trigger and candidate
+eligibility.
