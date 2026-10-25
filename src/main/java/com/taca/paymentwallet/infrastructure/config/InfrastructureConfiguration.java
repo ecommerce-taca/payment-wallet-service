@@ -541,13 +541,15 @@ public class InfrastructureConfiguration {
             OutboxEventJpaRepository repository,
             OutboxMessagePublisherPort publisherPort,
             ClockPort clockPort,
-            OutboxHealthProperties properties
+            OutboxHealthProperties properties,
+            OutboxOperationalObservation observation
     ) {
         return new OutboxBacklogHealthIndicator(
                 repository,
                 publisherPort,
                 clockPort,
-                properties
+                properties,
+                observation
         );
     }
 
@@ -756,6 +758,15 @@ public class InfrastructureConfiguration {
             MeterRegistry meterRegistry
     ) {
         return new MicrometerOperationMetricsAdapter(
+                meterRegistry
+        );
+    }
+
+    @Bean
+    OutboxOperationalObservation outboxOperationalObservation(
+            MeterRegistry meterRegistry
+    ) {
+        return new OutboxOperationalObservation(
                 meterRegistry
         );
     }

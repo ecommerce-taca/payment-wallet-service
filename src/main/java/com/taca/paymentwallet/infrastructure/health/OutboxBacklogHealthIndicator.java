@@ -3,6 +3,7 @@ package com.taca.paymentwallet.infrastructure.health;
 import com.taca.paymentwallet.application.port.out.ClockPort;
 import com.taca.paymentwallet.application.port.out.OutboxMessagePublisherPort;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxHealthProperties;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxOperationalObservation;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.PersistenceTimeMapper;
 import com.taca.paymentwallet.infrastructure.persistence.repository.OutboxEventJpaRepository;
 import org.springframework.boot.health.contributor.AbstractHealthIndicator;
@@ -22,20 +23,20 @@ public class OutboxBacklogHealthIndicator
     private final OutboxMessagePublisherPort publisherPort;
     private final ClockPort clockPort;
     private final OutboxHealthProperties properties;
+    private final OutboxOperationalObservation observation;
 
     public OutboxBacklogHealthIndicator(
             OutboxEventJpaRepository repository,
             OutboxMessagePublisherPort publisherPort,
             ClockPort clockPort,
-            OutboxHealthProperties properties
+            OutboxHealthProperties properties,
+            OutboxOperationalObservation observation
     ) {
         this.repository = Objects.requireNonNull(repository);
-
         this.publisherPort = Objects.requireNonNull(publisherPort);
-
         this.clockPort = Objects.requireNonNull(clockPort);
-
         this.properties = Objects.requireNonNull(properties);
+        this.observation = Objects.requireNonNull(observation);
     }
 
     @Override
@@ -52,6 +53,11 @@ public class OutboxBacklogHealthIndicator
                 publisherPort.supportedEventTypes();
 
         if (supportedEventTypes.isEmpty()) {
+            observation.recordBacklog(
+                    0L,
+                    Duration.ZERO
+            );
+
             builder.up()
                     .withDetail("enabled", true)
                     .withDetail("pendingCount", 0L)
@@ -71,6 +77,11 @@ public class OutboxBacklogHealthIndicator
                 );
 
         if (pendingCount == 0 || oldest.isEmpty()) {
+            observation.recordBacklog(
+                    0L,
+                    Duration.ZERO
+            );
+
             builder.up()
                     .withDetail("enabled", true)
                     .withDetail("pendingCount", 0L)
@@ -96,6 +107,11 @@ public class OutboxBacklogHealthIndicator
         if (lag.isNegative()) {
             lag = Duration.ZERO;
         }
+
+        observation.recordBacklog(
+                pendingCount,
+                lag
+        );
 
         if (lag.compareTo(properties.maxLag()) > 0) {
             builder.outOfService();
