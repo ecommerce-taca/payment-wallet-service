@@ -13,6 +13,7 @@ import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicato
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
+import com.taca.paymentwallet.infrastructure.observability.HttpRequestObservation;
 import com.taca.paymentwallet.infrastructure.observability.MicrometerOperationMetricsAdapter;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.audit.AuditLogPersistenceSupport;
@@ -769,5 +770,12 @@ public class InfrastructureConfiguration {
         return new OutboxOperationalObservation(
                 meterRegistry
         );
+    }
+
+    @Bean
+    HttpRequestObservation httpRequestObservation(
+            MeterRegistry meterRegistry
+    ) {
+        return new HttpRequestObservation(meterRegistry);
     }
 }

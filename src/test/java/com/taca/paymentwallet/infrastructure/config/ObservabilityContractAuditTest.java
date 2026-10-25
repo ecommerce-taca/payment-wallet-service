@@ -6,6 +6,7 @@ import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator
 import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxOperationalObservation;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxPublisherObservation;
+import com.taca.paymentwallet.infrastructure.observability.HttpRequestObservation;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Bean;
 
@@ -36,6 +37,10 @@ class ObservabilityContractAuditTest {
 
         assertThat(hasInfrastructureBean(
                 OutboxOperationalObservation.class
+        )).isTrue();
+
+        assertThat(hasInfrastructureBean(
+                HttpRequestObservation.class
         )).isTrue();
     }
 
