@@ -45,23 +45,36 @@ public class OutboxBacklogHealthIndicator
     ) {
         if (!properties.enabled()) {
             builder.up().withDetail("enabled", false);
-
             return;
         }
 
+        try {
+            checkBacklog(builder);
+        } catch (RuntimeException exception) {
+            builder.outOfService()
+                    .withDetail("enabled", true)
+                    .withDetail("reason", "outbox_unavailable")
+                    .withDetail(
+                            "errorType",
+                            exception.getClass().getSimpleName()
+                    );
+        }
+    }
+
+    private void checkBacklog(Health.Builder builder) {
         Set<String> supportedEventTypes =
                 publisherPort.supportedEventTypes();
 
         if (supportedEventTypes.isEmpty()) {
-            observation.recordBacklog(
-                    0L,
-                    Duration.ZERO
-            );
+            observation.recordBacklog(0L, Duration.ZERO);
 
             builder.up()
                     .withDetail("enabled", true)
                     .withDetail("pendingCount", 0L)
-                    .withDetail("reason", "no_supported_event_types");
+                    .withDetail(
+                            "reason",
+                            "no_supported_event_types"
+                    );
 
             return;
         }
@@ -77,10 +90,7 @@ public class OutboxBacklogHealthIndicator
                 );
 
         if (pendingCount == 0 || oldest.isEmpty()) {
-            observation.recordBacklog(
-                    0L,
-                    Duration.ZERO
-            );
+            observation.recordBacklog(0L, Duration.ZERO);
 
             builder.up()
                     .withDetail("enabled", true)
@@ -98,11 +108,10 @@ public class OutboxBacklogHealthIndicator
                         oldest.orElseThrow()
                 );
 
-        Duration lag =
-                Duration.between(
-                        oldestOccurredAt,
-                        clockPort.now()
-                );
+        Duration lag = Duration.between(
+                oldestOccurredAt,
+                clockPort.now()
+        );
 
         if (lag.isNegative()) {
             lag = Duration.ZERO;
@@ -114,7 +123,11 @@ public class OutboxBacklogHealthIndicator
         );
 
         if (lag.compareTo(properties.maxLag()) > 0) {
-            builder.outOfService();
+            builder.outOfService()
+                    .withDetail(
+                            "reason",
+                            "outbox_backlog_exceeded"
+                    );
         } else {
             builder.up();
         }

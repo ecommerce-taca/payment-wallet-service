@@ -194,6 +194,39 @@ class OutboxBacklogHealthIndicatorTest {
                 .findOldestPendingOccurredAt(eventTypes);
     }
 
+    @Test
+    void shouldBeOutOfServiceWhenBacklogQueryFails() {
+        when(publisherPort.supportedEventTypes())
+                .thenReturn(Set.of(
+                        "payment.created",
+                        "wallet.allocated"
+                ));
+
+        when(repository.countPendingForHealth(anySet()))
+                .thenThrow(
+                        new IllegalStateException(
+                                "database unavailable"
+                        )
+                );
+
+        var health =
+                indicator(Duration.ofMinutes(5))
+                        .health();
+
+        assertThat(health.getStatus())
+                .isEqualTo(Status.OUT_OF_SERVICE);
+
+        assertThat(health.getDetails())
+                .containsEntry(
+                        "reason",
+                        "outbox_unavailable"
+                )
+                .containsEntry(
+                        "errorType",
+                        "IllegalStateException"
+                );
+    }
+
     private OutboxBacklogHealthIndicator indicator(
             Duration maxLag
     ) {
