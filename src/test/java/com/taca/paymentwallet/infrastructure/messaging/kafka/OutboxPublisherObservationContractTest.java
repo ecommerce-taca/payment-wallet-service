@@ -25,6 +25,12 @@ class OutboxPublisherObservationContractTest {
         ).isEqualTo(
                 "payment_wallet_outbox_dlq_publish_total"
         );
+
+        assertThat(
+                OutboxPublisherObservation.DLQ_LATENCY
+        ).isEqualTo(
+                "payment_wallet_outbox_dlq_publish_latency"
+        );
     }
 
     @Test
@@ -73,6 +79,7 @@ class OutboxPublisherObservationContractTest {
                         .timer()
                         .count()
         ).isEqualTo(1L);
+
     }
 
     @Test
@@ -105,5 +112,21 @@ class OutboxPublisherObservationContractTest {
                         .counter()
                         .count()
         ).isEqualTo(1.0);
+
+        assertThat(
+                registry.get(
+                                OutboxPublisherObservation.DLQ_LATENCY
+                        )
+                        .tags(
+                                "event_type",
+                                "payment.failed",
+                                "topic",
+                                "payment.events.v1",
+                                "result",
+                                "success"
+                        )
+                        .timer()
+                        .count()
+        ).isEqualTo(1L);
     }
 }

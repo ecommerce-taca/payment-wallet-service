@@ -4,6 +4,7 @@ import com.taca.paymentwallet.application.outbox.OutboxMessage;
 import com.taca.paymentwallet.application.port.out.ClockPort;
 import com.taca.paymentwallet.application.port.out.OutboxMessagePublisherPort;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxHealthProperties;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxOperationalObservation;
 import com.taca.paymentwallet.infrastructure.persistence.repository.OutboxEventJpaRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.health.contributor.Status;
@@ -28,6 +29,9 @@ class OutboxBacklogHealthIndicatorTest {
 
     private final OutboxMessagePublisherPort publisherPort =
             mock(OutboxMessagePublisherPort.class);
+
+    private final OutboxOperationalObservation observation =
+            mock(OutboxOperationalObservation.class);
 
     private final ClockPort clockPort =
             () -> NOW;
@@ -55,6 +59,11 @@ class OutboxBacklogHealthIndicatorTest {
 
         assertThat(health.getDetails())
                 .containsEntry("pendingCount", 0L);
+
+        verify(observation).recordBacklog(
+                0L,
+                Duration.ZERO
+        );
     }
 
     @Test
@@ -78,6 +87,11 @@ class OutboxBacklogHealthIndicatorTest {
         var health =
                 indicator(Duration.ofMinutes(5))
                         .health();
+
+        verify(observation).recordBacklog(
+                3L,
+                Duration.ofSeconds(120)
+        );
 
         assertThat(health.getStatus())
                 .isEqualTo(Status.UP);
@@ -110,6 +124,11 @@ class OutboxBacklogHealthIndicatorTest {
                 indicator(Duration.ofMinutes(5))
                         .health();
 
+        verify(observation).recordBacklog(
+                4L,
+                Duration.ofSeconds(601)
+        );
+
         assertThat(health.getStatus())
                 .isEqualTo(Status.OUT_OF_SERVICE);
 
@@ -128,7 +147,8 @@ class OutboxBacklogHealthIndicatorTest {
                         new OutboxHealthProperties(
                                 false,
                                 Duration.ofMinutes(5)
-                        )
+                        ),
+                        observation
                 );
 
         var health = indicator.health();
@@ -143,6 +163,8 @@ class OutboxBacklogHealthIndicatorTest {
                 repository,
                 publisherPort
         );
+
+        verifyNoInteractions(observation);
     }
 
     @Test
@@ -182,7 +204,8 @@ class OutboxBacklogHealthIndicatorTest {
                 new OutboxHealthProperties(
                         true,
                         maxLag
-                )
+                ),
+                observation
         );
     }
 
