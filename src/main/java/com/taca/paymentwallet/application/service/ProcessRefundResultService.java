@@ -5,14 +5,7 @@ import com.taca.paymentwallet.application.exception.PaymentNotFoundException;
 import com.taca.paymentwallet.application.exception.RefundAmountMismatchException;
 import com.taca.paymentwallet.application.exception.RefundNotFoundException;
 import com.taca.paymentwallet.application.port.in.ProcessRefundResultUseCase;
-import com.taca.paymentwallet.application.port.out.LedgerAccountLookupPort;
-import com.taca.paymentwallet.application.port.out.LedgerPostingRepositoryPort;
-import com.taca.paymentwallet.application.port.out.OutboxPort;
-import com.taca.paymentwallet.application.port.out.PaymentAllocationRepositoryPort;
-import com.taca.paymentwallet.application.port.out.PaymentRepositoryPort;
-import com.taca.paymentwallet.application.port.out.RefundAllocationRepositoryPort;
-import com.taca.paymentwallet.application.port.out.RefundRepositoryPort;
-import com.taca.paymentwallet.application.port.out.TransactionPort;
+import com.taca.paymentwallet.application.port.out.*;
 import com.taca.paymentwallet.application.refund.RefundResultProcessingAction;
 import com.taca.paymentwallet.application.refund.RefundResultStatus;
 import com.taca.paymentwallet.application.result.ProcessRefundResult;
@@ -45,6 +38,7 @@ public class ProcessRefundResultService implements ProcessRefundResultUseCase {
     private final com.taca.paymentwallet.application.port.out.IdGeneratorPort idGeneratorPort;
     private final RefundAllocationCalculator refundAllocationCalculator;
     private final LedgerPostingFactory ledgerPostingFactory;
+    private final BusinessMetricsPort businessMetrics;
 
     public ProcessRefundResultService(
             RefundRepositoryPort refundRepository,
@@ -57,7 +51,8 @@ public class ProcessRefundResultService implements ProcessRefundResultUseCase {
             TransactionPort transactionPort,
             com.taca.paymentwallet.application.port.out.IdGeneratorPort idGeneratorPort,
             RefundAllocationCalculator refundAllocationCalculator,
-            LedgerPostingFactory ledgerPostingFactory
+            LedgerPostingFactory ledgerPostingFactory,
+            BusinessMetricsPort businessMetrics
     ) {
         this.refundRepository = Objects.requireNonNull(refundRepository);
         this.paymentRepository = Objects.requireNonNull(paymentRepository);
@@ -70,13 +65,21 @@ public class ProcessRefundResultService implements ProcessRefundResultUseCase {
         this.idGeneratorPort = Objects.requireNonNull(idGeneratorPort);
         this.refundAllocationCalculator = Objects.requireNonNull(refundAllocationCalculator);
         this.ledgerPostingFactory = Objects.requireNonNull(ledgerPostingFactory);
+        this.businessMetrics = Objects.requireNonNull(businessMetrics);
     }
 
     @Override
     public ProcessRefundResult execute(ProcessRefundResultCommand command) {
         Objects.requireNonNull(command, "command must not be null");
 
-        return transactionPort.execute(() -> process(command));
+        ProcessRefundResult result = transactionPort.execute(() -> process(command));
+
+        businessMetrics.recordRefund(
+                result.refundStatus(),
+                result.action().name()
+        );
+
+        return result;
     }
 
     private ProcessRefundResult process(ProcessRefundResultCommand command) {

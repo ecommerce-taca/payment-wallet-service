@@ -14,6 +14,7 @@ import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
 import com.taca.paymentwallet.infrastructure.observability.HttpRequestObservation;
+import com.taca.paymentwallet.infrastructure.observability.MicrometerBusinessMetricsAdapter;
 import com.taca.paymentwallet.infrastructure.observability.MicrometerOperationMetricsAdapter;
 import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
@@ -783,5 +784,12 @@ public class InfrastructureConfiguration {
     @Bean
     W3cTraceContext w3cTraceContext() {
         return new W3cTraceContext();
+    }
+
+    @Bean
+    BusinessMetricsPort businessMetricsPort(
+            MeterRegistry meterRegistry
+    ) {
+        return new MicrometerBusinessMetricsAdapter(meterRegistry);
     }
 }

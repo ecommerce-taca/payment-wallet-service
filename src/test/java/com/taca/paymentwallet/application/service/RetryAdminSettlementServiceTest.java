@@ -11,6 +11,7 @@ import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.domain.wallet.Wallet;
 import com.taca.paymentwallet.domain.wallet.WalletStatus;
+import com.taca.paymentwallet.support.FakeBusinessMetricsPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -60,7 +61,8 @@ class RetryAdminSettlementServiceTest {
                 new DirectTransactionPort(),
                 idGeneratorPort,
                 new LedgerPostingFactory(),
-                clockPort
+                clockPort,
+                new FakeBusinessMetricsPort()
         );
     }
 

@@ -6,15 +6,7 @@ import com.taca.paymentwallet.application.fee.PaymentFeePolicy;
 import com.taca.paymentwallet.application.payment.CodPaymentProcessingAction;
 import com.taca.paymentwallet.application.payment.CodPaymentResultStatus;
 import com.taca.paymentwallet.application.port.in.ProcessCodPaymentUseCase;
-import com.taca.paymentwallet.application.port.out.FeePolicyPort;
-import com.taca.paymentwallet.application.port.out.IdGeneratorPort;
-import com.taca.paymentwallet.application.port.out.LedgerAccountLookupPort;
-import com.taca.paymentwallet.application.port.out.LedgerPostingRepositoryPort;
-import com.taca.paymentwallet.application.port.out.OutboxPort;
-import com.taca.paymentwallet.application.port.out.PaymentAllocationRepositoryPort;
-import com.taca.paymentwallet.application.port.out.PaymentRepositoryPort;
-import com.taca.paymentwallet.application.port.out.TransactionPort;
-import com.taca.paymentwallet.application.port.out.WalletRepositoryPort;
+import com.taca.paymentwallet.application.port.out.*;
 import com.taca.paymentwallet.application.result.ProcessCodPaymentResult;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.payment.Payment;
@@ -44,6 +36,7 @@ public class ProcessCodPaymentService implements ProcessCodPaymentUseCase {
     private final TransactionPort transactionPort;
     private final AllocationCalculator allocationCalculator;
     private final LedgerPostingFactory ledgerPostingFactory;
+    private final BusinessMetricsPort businessMetrics;
 
     public ProcessCodPaymentService(
             PaymentRepositoryPort paymentRepository,
@@ -56,7 +49,8 @@ public class ProcessCodPaymentService implements ProcessCodPaymentUseCase {
             OutboxPort outboxPort,
             TransactionPort transactionPort,
             AllocationCalculator allocationCalculator,
-            LedgerPostingFactory ledgerPostingFactory
+            LedgerPostingFactory ledgerPostingFactory,
+            BusinessMetricsPort businessMetrics
     ) {
         this.paymentRepository = Objects.requireNonNull(paymentRepository);
         this.paymentAllocationRepository = Objects.requireNonNull(paymentAllocationRepository);
@@ -69,13 +63,25 @@ public class ProcessCodPaymentService implements ProcessCodPaymentUseCase {
         this.transactionPort = Objects.requireNonNull(transactionPort);
         this.allocationCalculator = Objects.requireNonNull(allocationCalculator);
         this.ledgerPostingFactory = Objects.requireNonNull(ledgerPostingFactory);
+        this.businessMetrics = Objects.requireNonNull(businessMetrics);
     }
 
     @Override
-    public ProcessCodPaymentResult execute(ProcessCodPaymentCommand command) {
+    public ProcessCodPaymentResult execute(
+            ProcessCodPaymentCommand command
+    ) {
         Objects.requireNonNull(command, "command must not be null");
 
-        return transactionPort.execute(() -> process(command));
+        ProcessCodPaymentResult result =
+                transactionPort.execute(() -> process(command));
+
+        businessMetrics.recordPayment(
+                "COD",
+                result.paymentStatus(),
+                result.action().name()
+        );
+
+        return result;
     }
 
     private ProcessCodPaymentResult process(ProcessCodPaymentCommand command) {

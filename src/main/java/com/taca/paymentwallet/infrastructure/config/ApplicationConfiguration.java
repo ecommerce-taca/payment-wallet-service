@@ -118,7 +118,8 @@ public class ApplicationConfiguration {
             OutboxPort outboxPort,
             TransactionPort transactionPort,
             AllocationCalculator allocationCalculator,
-            LedgerPostingFactory ledgerPostingFactory
+            LedgerPostingFactory ledgerPostingFactory,
+            BusinessMetricsPort businessMetricsPort
     ) {
         return new ProcessVnpayWebhookService(
                 paymentRepository,
@@ -135,7 +136,8 @@ public class ApplicationConfiguration {
                 outboxPort,
                 transactionPort,
                 allocationCalculator,
-                ledgerPostingFactory
+                ledgerPostingFactory,
+                businessMetricsPort
         );
     }
 
@@ -151,7 +153,8 @@ public class ApplicationConfiguration {
             OutboxPort outboxPort,
             TransactionPort transactionPort,
             AllocationCalculator allocationCalculator,
-            LedgerPostingFactory ledgerPostingFactory
+            LedgerPostingFactory ledgerPostingFactory,
+            BusinessMetricsPort businessMetricsPort
     ) {
         return new ProcessCodPaymentService(
                 paymentRepository,
@@ -164,7 +167,8 @@ public class ApplicationConfiguration {
                 outboxPort,
                 transactionPort,
                 allocationCalculator,
-                ledgerPostingFactory
+                ledgerPostingFactory,
+                businessMetricsPort
         );
     }
 
@@ -204,7 +208,8 @@ public class ApplicationConfiguration {
             TransactionPort transactionPort,
             IdGeneratorPort idGeneratorPort,
             RefundAllocationCalculator refundAllocationCalculator,
-            LedgerPostingFactory ledgerPostingFactory
+            LedgerPostingFactory ledgerPostingFactory,
+            BusinessMetricsPort businessMetricsPort
     ) {
         return new ProcessRefundResultService(
                 refundRepository,
@@ -217,7 +222,8 @@ public class ApplicationConfiguration {
                 transactionPort,
                 idGeneratorPort,
                 refundAllocationCalculator,
-                ledgerPostingFactory
+                ledgerPostingFactory,
+                businessMetricsPort
         );
     }
 
@@ -231,7 +237,8 @@ public class ApplicationConfiguration {
             OutboxPort outboxPort,
             TransactionPort transactionPort,
             IdGeneratorPort idGeneratorPort,
-            LedgerPostingFactory ledgerPostingFactory
+            LedgerPostingFactory ledgerPostingFactory,
+            BusinessMetricsPort businessMetricsPort
     ) {
         return new ProcessPayoutResultService(
                 payoutRepository,
@@ -241,7 +248,8 @@ public class ApplicationConfiguration {
                 outboxPort,
                 transactionPort,
                 idGeneratorPort,
-                ledgerPostingFactory
+                ledgerPostingFactory,
+                businessMetricsPort
         );
     }
 
@@ -372,7 +380,8 @@ public class ApplicationConfiguration {
             TransactionPort transactionPort,
             IdGeneratorPort idGeneratorPort,
             LedgerPostingFactory ledgerPostingFactory,
-            ClockPort clockPort
+            ClockPort clockPort,
+            BusinessMetricsPort businessMetricsPort
     ) {
         return new RetryAdminSettlementService(
                 settlementRepository,
@@ -384,7 +393,8 @@ public class ApplicationConfiguration {
                 transactionPort,
                 idGeneratorPort,
                 ledgerPostingFactory,
-                clockPort
+                clockPort,
+                businessMetricsPort
         );
     }
 

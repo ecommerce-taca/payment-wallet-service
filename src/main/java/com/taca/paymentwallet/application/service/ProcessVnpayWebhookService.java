@@ -46,6 +46,7 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
     private final AllocationCalculator allocationCalculator;
     private final LedgerPostingFactory ledgerPostingFactory;
     private final PaymentAttemptRepositoryPort paymentAttemptRepository;
+    private final BusinessMetricsPort businessMetrics;
 
     public ProcessVnpayWebhookService(
             PaymentRepositoryPort paymentRepository,
@@ -62,7 +63,8 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
             OutboxPort outboxPort,
             TransactionPort transactionPort,
             AllocationCalculator allocationCalculator,
-            LedgerPostingFactory ledgerPostingFactory
+            LedgerPostingFactory ledgerPostingFactory,
+            BusinessMetricsPort businessMetrics
     ) {
         this.paymentRepository = Objects.requireNonNull(paymentRepository);
         this.paymentAttemptRepository = Objects.requireNonNull(paymentAttemptRepository);
@@ -79,15 +81,27 @@ public class ProcessVnpayWebhookService implements ProcessVnpayWebhookUseCase {
         this.transactionPort = Objects.requireNonNull(transactionPort);
         this.allocationCalculator = Objects.requireNonNull(allocationCalculator);
         this.ledgerPostingFactory = Objects.requireNonNull(ledgerPostingFactory);
+        this.businessMetrics = Objects.requireNonNull(businessMetrics);
     }
 
     @Override
-    public ProcessVnpayWebhookResult execute(ProcessVnpayWebhookCommand command) {
+    public ProcessVnpayWebhookResult execute(
+            ProcessVnpayWebhookCommand command
+    ) {
         Objects.requireNonNull(command, "command must not be null");
 
         vnpayWebhookVerifierPort.verify(command);
 
-        return transactionPort.execute(() -> process(command));
+        ProcessVnpayWebhookResult result =
+                transactionPort.execute(() -> process(command));
+
+        businessMetrics.recordPayment(
+                "VNPAY",
+                result.paymentStatus(),
+                result.action().name()
+        );
+
+        return result;
     }
 
     private ProcessVnpayWebhookResult process(

@@ -16,6 +16,7 @@ import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
 import com.taca.paymentwallet.domain.wallet.Wallet;
 import com.taca.paymentwallet.domain.wallet.WalletAllocatedEvent;
+import com.taca.paymentwallet.support.FakeBusinessMetricsPort;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -50,7 +51,8 @@ class ProcessCodPaymentServiceTest {
             outbox,
             transactionPort,
             new AllocationCalculator(),
-            new LedgerPostingFactory()
+            new LedgerPostingFactory(),
+            new FakeBusinessMetricsPort()
     );
 
     @Test

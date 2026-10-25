@@ -1,5 +1,6 @@
 package com.taca.paymentwallet.infrastructure.config;
 
+import com.taca.paymentwallet.application.port.out.BusinessMetricsPort;
 import com.taca.paymentwallet.application.port.out.OperationMetricsPort;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
@@ -53,6 +54,13 @@ class ObservabilityContractAuditTest {
     void shouldWireOperationMetricsFoundation() {
         assertThat(
                 hasInfrastructureBean(OperationMetricsPort.class)
+        ).isTrue();
+    }
+
+    @Test
+    void shouldWireBusinessMetrics() {
+        assertThat(
+                hasInfrastructureBean(BusinessMetricsPort.class)
         ).isTrue();
     }
 
