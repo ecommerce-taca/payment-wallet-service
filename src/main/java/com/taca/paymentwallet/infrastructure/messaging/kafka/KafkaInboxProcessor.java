@@ -7,6 +7,7 @@ import com.taca.paymentwallet.application.port.in.ProcessInboxEventUseCase;
 import com.taca.paymentwallet.application.result.InboxEventExecutionResult;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
+import java.time.Duration;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -15,20 +16,19 @@ public class KafkaInboxProcessor {
     private final ProcessInboxEventUseCase processInboxEventUseCase;
     private final KafkaInboundMetadataExtractor metadataExtractor;
     private final KafkaPayloadHasher payloadHasher;
+    private final KafkaConsumerObservation observation;
 
     public KafkaInboxProcessor(
             ProcessInboxEventUseCase processInboxEventUseCase,
             KafkaInboundMetadataExtractor metadataExtractor,
-            KafkaPayloadHasher payloadHasher
+            KafkaPayloadHasher payloadHasher,
+            KafkaConsumerObservation observation
     ) {
         this.processInboxEventUseCase =
                 Objects.requireNonNull(processInboxEventUseCase);
-
-        this.metadataExtractor =
-                Objects.requireNonNull(metadataExtractor);
-
-        this.payloadHasher =
-                Objects.requireNonNull(payloadHasher);
+        this.metadataExtractor = Objects.requireNonNull(metadataExtractor);
+        this.payloadHasher = Objects.requireNonNull(payloadHasher);
+        this.observation = Objects.requireNonNull(observation);
     }
 
     public <T> InboxEventExecutionResult<T> process(
@@ -77,6 +77,8 @@ public class KafkaInboxProcessor {
                         metadata.tracestate()
                 );
 
+        long startedAt = System.nanoTime();
+
         try {
             RequestMetadataContext.set(requestMetadata);
 
@@ -89,13 +91,35 @@ public class KafkaInboxProcessor {
                             payloadHasher.hash(payload)
                     );
 
-            return processInboxEventUseCase.execute(
-                    command,
-                    action
+            InboxEventExecutionResult<T> result =
+                    processInboxEventUseCase.execute(command, action);
+
+            observation.record(
+                    consumerName,
+                    eventType,
+                    record.topic(),
+                    result.isDuplicate() ? "duplicate" : "success",
+                    elapsed(startedAt)
             );
+
+            return result;
+        } catch (RuntimeException exception) {
+            observation.record(
+                    consumerName,
+                    eventType,
+                    record.topic(),
+                    "failure",
+                    elapsed(startedAt)
+            );
+
+            throw exception;
         } finally {
             RequestMetadataContext.clear();
         }
+    }
+
+    private Duration elapsed(long startedAt) {
+        return Duration.ofNanos(System.nanoTime() - startedAt);
     }
 
     private void requireText(
