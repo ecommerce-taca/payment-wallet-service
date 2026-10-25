@@ -21,6 +21,7 @@ import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
 import com.taca.paymentwallet.infrastructure.persistence.repository.*;
 import com.taca.paymentwallet.infrastructure.persistence.support.PersistenceUuidGenerator;
 import com.taca.paymentwallet.infrastructure.transaction.SpringTransactionAdapter;
+import com.taca.paymentwallet.support.FakeBusinessMetricsPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -374,7 +375,8 @@ class ProcessVnpayWebhookIntegrationTest {
                 outbox,
                 transactionPort,
                 new AllocationCalculator(),
-                new LedgerPostingFactory()
+                new LedgerPostingFactory(),
+                new FakeBusinessMetricsPort()
         );
     }
 

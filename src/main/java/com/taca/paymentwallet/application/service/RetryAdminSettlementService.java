@@ -32,6 +32,7 @@ public class RetryAdminSettlementService implements RetryAdminSettlementUseCase 
     private final IdGeneratorPort idGeneratorPort;
     private final LedgerPostingFactory ledgerPostingFactory;
     private final ClockPort clockPort;
+    private final BusinessMetricsPort businessMetrics;
 
     public RetryAdminSettlementService(
             SettlementRepositoryPort settlementRepository,
@@ -43,7 +44,8 @@ public class RetryAdminSettlementService implements RetryAdminSettlementUseCase 
             TransactionPort transactionPort,
             IdGeneratorPort idGeneratorPort,
             LedgerPostingFactory ledgerPostingFactory,
-            ClockPort clockPort
+            ClockPort clockPort,
+            BusinessMetricsPort businessMetrics
     ) {
         this.settlementRepository = Objects.requireNonNull(settlementRepository);
         this.walletRepository = Objects.requireNonNull(walletRepository);
@@ -55,12 +57,19 @@ public class RetryAdminSettlementService implements RetryAdminSettlementUseCase 
         this.idGeneratorPort = Objects.requireNonNull(idGeneratorPort);
         this.ledgerPostingFactory = Objects.requireNonNull(ledgerPostingFactory);
         this.clockPort = Objects.requireNonNull(clockPort);
+        this.businessMetrics = Objects.requireNonNull(businessMetrics);
     }
 
     @Override
     public RetryAdminSettlementResult execute(RetryAdminSettlementCommand command) {
         Objects.requireNonNull(command, "command must not be null");
-        return transactionPort.execute(() -> retry(command));
+
+        RetryAdminSettlementResult result =
+                transactionPort.execute(() -> retry(command));
+
+        businessMetrics.recordSettlementRetry(result.status());
+
+        return result;
     }
 
     private RetryAdminSettlementResult retry(RetryAdminSettlementCommand command) {

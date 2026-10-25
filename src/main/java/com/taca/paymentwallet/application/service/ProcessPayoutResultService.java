@@ -7,13 +7,7 @@ import com.taca.paymentwallet.application.exception.WalletNotFoundException;
 import com.taca.paymentwallet.application.payout.PayoutResultProcessingAction;
 import com.taca.paymentwallet.application.payout.PayoutResultStatus;
 import com.taca.paymentwallet.application.port.in.ProcessPayoutResultUseCase;
-import com.taca.paymentwallet.application.port.out.IdGeneratorPort;
-import com.taca.paymentwallet.application.port.out.LedgerAccountLookupPort;
-import com.taca.paymentwallet.application.port.out.LedgerPostingRepositoryPort;
-import com.taca.paymentwallet.application.port.out.OutboxPort;
-import com.taca.paymentwallet.application.port.out.PayoutRepositoryPort;
-import com.taca.paymentwallet.application.port.out.TransactionPort;
-import com.taca.paymentwallet.application.port.out.WalletRepositoryPort;
+import com.taca.paymentwallet.application.port.out.*;
 import com.taca.paymentwallet.application.result.ProcessPayoutResult;
 import com.taca.paymentwallet.domain.payout.Payout;
 import com.taca.paymentwallet.domain.payout.PayoutStatus;
@@ -35,6 +29,7 @@ public class ProcessPayoutResultService implements ProcessPayoutResultUseCase {
     private final TransactionPort transactionPort;
     private final IdGeneratorPort idGeneratorPort;
     private final LedgerPostingFactory ledgerPostingFactory;
+    private final BusinessMetricsPort businessMetrics;
 
     public ProcessPayoutResultService(
             PayoutRepositoryPort payoutRepository,
@@ -44,7 +39,8 @@ public class ProcessPayoutResultService implements ProcessPayoutResultUseCase {
             OutboxPort outboxPort,
             TransactionPort transactionPort,
             IdGeneratorPort idGeneratorPort,
-            LedgerPostingFactory ledgerPostingFactory
+            LedgerPostingFactory ledgerPostingFactory,
+            BusinessMetricsPort businessMetrics
     ) {
         this.payoutRepository = Objects.requireNonNull(payoutRepository);
         this.walletRepository = Objects.requireNonNull(walletRepository);
@@ -54,13 +50,22 @@ public class ProcessPayoutResultService implements ProcessPayoutResultUseCase {
         this.transactionPort = Objects.requireNonNull(transactionPort);
         this.idGeneratorPort = Objects.requireNonNull(idGeneratorPort);
         this.ledgerPostingFactory = Objects.requireNonNull(ledgerPostingFactory);
+        this.businessMetrics = Objects.requireNonNull(businessMetrics);
     }
 
     @Override
     public ProcessPayoutResult execute(ProcessPayoutResultCommand command) {
         Objects.requireNonNull(command, "command must not be null");
 
-        return transactionPort.execute(() -> process(command));
+        ProcessPayoutResult result =
+                transactionPort.execute(() -> process(command));
+
+        businessMetrics.recordPayout(
+                result.payoutStatus(),
+                result.action().name()
+        );
+
+        return result;
     }
 
     private ProcessPayoutResult process(ProcessPayoutResultCommand command) {

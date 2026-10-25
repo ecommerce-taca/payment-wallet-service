@@ -1,6 +1,7 @@
 package com.taca.paymentwallet.infrastructure.messaging.kafka;
 
 import com.taca.paymentwallet.application.port.in.ProcessInboxEventUseCase;
+import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,8 +10,10 @@ import org.springframework.context.annotation.Configuration;
 public class KafkaConsumerConfiguration {
 
     @Bean
-    KafkaInboundMetadataExtractor kafkaInboundMetadataExtractor() {
-        return new KafkaInboundMetadataExtractor();
+    KafkaInboundMetadataExtractor kafkaInboundMetadataExtractor(
+            W3cTraceContext traceContext
+    ) {
+        return new KafkaInboundMetadataExtractor(traceContext);
     }
 
     @Bean

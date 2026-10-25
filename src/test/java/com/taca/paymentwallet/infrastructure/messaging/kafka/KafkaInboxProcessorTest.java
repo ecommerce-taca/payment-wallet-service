@@ -5,6 +5,7 @@ import com.taca.paymentwallet.application.inbox.InboxEventProcessingAction;
 import com.taca.paymentwallet.application.metadata.RequestMetadataContext;
 import com.taca.paymentwallet.application.port.in.ProcessInboxEventUseCase;
 import com.taca.paymentwallet.application.result.InboxEventExecutionResult;
+import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.AfterEach;
@@ -38,7 +39,9 @@ class KafkaInboxProcessorTest {
         KafkaInboxProcessor processor =
                 new KafkaInboxProcessor(
                         useCase,
-                        new KafkaInboundMetadataExtractor(),
+                        new KafkaInboundMetadataExtractor(
+                                new W3cTraceContext()
+                        ),
                         new KafkaPayloadHasher(),
                         observation
                 );
@@ -98,7 +101,9 @@ class KafkaInboxProcessorTest {
         KafkaInboxProcessor processor =
                 new KafkaInboxProcessor(
                         useCase,
-                        new KafkaInboundMetadataExtractor(),
+                        new KafkaInboundMetadataExtractor(
+                                new W3cTraceContext()
+                        ),
                         new KafkaPayloadHasher(),
                         observation
                 );
@@ -155,7 +160,9 @@ class KafkaInboxProcessorTest {
 
         KafkaInboxProcessor processor = new KafkaInboxProcessor(
                 useCase,
-                new KafkaInboundMetadataExtractor(),
+                new KafkaInboundMetadataExtractor(
+                        new W3cTraceContext()
+                ),
                 new KafkaPayloadHasher(),
                 observation
         );
@@ -188,7 +195,9 @@ class KafkaInboxProcessorTest {
     void shouldRecordDuplicateConsumption() {
         KafkaInboxProcessor processor = new KafkaInboxProcessor(
                 new DuplicateInboxUseCase(),
-                new KafkaInboundMetadataExtractor(),
+                new KafkaInboundMetadataExtractor(
+                        new W3cTraceContext()
+                ),
                 new KafkaPayloadHasher(),
                 observation
         );
@@ -218,7 +227,9 @@ class KafkaInboxProcessorTest {
 
         KafkaInboxProcessor processor = new KafkaInboxProcessor(
                 useCase,
-                new KafkaInboundMetadataExtractor(),
+                new KafkaInboundMetadataExtractor(
+                        new W3cTraceContext()
+                ),
                 new KafkaPayloadHasher(),
                 observation
         );
