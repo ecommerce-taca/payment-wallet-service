@@ -1,5 +1,6 @@
 package com.taca.paymentwallet.infrastructure.messaging.kafka;
 
+import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
 
@@ -7,6 +8,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 public class KafkaInboundMetadataExtractor {
+
+    private final W3cTraceContext traceContext;
 
     public KafkaInboundMetadata extract(ConsumerRecord<String, String> record) {
         return extract(record, null);
@@ -30,12 +33,20 @@ public class KafkaInboundMetadataExtractor {
             );
         }
 
+        String traceparent = inboundTraceparent(record);
+
         return new KafkaInboundMetadata(
                 eventId,
                 header(record, KafkaHeaderNames.REQUEST_ID),
-                header(record, KafkaHeaderNames.TRACEPARENT),
+                traceparent,
                 header(record, KafkaHeaderNames.TRACESTATE)
         );
+    }
+
+    public KafkaInboundMetadataExtractor(
+            W3cTraceContext traceContext
+    ) {
+        this.traceContext = Objects.requireNonNull(traceContext);
     }
 
     private String header(
@@ -62,5 +73,18 @@ public class KafkaInboundMetadataExtractor {
         String normalized = value.trim();
 
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String inboundTraceparent(
+            ConsumerRecord<String, String> record
+    ) {
+        String value = header(
+                record,
+                KafkaHeaderNames.TRACEPARENT
+        );
+
+        return value == null
+                ? traceContext.create()
+                : traceContext.childOf(value);
     }
 }

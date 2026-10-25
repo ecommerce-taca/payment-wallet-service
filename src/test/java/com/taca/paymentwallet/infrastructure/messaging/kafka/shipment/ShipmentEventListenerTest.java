@@ -11,6 +11,7 @@ import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaConsumerObserv
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaInboundMetadataExtractor;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaInboxProcessor;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaPayloadHasher;
+import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
@@ -32,7 +33,9 @@ class ShipmentEventListenerTest {
 
     private final KafkaInboxProcessor inboxProcessor = new KafkaInboxProcessor(
             inboxUseCase,
-            new KafkaInboundMetadataExtractor(),
+            new KafkaInboundMetadataExtractor(
+                    new W3cTraceContext()
+            ),
             new KafkaPayloadHasher(),
             new KafkaConsumerObservation(new SimpleMeterRegistry())
     );

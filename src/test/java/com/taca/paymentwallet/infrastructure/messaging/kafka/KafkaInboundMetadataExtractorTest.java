@@ -1,5 +1,6 @@
 package com.taca.paymentwallet.infrastructure.messaging.kafka;
 
+import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 
@@ -11,7 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class KafkaInboundMetadataExtractorTest {
 
     private final KafkaInboundMetadataExtractor extractor =
-            new KafkaInboundMetadataExtractor();
+            new KafkaInboundMetadataExtractor(
+                    new W3cTraceContext()
+            );
 
     @Test
     void shouldExtractKafkaMetadata() {
@@ -112,6 +115,46 @@ class KafkaInboundMetadataExtractorTest {
 
         assertThat(metadata.eventId())
                 .isEqualTo("header-event-001");
+    }
+
+    @Test
+    void shouldCreateTraceWhenTraceparentIsMissing() {
+        ConsumerRecord<String, String> record = record();
+
+        record.headers().add(
+                KafkaHeaderNames.EVENT_ID,
+                bytes("event-001")
+        );
+
+        KafkaInboundMetadata metadata =
+                extractor.extract(record);
+
+        assertThat(metadata.traceparent())
+                .startsWith("00-");
+    }
+
+    @Test
+    void shouldReplaceMalformedTraceparent() {
+        ConsumerRecord<String, String> record = record();
+
+        record.headers().add(
+                KafkaHeaderNames.EVENT_ID,
+                bytes("event-001")
+        );
+
+        record.headers().add(
+                KafkaHeaderNames.TRACEPARENT,
+                bytes("invalid")
+        );
+
+        KafkaInboundMetadata metadata =
+                extractor.extract(record);
+
+        assertThat(metadata.traceparent())
+                .startsWith("00-");
+
+        assertThat(metadata.traceparent())
+                .isNotEqualTo("invalid");
     }
 
     private ConsumerRecord<String, String> record() {

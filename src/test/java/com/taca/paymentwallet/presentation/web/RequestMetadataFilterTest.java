@@ -2,6 +2,7 @@ package com.taca.paymentwallet.presentation.web;
 
 import com.taca.paymentwallet.application.metadata.RequestMetadata;
 import com.taca.paymentwallet.application.metadata.RequestMetadataContext;
+import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 class RequestMetadataFilterTest {
 
     private final RequestMetadataFilter filter =
-            new RequestMetadataFilter();
+            new RequestMetadataFilter(
+                    new W3cTraceContext()
+            );
 
     @AfterEach
     void tearDown() {
@@ -66,7 +69,12 @@ class RequestMetadataFilterTest {
                 .isEqualTo("req-001");
 
         assertThat(captured.get().traceparent())
-                .isEqualTo(
+                .startsWith(
+                        "00-4bf92f3577b34da6a3ce929d0e0e4736-"
+                );
+
+        assertThat(captured.get().traceparent())
+                .isNotEqualTo(
                         "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
                 );
 
@@ -75,5 +83,35 @@ class RequestMetadataFilterTest {
 
         assertThat(RequestMetadataContext.current())
                 .isEmpty();
+    }
+
+    @Test
+    void shouldCreateTraceWhenHeaderIsMissing()
+            throws Exception {
+
+        MockHttpServletRequest request =
+                new MockHttpServletRequest();
+
+        MockHttpServletResponse response =
+                new MockHttpServletResponse();
+
+        AtomicReference<RequestMetadata> captured =
+                new AtomicReference<>();
+
+        filter.doFilter(
+                request,
+                response,
+                (req, res) ->
+                        captured.set(
+                                RequestMetadataContext.current()
+                                        .orElseThrow()
+                        )
+        );
+
+        assertThat(captured.get().traceparent())
+                .startsWith("00-");
+
+        assertThat(response.getHeader("traceparent"))
+                .isEqualTo(captured.get().traceparent());
     }
 }

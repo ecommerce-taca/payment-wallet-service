@@ -15,6 +15,7 @@ import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
 import com.taca.paymentwallet.infrastructure.observability.HttpRequestObservation;
 import com.taca.paymentwallet.infrastructure.observability.MicrometerOperationMetricsAdapter;
+import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.audit.AuditLogPersistenceSupport;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
@@ -777,5 +778,10 @@ public class InfrastructureConfiguration {
             MeterRegistry meterRegistry
     ) {
         return new HttpRequestObservation(meterRegistry);
+    }
+
+    @Bean
+    W3cTraceContext w3cTraceContext() {
+        return new W3cTraceContext();
     }
 }
