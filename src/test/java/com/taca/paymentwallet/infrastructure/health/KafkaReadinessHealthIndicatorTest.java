@@ -93,6 +93,12 @@ class KafkaReadinessHealthIndicatorTest {
         ).isEqualTo(
                 Set.of("shipment.events.v1")
         );
+
+        assertThat(health.getDetails())
+                .containsEntry(
+                        "reason",
+                        "required_topics_missing"
+                );
     }
 
     @Test

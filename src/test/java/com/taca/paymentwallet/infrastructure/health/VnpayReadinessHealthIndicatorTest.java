@@ -82,6 +82,12 @@ class VnpayReadinessHealthIndicatorTest {
                         "hashSecret"
                 )
         );
+
+        assertThat(health.getDetails())
+                .containsEntry(
+                        "reason",
+                        "configuration_incomplete"
+                );
     }
 
     @Test
