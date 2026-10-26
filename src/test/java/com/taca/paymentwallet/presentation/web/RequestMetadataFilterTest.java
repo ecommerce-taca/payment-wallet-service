@@ -6,6 +6,7 @@ import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
@@ -113,5 +114,40 @@ class RequestMetadataFilterTest {
 
         assertThat(response.getHeader("traceparent"))
                 .isEqualTo(captured.get().traceparent());
+    }
+
+    @Test
+    void shouldBindAndClearMdcDuringRequest()
+            throws Exception {
+
+        MockHttpServletRequest request =
+                new MockHttpServletRequest();
+
+        request.addHeader(
+                "X-Request-ID",
+                "req-001"
+        );
+
+        MockHttpServletResponse response =
+                new MockHttpServletResponse();
+
+        filter.doFilter(
+                request,
+                response,
+                (req, res) -> {
+                    assertThat(MDC.get("request_id"))
+                            .isEqualTo("req-001");
+
+                    assertThat(MDC.get("trace_id"))
+                            .isNotBlank();
+
+                    assertThat(MDC.get("span_id"))
+                            .isNotBlank();
+                }
+        );
+
+        assertThat(MDC.get("request_id")).isNull();
+        assertThat(MDC.get("trace_id")).isNull();
+        assertThat(MDC.get("span_id")).isNull();
     }
 }

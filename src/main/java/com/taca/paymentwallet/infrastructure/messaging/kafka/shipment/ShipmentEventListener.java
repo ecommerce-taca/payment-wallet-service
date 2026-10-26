@@ -5,12 +5,19 @@ import com.taca.paymentwallet.application.payment.CodPaymentResultStatus;
 import com.taca.paymentwallet.application.port.in.ProcessCodPaymentUseCase;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaInboxProcessor;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
 
 @Component
+@ConditionalOnProperty(
+        prefix = "app.kafka.listeners",
+        name = "enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 public class ShipmentEventListener {
 
     public static final String CONSUMER_NAME = "payment-wallet-shipment-consumer";

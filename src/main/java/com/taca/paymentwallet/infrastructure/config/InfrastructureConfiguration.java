@@ -579,6 +579,12 @@ public class InfrastructureConfiguration {
     }
 
     @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(
+            prefix = "app.kafka.health",
+            name = "enabled",
+            havingValue = "true",
+            matchIfMissing = true
+    )
     AdminClient kafkaAdminClient(
             KafkaProperties kafkaProperties
     ) {
@@ -588,12 +594,28 @@ public class InfrastructureConfiguration {
     }
 
     @Bean
+    @ConditionalOnProperty(
+            prefix = "app.kafka.health",
+            name = "enabled",
+            havingValue = "true",
+            matchIfMissing = true
+    )
     KafkaTopicNamesClient kafkaTopicNamesClient(
             AdminClient adminClient
     ) {
         return new AdminClientKafkaTopicNamesClient(
                 adminClient
         );
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            prefix = "app.kafka.health",
+            name = "enabled",
+            havingValue = "false"
+    )
+    KafkaTopicNamesClient disabledKafkaTopicNamesClient() {
+        return timeout -> java.util.Set.of();
     }
 
     @Bean

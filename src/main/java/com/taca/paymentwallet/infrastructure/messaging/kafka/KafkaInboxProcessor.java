@@ -5,6 +5,7 @@ import com.taca.paymentwallet.application.metadata.RequestMetadata;
 import com.taca.paymentwallet.application.metadata.RequestMetadataContext;
 import com.taca.paymentwallet.application.port.in.ProcessInboxEventUseCase;
 import com.taca.paymentwallet.application.result.InboxEventExecutionResult;
+import com.taca.paymentwallet.infrastructure.observability.MdcCorrelationContext;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.time.Duration;
@@ -81,6 +82,7 @@ public class KafkaInboxProcessor {
 
         try {
             RequestMetadataContext.set(requestMetadata);
+            MdcCorrelationContext.bind(requestMetadata);
 
             ProcessInboxEventCommand command =
                     new ProcessInboxEventCommand(
@@ -114,6 +116,7 @@ public class KafkaInboxProcessor {
 
             throw exception;
         } finally {
+            MdcCorrelationContext.clear();
             RequestMetadataContext.clear();
         }
     }

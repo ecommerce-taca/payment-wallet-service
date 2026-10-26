@@ -2,6 +2,7 @@ package com.taca.paymentwallet.presentation.web;
 
 import com.taca.paymentwallet.application.metadata.RequestMetadata;
 import com.taca.paymentwallet.application.metadata.RequestMetadataContext;
+import com.taca.paymentwallet.infrastructure.observability.MdcCorrelationContext;
 import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -46,8 +47,11 @@ public class RequestMetadataFilter extends OncePerRequestFilter {
 
         try {
             RequestMetadataContext.set(metadata);
+            MdcCorrelationContext.bind(metadata);
+
             filterChain.doFilter(request, response);
         } finally {
+            MdcCorrelationContext.clear();
             RequestMetadataContext.clear();
         }
     }
