@@ -6,11 +6,19 @@ spring:
     active: local
 
 management:
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+
   endpoints:
     web:
       base-path: /
       exposure:
-        include: health,info
+        include:
+          - health
+          - info
+          - prometheus
       path-mapping:
         health: health
 

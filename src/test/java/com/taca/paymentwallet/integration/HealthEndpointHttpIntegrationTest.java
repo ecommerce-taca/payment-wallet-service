@@ -57,6 +57,16 @@ class HealthEndpointHttpIntegrationTest {
         );
 
         registry.add(
+                "app.kafka.topic-admin.enabled",
+                () -> "false"
+        );
+
+        registry.add(
+                "app.kafka.listeners.enabled",
+                () -> "false"
+        );
+
+        registry.add(
                 "vnpay.tmn-code",
                 () -> "TEST_TMN"
         );
