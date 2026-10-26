@@ -16,9 +16,7 @@ public class KafkaOutboxMessagePublisherAdapter
         implements OutboxMessagePublisherPort {
 
     private static final Logger log =
-            LoggerFactory.getLogger(
-                    KafkaOutboxMessagePublisherAdapter.class
-            );
+            LoggerFactory.getLogger(KafkaOutboxMessagePublisherAdapter.class);
 
     private static final Set<String> SUPPORTED_EVENT_TYPES =
             Set.of(
