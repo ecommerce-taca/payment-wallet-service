@@ -2,8 +2,8 @@ package com.taca.paymentwallet.presentation.web;
 
 import com.taca.paymentwallet.application.metadata.RequestMetadata;
 import com.taca.paymentwallet.application.metadata.RequestMetadataContext;
-import com.taca.paymentwallet.infrastructure.observability.MdcCorrelationContext;
-import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
+import com.taca.paymentwallet.application.metadata.MdcCorrelationContext;
+import com.taca.paymentwallet.application.observability.W3cTraceContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

@@ -2,13 +2,13 @@ package com.taca.paymentwallet.infrastructure.config;
 
 import com.taca.paymentwallet.application.port.out.BusinessMetricsPort;
 import com.taca.paymentwallet.application.port.out.OperationMetricsPort;
+import com.taca.paymentwallet.application.observability.HttpRequestObservation;
+import com.taca.paymentwallet.application.observability.W3cTraceContext;
 import com.taca.paymentwallet.infrastructure.health.KafkaReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.OutboxBacklogHealthIndicator;
 import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicator;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxOperationalObservation;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.OutboxPublisherObservation;
-import com.taca.paymentwallet.infrastructure.observability.HttpRequestObservation;
-import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.Bean;
 
