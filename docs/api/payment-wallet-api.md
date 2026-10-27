@@ -1,9 +1,9 @@
 # API Spec — Payment-Wallet Service
 
 > Nguồn: `docs/lld/payment-wallet.md` · `docs/db/payment-wallet.md` · HLD/Penpot · ADR-002 · ADR-003  
-> Base path: `/api/v1` · VNPAY sandbox + COD · Payment secrets không đi qua client  
-> Cập nhật: `2026-10-18`  
-> Trạng thái: Phase 6 Payment + Refund APIs đã hoàn thiện. Phase 7 đã hoàn thiện seller wallet, ledger và revenue runtime. Các seller payout contract còn OPEN theo ADR-003 tiếp tục được gate thay vì tự suy diễn production behavior.
+> Base path business API: `/api/v1` · VNPAY sandbox + COD · Payment secrets không đi qua client  
+> Cập nhật: `2026-10-26`  
+> Trạng thái: Phase 6 Payment + Refund APIs, Phase 7 Seller Finance, Phase 8 Admin Finance và Phase 9 Observability + Operations đã hoàn thiện trong phạm vi runtime authoritative. Các contract còn OPEN theo ADR-003 tiếp tục được gate thay vì tự suy diễn production behavior.
 
 ## 1. Quy ước API chung
 
@@ -12,13 +12,14 @@
 | Auth | Buyer/seller/admin JWT qua Gateway. Payment-Wallet đọc actor context do Gateway inject. Internal Order-Commerce được kiểm tra bằng `InternalCallerPolicy`; transport production để populate `InternalCallerContext` vẫn là contract mở, không tự suy diễn header service-auth mới. |
 | Actor context | Đọc `X-User-ID`, `X-User-Roles`, `X-User-Permissions`, `X-User-Shop-Scope` do Gateway inject. |
 | Seller scope | Seller Finance suy ra shop từ actor context. Một seller actor phải có đúng một shop trong `shopScope`; seller APIs không nhận `shop_id` từ query/body để chọn shop. |
-| Request ID | `X-Request-ID` bắt buộc ở các Payment/Refund/Seller Finance HTTP APIs hiện đã expose; Gateway tạo/propagate. |
-| Trace | W3C `traceparent`/`tracestate` được propagate qua REST/Kafka và được ghi vào outbox metadata khi có. |
+| Request ID | `X-Request-ID` bắt buộc ở các business/admin HTTP APIs hiện đã expose theo contract tương ứng. Gateway tạo/propagate. |
+| Trace | W3C `traceparent`/`tracestate` được validate, tạo/continue và propagate qua REST, outbox và Kafka metadata. |
 | Time/money | ISO-8601 UTC; integer VND, không dùng FLOAT cho tiền. |
 | Idempotency | Create Payment và Request Refund dùng `Idempotency-Key`; provider webhook dedupe theo provider event. |
-| Response | Success: `{data,meta:{request_id}}`; error: `{error:{code,message},meta:{request_id}}`. |
+| Response | Success business API: `{data,meta:{request_id}}`; error: `{error:{code,message},meta:{request_id}}`. |
 | Pagination | API có phân trang dùng `page` từ 1, `size` mặc định 20 tối đa 100; meta có thể trả `page,size,total,total_pages`. |
 | Redaction | Không trả/log token, VNPAY signature/secret, raw provider payload, bank/card credential hoặc PII nhạy cảm. |
+| Operational endpoints | Health và Prometheus là operational surfaces, không dùng base path `/api/v1`. |
 
 ### 1.1 Phạm vi runtime hiện tại
 
@@ -43,7 +44,23 @@ Các target endpoint seller chưa được runtime expose:
 
 `POST /seller/payouts` bị production-gate vì các contract payout quan trọng vẫn OPEN theo ADR-003.
 
-Admin Finance APIs thuộc Phase 8.
+Phase 8 triển khai Admin Finance runtime APIs:
+
+- reconciliation;
+- fee configuration;
+- tax configuration;
+- settlement read/retry;
+- finance summary/export.
+
+Phase 9 triển khai operational surfaces:
+
+- `GET /health/live`
+- `GET /health/liveness`
+- `GET /health/ready`
+- `GET /health/readiness`
+- `GET /prometheus`
+
+Phase 9 không tạo `/api/v1/admin/operations`.
 
 ## 2. Danh sách endpoint
 
@@ -70,9 +87,13 @@ Admin Finance APIs thuộc Phase 8.
 | 18 | `GET /admin/finance/summary` | `FINANCE_OPS` | Tổng hợp tài chính sàn | Implemented |
 | 18a | `GET /admin/finance/summary/export` | `FINANCE_OPS` | Xuất báo cáo tài chính | Implemented |
 | 19 | `GET /health/live` | Ops | Liveness | Implemented |
+| 19a | `GET /health/liveness` | Ops | Conventional liveness probe | Implemented |
 | 20 | `GET /health/ready` | Ops | Readiness | Implemented |
+| 20a | `GET /health/readiness` | Ops | Conventional readiness probe | Implemented |
 
 > `POST /payments` và `POST /payments/{paymentId}/refunds` không dùng prefix `/internal/**`. Service tự enforce caller. Không được tự tạo một header service-auth mới như `X-Internal-Service` khi contract transport chưa được chốt.
+
+> Health/Prometheus endpoints là operational surfaces ở management base path `/`; chúng không thuộc business base path `/api/v1`.
 
 ## 3. Chi tiết endpoint
 
@@ -645,11 +666,17 @@ Endpoint nằm trong target API inventory nhưng runtime chưa implement.
 
 Không tự suy diễn response shape, pagination hoặc filtering behavior nếu chưa có contract authoritative tương ứng.
 
-### 3.7 Reconciliation/health
+### 3.7 Reconciliation and operational endpoints
 
-> Reconciliation thuộc Phase 8; health endpoints đã có runtime foundation.
+#### 3.7.1 `GET /admin/payments/reconciliation`
 
-`GET /admin/payments/reconciliation` target:
+Authorization:
+
+- `FINANCE_OPS`.
+
+The endpoint is read-only.
+
+Example response:
 
 ```json
 {
@@ -675,12 +702,77 @@ Không tự suy diễn response shape, pagination hoặc filtering behavior nế
 }
 ```
 
-`match:false` chỉ phục vụ điều tra, không tự sửa financial state.
+`match:false` chỉ phục vụ điều tra.
 
-Health:
+Reconciliation không tự sửa financial state.
 
-- `/health/live`: liveness;
-- `/health/ready`: readiness gồm DB/Kafka/outbox/VNPAY readiness theo cấu hình runtime.
+#### 3.7.2 Health
+
+Canonical liveness:
+
+`GET /health/live`
+
+Conventional Spring liveness:
+
+`GET /health/liveness`
+
+Liveness không phụ thuộc vào DB, Kafka, VNPAY hoặc outbox backlog.
+
+Canonical readiness:
+
+`GET /health/ready`
+
+Conventional Spring readiness:
+
+`GET /health/readiness`
+
+Readiness hiện gồm:
+
+- `readinessState`;
+- DB;
+- Kafka readiness;
+- outbox backlog;
+- VNPAY configuration readiness.
+
+Dependency failure có thể làm readiness trả HTTP `503` trong khi liveness vẫn
+`UP`.
+
+Health details không expose secret.
+
+#### 3.7.3 `GET /prometheus`
+
+Prometheus-compatible operational scrape endpoint.
+
+Runtime Actuator exposure chỉ gồm:
+
+- `health`;
+- `info`;
+- `prometheus`.
+
+Các endpoint sau không được expose mặc định:
+
+- `/metrics`;
+- `/env`;
+- `/configprops`;
+- `/beans`;
+- `/heapdump`;
+- `/threaddump`;
+- `/loggers`.
+
+`/prometheus` là operational endpoint, không phải business API.
+
+Production deployment nên giới hạn access endpoint này cho monitoring
+infrastructure phù hợp.
+
+Phase 9 không tạo custom controller để expose Prometheus.
+
+Phase 9 cũng không tạo:
+
+`/api/v1/admin/operations`
+
+hoặc:
+
+`/api/v1/admin/operations/outbox`
 
 ### 3.8 Admin finance back-office (`FINANCE_OPS`)
 
@@ -769,7 +861,7 @@ Headers:
 
 Authorization:
 
-- `FINANCE_OPS`
+- `FINANCE_OPS`;
 - MFA step-up required.
 
 The endpoint has no request body.
@@ -830,16 +922,14 @@ Download contract:
 - storage provider details are not part of the API contract;
 - object-storage credentials and internal object keys must not be exposed.
 
-Phase 8V status:
-
 Runtime status:
+
 - CSV UTF-8 export is implemented;
 - the endpoint requires `FINANCE_OPS`;
 - exports are stored temporarily behind an opaque capability token;
 - temporary download URLs expire after 30 minutes;
 - expired or unknown URLs return `FINANCE_EXPORT_NOT_FOUND`;
 - storage provider details are not exposed by the API.
-
 
 ## 4. Mã lỗi
 
@@ -861,12 +951,16 @@ Runtime status:
 | `PAYMENT_ATTEMPT_NOT_FOUND` | 404 | Không tìm thấy payment attempt cho provider transaction |
 | `REFUND_NOT_FOUND` | 404 | Không tìm thấy refund |
 | `WALLET_NOT_FOUND` | 404 | Không tìm thấy seller wallet |
+| `SETTLEMENT_BATCH_NOT_FOUND` | 404 | Settlement batch không tồn tại |
+| `FINANCE_EXPORT_NOT_FOUND` | 404 | Finance export không tồn tại hoặc đã hết hạn |
+| `RESOURCE_NOT_FOUND` | 404 | Resource/endpoint không tồn tại hoặc không được expose |
 | `PAYMENT_AMOUNT_MISMATCH` | 409 | Provider/payment amount mismatch |
 | `PAYMENT_IDEMPOTENCY_CONFLICT` | 409 | Idempotency key được reuse với request khác |
 | `REQUEST_ALREADY_PROCESSING` | 409 | Idempotent request cùng key đang xử lý |
 | `REFUND_AMOUNT_INVALID` | 409 | Refund vượt captured/pending limit |
 | `REFUND_STATE_INVALID` | 409 | Payment state hiện tại không cho phép refund |
 | `REFUND_AMOUNT_MISMATCH` | 409 | Refund result amount không khớp refund đã ghi |
+| `SETTLEMENT_BATCH_INVALID_STATE` | 409 | Settlement action/retry không hợp lệ với state hiện tại |
 | `INTERNAL_ERROR` | 500 | Unexpected server error; không expose internal detail |
 
 ### 4.2 Error codes reserved cho contract chưa expose
@@ -877,10 +971,7 @@ Runtime status:
 | `WALLET_FROZEN` | 403 | Wallet frozen |
 | `PAYOUT_NOT_ALLOWED` | 403/409 | Payout không thỏa policy |
 | `FEE_CONFIG_INVALID` | 409 | Fee/tax config không hợp lệ |
-| `SETTLEMENT_BATCH_INVALID_STATE` | 409 | Settlement action không hợp lệ với state |
-| `SETTLEMENT_BATCH_NOT_FOUND` | 404 | Settlement batch không tồn tại |
-| `SETTLEMENT_BATCH_INVALID_STATE` | 409 | Settlement retry yêu cầu batch ở trạng thái `FAILED` |
-| `FINANCE_EXPORT_NOT_FOUND` | 404 | Finance export không tồn tại hoặc đã hết hạn |
+
 Các code ở mục này không đồng nghĩa endpoint tương ứng đã được runtime expose.
 
 ## 5. Known contract debt & open items
@@ -889,7 +980,7 @@ Các code ở mục này không đồng nghĩa endpoint tương ứng đã đư�
 |---:|---|---|
 | 1 | Create-payment canonical Order snapshot | ADR-002 đã Accepted nhưng runtime vẫn dùng `orders[]`; đây là implementation debt. |
 | 2 | Internal service-auth transport | `InternalCallerPolicy` đã có nhưng production transport để populate `InternalCallerContext` chưa được chốt; không fabricate service header. |
-| 3 | VNPAY IP policy | Signature verification đã có; authoritative IP allowlist policy vẫn cần nguồn chính thức. |
+| 3 | VNPAY IP policy | Signature verification đã có; authoritative allowlist policy vẫn cần nguồn chính thức. |
 | 4 | Provider refund transport/worker | Refund HTTP/application foundation đã có; authoritative provider refund transport vẫn là contract riêng. |
 | 5 | Buyer notification recipient | `buyer.email` chưa có authoritative source theo ADR-003; không fabricate email. |
 | 6 | Seller revenue export | Target contract tồn tại nhưng runtime endpoint chưa được implement. |
@@ -899,6 +990,9 @@ Các code ở mục này không đồng nghĩa endpoint tương ứng đã đư�
 | 10 | Seller payout history | Target endpoint có trong API inventory nhưng runtime chưa implement. |
 | 11 | Settlement trigger/eligibility | Hold window, eligible timestamp và upstream trigger để tạo settlement batch mới vẫn OPEN theo ADR-003. Production `SettlementCandidatePort` và `RunSettlementUseCase` tiếp tục không được wire. Admin retry semantics cho persisted `FAILED` batch đã được resolve và runtime endpoint đã implement. |
 | 12 | Admin finance summary export storage scaling | Runtime hiện dùng temporary in-process storage. Multi-instance deployment có thể thay bằng shared object storage mà không thay đổi application/API contract. |
+| 13 | External tracing backend | Phase 9 implement W3C trace propagation nhưng chưa yêu cầu Tempo/Zipkin/Jaeger/OpenTelemetry Collector exporter. |
+| 14 | Monitoring deployment topology | `/prometheus` runtime endpoint đã có; production scrape network/access policy thuộc deployment hardening. |
+
 ## 6. Phase 6 closeout
 
 Phase 6 hoàn thiện phạm vi Payment + Refund APIs:
@@ -955,7 +1049,7 @@ Các target endpoint chưa runtime implement/expose:
 
 Phase 7 vì vậy được close cho phần seller wallet/ledger/revenue và payout safety gate. Những target contract chưa hoàn thiện tiếp tục được carry forward rõ ràng thay vì được giả lập để đạt trạng thái DONE.
 
-## Phase 8 closeout — Admin Finance
+## 8. Phase 8 closeout — Admin Finance
 
 Phase 8 completes the supported Admin Finance runtime surface whose contracts
 are authoritative.
@@ -1026,3 +1120,44 @@ Reconciliation:
 Phase 8 intentionally does not resolve unrelated open contracts such as
 seller payout, seller revenue export, settlement trigger/eligibility,
 notification recipients or bank-account ownership.
+
+## 9. Phase 9 closeout — Observability + Operations
+
+Phase 9 completes the current service observability foundation.
+
+Implemented:
+
+- operation counters and latency metrics;
+- outbox publish/DLQ metrics;
+- outbox pending/lag operational gauges;
+- Kafka consumer counters and latency metrics;
+- bounded HTTP request metrics;
+- financial business outcome metrics;
+- W3C trace-context creation and continuation;
+- HTTP → outbox → Kafka trace propagation;
+- hardened Kafka/outbox/VNPAY readiness;
+- Prometheus registry and `/prometheus` exposure;
+- structured MDC correlation logging using `request_id`, `trace_id` and
+  `span_id`.
+
+Health semantics:
+
+- dependency failures affect readiness;
+- external dependency failure does not automatically affect liveness.
+
+Actuator exposure:
+
+- `health`;
+- `info`;
+- `prometheus`.
+
+Sensitive management endpoints remain unexposed by default.
+
+Phase 9 does not add a vendor-specific tracing backend.
+
+Operational diagnostics 9K was intentionally skipped after review because
+the existing combination of health probes, Prometheus metrics, structured
+logs, reconciliation and settlement APIs is sufficient for the current
+runtime scope.
+
+No new `/api/v1/admin/operations` API contract is introduced.
