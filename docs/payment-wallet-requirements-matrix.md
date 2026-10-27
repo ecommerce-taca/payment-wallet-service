@@ -44,11 +44,11 @@ Status:
 | API | Seller revenue export | TODO | Target contract exists; runtime endpoint not implemented |
 | API | Seller payout request | BLOCKED | ADR-003 payout-gate and bank-account source remain OPEN |
 | API | Seller payout history | TODO | Endpoint listed in target API inventory; runtime endpoint not implemented |
-| API | Admin finance endpoints | TODO | Phase 8 |
+| API | Admin finance endpoints | DONE | Reconciliation, fee/tax configuration, settlement read/retry and finance summary/export implemented in Phase 8 |
 | Security | Actor context | DONE | Actor context/filter/guard foundation |
 | Security | Seller single-shop scope | DONE | Seller access requires exactly one shop in actor `shopScope` |
 | Security | FINANCE_OPS scope | DONE | Finance authorization foundation from Phase 5 |
-| Security | Step-up 2FA | PARTIAL | MFA boundary exists; seller payout production exposure remains gated |
+| Security | Step-up 2FA | PARTIAL | MFA boundary is implemented for protected runtime operations; seller payout production exposure remains gated |
 | Seller Finance | wallet HTTP API | DONE | Wallet balance/status/`as_of` response |
 | Seller Finance | ledger pagination + filters | DONE | `page`, `size`, `from`, `to`, `type` |
 | Seller Finance | revenue aggregation | DONE | DAY/WEEK/MONTH aggregation |
@@ -56,8 +56,54 @@ Status:
 | Seller Finance | shop data isolation | DONE | Wallet/ledger/revenue derive shop from authenticated seller scope |
 | Seller Finance | HTTP integration coverage | DONE | `SellerFinanceHttpE2ETest` with MySQL Testcontainers |
 | Seller Finance | error contract | DONE | Seller finance 400/401/403/404 behavior aligned and tested |
-| Observability | Request/trace propagation | TODO | Phase 9 scope |
-| Health | `/health/live` | DONE | Runtime liveness endpoint |
-| Health | `/health/ready` | DONE | Runtime readiness foundation |
+| Observability | Observability architecture audit | DONE | Phase 9A audited existing health, metrics, tracing and operational boundaries before extension |
+| Observability | Operation metrics foundation | DONE | `OperationMetricsPort` + `MicrometerOperationMetricsAdapter`; bounded `operation` and `result` tags |
+| Observability | Outbox publish/DLQ metrics | DONE | Publish/DLQ counters and latency timers plus operational backlog gauges |
+| Observability | Kafka consumer metrics | DONE | Shared inbox processor records bounded consumer/event/topic/result counters and latency |
+| Observability | HTTP request metrics | DONE | Method, route-template and status counters/latency; raw URI is not used as a metric tag |
+| Observability | Request/trace propagation | DONE | W3C trace context is created/continued across HTTP, outbox and Kafka transport metadata |
+| Observability | Business outcome metrics | DONE | Payment, refund, payout and settlement retry outcome counters |
+| Observability | Structured correlation logging | DONE | MDC `request_id`, `trace_id`, `span_id` at HTTP/Kafka boundaries with cleanup after processing |
+| Health | `/health/live` | DONE | Liveness depends only on service process state |
+| Health | `/health/liveness` | DONE | Conventional Spring liveness probe retained |
+| Health | `/health/ready` | DONE | DB/Kafka/outbox/VNPAY readiness group with hardened failure handling |
+| Health | `/health/readiness` | DONE | Conventional Spring readiness probe retained |
+| Operations | Prometheus registry | DONE | Micrometer Prometheus runtime registry |
+| Operations | `/prometheus` scrape endpoint | DONE | Explicit Actuator exposure; custom service metrics are scrapeable |
+| Operations | Sensitive Actuator endpoints protected | DONE | `/metrics`, `/env`, `/beans`, `/configprops`, `/heapdump`, `/threaddump`, `/loggers` are not exposed by default |
+| Operations | Structured operational diagnostics | DONE | Readiness + Prometheus + structured logs + existing reconciliation/settlement APIs provide current diagnostic surface |
+| Operations | Dedicated admin operations API | NOT REQUIRED | Phase 9K intentionally skipped; no `/api/v1/admin/operations` contract introduced |
 | Operations | Dockerfile/Kafka local stack | DONE | Local runtime composition available |
-| Operations | OpenAPI/runbook | TODO | Phase 9/10 scope |
+| Operations | OpenAPI/runbook | TODO | Deferred to Phase 10 contract/E2E/operational hardening |
+
+## Phase 9 closeout
+
+Phase 9 completes the current observability and operations foundation without
+changing financial business rules or inventing new public business APIs.
+
+Completed runtime capabilities:
+
+- Micrometer operation metrics;
+- outbox publish, DLQ and backlog metrics;
+- Kafka consumer metrics;
+- bounded HTTP request metrics;
+- payment/refund/payout/settlement outcome metrics;
+- W3C HTTP/outbox/Kafka trace propagation;
+- hardened readiness behavior;
+- Prometheus scrape exposure;
+- MDC structured correlation logging.
+
+Operational diagnostics Phase 9K was reviewed and intentionally skipped.
+
+The current combination of:
+
+- `/health/ready`;
+- `/health/readiness`;
+- `/prometheus`;
+- structured correlated logs;
+- admin payment reconciliation;
+- admin settlement read/retry;
+
+is sufficient for the current runtime scope.
+
+No `/api/v1/admin/operations` endpoint is part of the runtime contract.
