@@ -1,6 +1,6 @@
 package com.taca.paymentwallet.infrastructure.messaging.kafka;
 
-import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
+import com.taca.paymentwallet.application.observability.W3cTraceContext;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
 

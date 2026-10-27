@@ -3,9 +3,9 @@ package com.taca.paymentwallet.infrastructure.messaging.kafka;
 import com.taca.paymentwallet.application.command.ProcessInboxEventCommand;
 import com.taca.paymentwallet.application.metadata.RequestMetadata;
 import com.taca.paymentwallet.application.metadata.RequestMetadataContext;
+import com.taca.paymentwallet.application.metadata.MdcCorrelationContext;
 import com.taca.paymentwallet.application.port.in.ProcessInboxEventUseCase;
 import com.taca.paymentwallet.application.result.InboxEventExecutionResult;
-import com.taca.paymentwallet.infrastructure.observability.MdcCorrelationContext;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.time.Duration;

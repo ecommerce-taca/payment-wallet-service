@@ -773,7 +773,7 @@ class VnpayWebhookHttpE2ETest {
 
     private void assertOutboxCreated(
             UUID paymentId
-    ) {
+    ) throws Exception {
         List<OutboxEventJpaEntity> events =
                 outboxEventJpaRepository
                         .findAll()
@@ -819,11 +819,17 @@ class VnpayWebhookHttpE2ETest {
                 "req-webhook-http-e2e-001"
         );
 
-        assertThat(
-                outboxEvent.getHeaders()
-        ).contains(
-                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
-        );
+        String traceparent = objectMapper
+                .readTree(outboxEvent.getHeaders())
+                .get("traceparent")
+                .asText();
+
+        assertThat(traceparent)
+                .startsWith("00-4bf92f3577b34da6a3ce929d0e0e4736-")
+                .endsWith("-01")
+                .isNotEqualTo(
+                        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+                );
 
         assertThat(
                 outboxEvent.getHeaders()

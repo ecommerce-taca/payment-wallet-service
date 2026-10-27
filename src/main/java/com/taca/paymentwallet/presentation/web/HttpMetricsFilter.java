@@ -1,6 +1,6 @@
 package com.taca.paymentwallet.presentation.web;
 
-import com.taca.paymentwallet.infrastructure.observability.HttpRequestObservation;
+import com.taca.paymentwallet.application.observability.HttpRequestObservation;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
