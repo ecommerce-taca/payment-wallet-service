@@ -1,0 +1,14 @@
+.git
+.idea
+.vscode
+*.iml
+*.ipr
+*.iws
+
+target
+!mvnw
+!mvnw.cmd
+
+README.md
+HELP.md
+docs
