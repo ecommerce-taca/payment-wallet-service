@@ -5,6 +5,8 @@ import com.taca.paymentwallet.application.inbox.InboxEventProcessingAction;
 import com.taca.paymentwallet.application.metadata.RequestMetadataContext;
 import com.taca.paymentwallet.application.port.in.ProcessInboxEventUseCase;
 import com.taca.paymentwallet.application.result.InboxEventExecutionResult;
+import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -14,8 +16,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class KafkaInboxProcessorTest {
+
+    private final SimpleMeterRegistry registry =
+            new SimpleMeterRegistry();
+
+    private final KafkaConsumerObservation observation =
+            new KafkaConsumerObservation(registry);
 
     @AfterEach
     void tearDown() {
@@ -30,8 +39,11 @@ class KafkaInboxProcessorTest {
         KafkaInboxProcessor processor =
                 new KafkaInboxProcessor(
                         useCase,
-                        new KafkaInboundMetadataExtractor(),
-                        new KafkaPayloadHasher()
+                        new KafkaInboundMetadataExtractor(
+                                new W3cTraceContext()
+                        ),
+                        new KafkaPayloadHasher(),
+                        observation
                 );
 
         ConsumerRecord<String, String> record =
@@ -89,8 +101,11 @@ class KafkaInboxProcessorTest {
         KafkaInboxProcessor processor =
                 new KafkaInboxProcessor(
                         useCase,
-                        new KafkaInboundMetadataExtractor(),
-                        new KafkaPayloadHasher()
+                        new KafkaInboundMetadataExtractor(
+                                new W3cTraceContext()
+                        ),
+                        new KafkaPayloadHasher(),
+                        observation
                 );
 
         ConsumerRecord<String, String> record =
@@ -137,6 +152,121 @@ class KafkaInboxProcessorTest {
         assertThat(
                 RequestMetadataContext.current()
         ).isEmpty();
+    }
+
+    @Test
+    void shouldRecordSuccessfulConsumption() {
+        CapturingInboxUseCase useCase = new CapturingInboxUseCase();
+
+        KafkaInboxProcessor processor = new KafkaInboxProcessor(
+                useCase,
+                new KafkaInboundMetadataExtractor(
+                        new W3cTraceContext()
+                ),
+                new KafkaPayloadHasher(),
+                observation
+        );
+
+        ConsumerRecord<String, String> record = record("{}");
+        addHeader(record, KafkaHeaderNames.EVENT_ID, "event-001");
+
+        processor.process(
+                "consumer",
+                "shipment-service",
+                "shipment.delivered",
+                record,
+                () -> null
+        );
+
+        assertThat(
+                registry.get(KafkaConsumerObservation.CONSUME_TOTAL)
+                        .tags(
+                                "consumer", "consumer",
+                                "event_type", "shipment.delivered",
+                                "topic", "test-topic",
+                                "result", "success"
+                        )
+                        .counter()
+                        .count()
+        ).isEqualTo(1.0);
+    }
+
+    @Test
+    void shouldRecordDuplicateConsumption() {
+        KafkaInboxProcessor processor = new KafkaInboxProcessor(
+                new DuplicateInboxUseCase(),
+                new KafkaInboundMetadataExtractor(
+                        new W3cTraceContext()
+                ),
+                new KafkaPayloadHasher(),
+                observation
+        );
+
+        ConsumerRecord<String, String> record = record("{}");
+        addHeader(record, KafkaHeaderNames.EVENT_ID, "event-001");
+
+        processor.process(
+                "consumer",
+                "shipment-service",
+                "shipment.delivered",
+                record,
+                () -> null
+        );
+
+        assertThat(
+                registry.get(KafkaConsumerObservation.CONSUME_TOTAL)
+                        .tags("result", "duplicate")
+                        .counter()
+                        .count()
+        ).isEqualTo(1.0);
+    }
+
+    @Test
+    void shouldRecordFailedConsumption() {
+        CapturingInboxUseCase useCase = new CapturingInboxUseCase();
+
+        KafkaInboxProcessor processor = new KafkaInboxProcessor(
+                useCase,
+                new KafkaInboundMetadataExtractor(
+                        new W3cTraceContext()
+                ),
+                new KafkaPayloadHasher(),
+                observation
+        );
+
+        ConsumerRecord<String, String> record = record("{}");
+        addHeader(record, KafkaHeaderNames.EVENT_ID, "event-001");
+
+        assertThatThrownBy(() ->
+                processor.process(
+                        "consumer",
+                        "shipment-service",
+                        "shipment.delivered",
+                        record,
+                        () -> {
+                            throw new IllegalStateException("boom");
+                        }
+                )
+        ).isInstanceOf(IllegalStateException.class);
+
+        assertThat(
+                registry.get(KafkaConsumerObservation.CONSUME_TOTAL)
+                        .tags("result", "failure")
+                        .counter()
+                        .count()
+        ).isEqualTo(1.0);
+    }
+
+    private static final class DuplicateInboxUseCase
+            implements ProcessInboxEventUseCase {
+
+        @Override
+        public <T> InboxEventExecutionResult<T> execute(
+                ProcessInboxEventCommand command,
+                Supplier<T> action
+        ) {
+            return InboxEventExecutionResult.duplicate();
+        }
     }
 
     private ConsumerRecord<String, String> record(

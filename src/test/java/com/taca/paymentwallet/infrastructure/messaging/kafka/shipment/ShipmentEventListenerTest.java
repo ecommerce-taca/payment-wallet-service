@@ -7,9 +7,12 @@ import com.taca.paymentwallet.application.payment.CodPaymentResultStatus;
 import com.taca.paymentwallet.application.port.in.ProcessCodPaymentUseCase;
 import com.taca.paymentwallet.application.port.in.ProcessInboxEventUseCase;
 import com.taca.paymentwallet.application.result.InboxEventExecutionResult;
+import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaConsumerObservation;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaInboundMetadataExtractor;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaInboxProcessor;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.KafkaPayloadHasher;
+import com.taca.paymentwallet.infrastructure.observability.W3cTraceContext;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -30,8 +33,11 @@ class ShipmentEventListenerTest {
 
     private final KafkaInboxProcessor inboxProcessor = new KafkaInboxProcessor(
             inboxUseCase,
-            new KafkaInboundMetadataExtractor(),
-            new KafkaPayloadHasher()
+            new KafkaInboundMetadataExtractor(
+                    new W3cTraceContext()
+            ),
+            new KafkaPayloadHasher(),
+            new KafkaConsumerObservation(new SimpleMeterRegistry())
     );
 
     private final ProcessCodPaymentUseCase processCodPaymentUseCase =

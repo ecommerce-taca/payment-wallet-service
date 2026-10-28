@@ -14,6 +14,7 @@ import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.payment.*;
 import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.*;
+import com.taca.paymentwallet.support.FakeBusinessMetricsPort;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -555,7 +556,8 @@ class ProcessVnpayWebhookServiceTest {
                 outboxPort,
                 new ImmediateTransactionPort(),
                 new AllocationCalculator(),
-                new LedgerPostingFactory()
+                new LedgerPostingFactory(),
+                new FakeBusinessMetricsPort()
         );
     }
 

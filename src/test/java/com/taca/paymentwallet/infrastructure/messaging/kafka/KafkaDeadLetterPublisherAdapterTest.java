@@ -320,7 +320,7 @@ class KafkaDeadLetterPublisherAdapterTest {
 
         var timer = meterRegistry
                 .get(
-                        OutboxPublisherObservation.PUBLISH_LATENCY
+                        OutboxPublisherObservation.DLQ_LATENCY
                 )
                 .tag(
                         "event_type",

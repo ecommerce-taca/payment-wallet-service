@@ -61,6 +61,10 @@ public class KafkaReadinessHealthIndicator
                 builder.outOfService()
                         .withDetail("enabled", true)
                         .withDetail(
+                                "reason",
+                                "required_topics_missing"
+                        )
+                        .withDetail(
                                 "requiredTopicCount",
                                 requiredTopics.size()
                         )

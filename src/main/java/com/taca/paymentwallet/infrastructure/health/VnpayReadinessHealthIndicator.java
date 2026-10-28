@@ -37,6 +37,10 @@ public class VnpayReadinessHealthIndicator
         if (!missing.isEmpty()) {
             builder.outOfService()
                     .withDetail(
+                            "reason",
+                            "configuration_incomplete"
+                    )
+                    .withDetail(
                             "provider",
                             "VNPAY"
                     )

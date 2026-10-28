@@ -29,6 +29,7 @@ import com.taca.paymentwallet.domain.refund.RefundStatus;
 import com.taca.paymentwallet.domain.valueobject.*;
 import com.taca.paymentwallet.domain.wallet.LedgerPosting;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
+import com.taca.paymentwallet.support.FakeBusinessMetricsPort;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -281,7 +282,8 @@ class ProcessRefundResultServiceTest {
                 new ImmediateTransactionPort(),
                 new FakeIdGeneratorPort(),
                 new RefundAllocationCalculator(),
-                new LedgerPostingFactory()
+                new LedgerPostingFactory(),
+                new FakeBusinessMetricsPort()
         );
     }
 

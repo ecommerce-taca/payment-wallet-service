@@ -17,6 +17,9 @@ public class OutboxPublisherObservation {
     static final String DLQ_TOTAL =
             "payment_wallet_outbox_dlq_publish_total";
 
+    static final String DLQ_LATENCY =
+            "payment_wallet_outbox_dlq_publish_latency";
+
     private final MeterRegistry meterRegistry;
 
     public OutboxPublisherObservation(
@@ -60,7 +63,7 @@ public class OutboxPublisherObservation {
                 "result", result
         ).increment();
 
-        Timer.builder(PUBLISH_LATENCY)
+        Timer.builder(DLQ_LATENCY)
                 .tag("event_type", eventType)
                 .tag("topic", topic)
                 .tag("result", result)

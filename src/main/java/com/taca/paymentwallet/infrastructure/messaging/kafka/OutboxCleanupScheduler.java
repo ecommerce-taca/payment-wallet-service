@@ -24,12 +24,20 @@ public class OutboxCleanupScheduler {
 
     private final CleanupOutboxUseCase cleanupOutboxUseCase;
 
+    private final OutboxOperationalObservation observation;
+
     public OutboxCleanupScheduler(
-            CleanupOutboxUseCase cleanupOutboxUseCase
+            CleanupOutboxUseCase cleanupOutboxUseCase,
+            OutboxOperationalObservation observation
     ) {
         this.cleanupOutboxUseCase =
                 Objects.requireNonNull(
                         cleanupOutboxUseCase
+                );
+
+        this.observation =
+                Objects.requireNonNull(
+                        observation
                 );
     }
 
@@ -40,6 +48,8 @@ public class OutboxCleanupScheduler {
     public void cleanup() {
         int deleted =
                 cleanupOutboxUseCase.cleanup();
+
+        observation.recordCleanup(deleted);
 
         if (deleted > 0) {
             log.info(

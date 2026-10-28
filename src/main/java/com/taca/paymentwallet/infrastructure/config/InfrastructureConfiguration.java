@@ -1,6 +1,8 @@
 package com.taca.paymentwallet.infrastructure.config;
 
 import com.taca.paymentwallet.application.port.out.*;
+import com.taca.paymentwallet.application.observability.HttpRequestObservation;
+import com.taca.paymentwallet.application.observability.W3cTraceContext;
 import com.taca.paymentwallet.domain.finance.AllocationCalculator;
 import com.taca.paymentwallet.domain.finance.RefundAllocationCalculator;
 import com.taca.paymentwallet.domain.wallet.LedgerPostingFactory;
@@ -13,6 +15,8 @@ import com.taca.paymentwallet.infrastructure.health.VnpayReadinessHealthIndicato
 import com.taca.paymentwallet.infrastructure.id.UuidV7IdGeneratorAdapter;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.*;
 import com.taca.paymentwallet.infrastructure.messaging.kafka.shipment.ShipmentEventParser;
+import com.taca.paymentwallet.infrastructure.observability.MicrometerBusinessMetricsAdapter;
+import com.taca.paymentwallet.infrastructure.observability.MicrometerOperationMetricsAdapter;
 import com.taca.paymentwallet.infrastructure.persistence.adapter.*;
 import com.taca.paymentwallet.infrastructure.persistence.audit.AuditLogPersistenceSupport;
 import com.taca.paymentwallet.infrastructure.persistence.mapper.*;
@@ -540,13 +544,15 @@ public class InfrastructureConfiguration {
             OutboxEventJpaRepository repository,
             OutboxMessagePublisherPort publisherPort,
             ClockPort clockPort,
-            OutboxHealthProperties properties
+            OutboxHealthProperties properties,
+            OutboxOperationalObservation observation
     ) {
         return new OutboxBacklogHealthIndicator(
                 repository,
                 publisherPort,
                 clockPort,
-                properties
+                properties,
+                observation
         );
     }
 
@@ -573,6 +579,12 @@ public class InfrastructureConfiguration {
     }
 
     @Bean(destroyMethod = "close")
+    @ConditionalOnProperty(
+            prefix = "app.kafka.health",
+            name = "enabled",
+            havingValue = "true",
+            matchIfMissing = true
+    )
     AdminClient kafkaAdminClient(
             KafkaProperties kafkaProperties
     ) {
@@ -582,12 +594,28 @@ public class InfrastructureConfiguration {
     }
 
     @Bean
+    @ConditionalOnProperty(
+            prefix = "app.kafka.health",
+            name = "enabled",
+            havingValue = "true",
+            matchIfMissing = true
+    )
     KafkaTopicNamesClient kafkaTopicNamesClient(
             AdminClient adminClient
     ) {
         return new AdminClientKafkaTopicNamesClient(
                 adminClient
         );
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            prefix = "app.kafka.health",
+            name = "enabled",
+            havingValue = "false"
+    )
+    KafkaTopicNamesClient disabledKafkaTopicNamesClient() {
+        return timeout -> java.util.Set.of();
     }
 
     @Bean
@@ -748,5 +776,42 @@ public class InfrastructureConfiguration {
             ClockPort clockPort
     ) {
         return new TemporaryAdminFinanceSummaryExportStorageAdapter(clockPort);
+    }
+
+    @Bean
+    OperationMetricsPort operationMetricsPort(
+            MeterRegistry meterRegistry
+    ) {
+        return new MicrometerOperationMetricsAdapter(
+                meterRegistry
+        );
+    }
+
+    @Bean
+    OutboxOperationalObservation outboxOperationalObservation(
+            MeterRegistry meterRegistry
+    ) {
+        return new OutboxOperationalObservation(
+                meterRegistry
+        );
+    }
+
+    @Bean
+    HttpRequestObservation httpRequestObservation(
+            MeterRegistry meterRegistry
+    ) {
+        return new HttpRequestObservation(meterRegistry);
+    }
+
+    @Bean
+    W3cTraceContext w3cTraceContext() {
+        return new W3cTraceContext();
+    }
+
+    @Bean
+    BusinessMetricsPort businessMetricsPort(
+            MeterRegistry meterRegistry
+    ) {
+        return new MicrometerBusinessMetricsAdapter(meterRegistry);
     }
 }
